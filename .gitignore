@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Build
+dist/
+build/
+.next/
+out/
+coverage/
+.turbo/
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads
+uploads/
+tmp/
+
+# Docker volumes
+docker-data/
+design-system
+pnpm-lock.yaml
+
+docs
+.codex
+.claude

@@ -1,0 +1,189 @@
+@import "tailwindcss";
+
+/* Design tokens — nguồn: design-system/zunibee/MASTER.md (brand reference .claude/image.png) */
+:root {
+  /* Luôn render theme sáng, không ăn theo prefers-color-scheme của hệ điều hành */
+  color-scheme: light;
+  --background: #fffef8;
+  --surface: #ffffff;
+  --surface-soft: #f1f5f9;
+  --foreground: #0f172a;
+  --muted-foreground: #475569;
+  --primary: #ffd84d;
+  --primary-hover: #ffcf24;
+  --on-primary: #0f172a;
+  --secondary: #60a5fa;
+  --secondary-strong: #2563eb;
+  --secondary-soft: #dff4fd;
+  --success: #4ade80;
+  --success-soft: #ddf8ec;
+  --destructive: #fa6e64;
+  --destructive-soft: #ffe4e1;
+  --warning-soft: #fff1b8;
+  --purple: #6548d8;
+  --purple-soft: #e9e2ff;
+  --on-purple-muted: #f8f7ff;
+  --section: #eaf5ff;
+  --banner: #0f172a;
+  --divider: #cbd5e1;
+  --border: #9aa1af;
+  --ring: #2f6bff;
+  --shadow-color: #0f172a;
+
+  /* Hard offset shadow — đặc trưng Neo-Brutalism, không blur. Thang độ sâu dùng chung cho mọi component. */
+  --shadow-brutal-xs: 1px 1px 0 0 var(--shadow-color);
+  --shadow-brutal-sm: 2px 2px 0 0 var(--shadow-color);
+  --shadow-brutal-md: 3px 3px 0 0 var(--shadow-color);
+  --shadow-brutal-lg: 4px 4px 0 0 var(--shadow-color);
+  --shadow-brutal-hover: 5px 5px 0 0 var(--shadow-color);
+  --shadow-brutal-xl: 7px 7px 0 0 var(--shadow-color);
+  --shadow-brutal-2xl: 8px 8px 0 0 var(--shadow-color);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-soft: var(--surface-soft);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-on-primary: var(--on-primary);
+  --color-secondary: var(--secondary);
+  --color-secondary-strong: var(--secondary-strong);
+  --color-secondary-soft: var(--secondary-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-destructive: var(--destructive);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-warning-soft: var(--warning-soft);
+  --color-purple: var(--purple);
+  --color-purple-soft: var(--purple-soft);
+  --color-on-purple-muted: var(--on-purple-muted);
+  --color-section: var(--section);
+  --color-banner: var(--banner);
+  --color-divider: var(--divider);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-nunito);
+  --font-display: var(--font-quicksand);
+  --shadow-brutal-xs: var(--shadow-brutal-xs);
+  --shadow-brutal-sm: var(--shadow-brutal-sm);
+  --shadow-brutal-md: var(--shadow-brutal-md);
+  --shadow-brutal-lg: var(--shadow-brutal-lg);
+  --shadow-brutal-hover: var(--shadow-brutal-hover);
+  --shadow-brutal-xl: var(--shadow-brutal-xl);
+  --shadow-brutal-2xl: var(--shadow-brutal-2xl);
+}
+
+/* Dark mode bật thủ công qua nút toggle (ThemeToggle), không ăn theo prefers-color-scheme của hệ điều hành */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #101629;
+  --surface: #1c2438;
+  --surface-soft: #263149;
+  --foreground: #f8fafc;
+  --muted-foreground: #cbd5e1;
+  --primary: #ffd84d;
+  --primary-hover: #ffe16f;
+  --secondary: #60a5fa;
+  --secondary-strong: #93c5fd;
+  --secondary-soft: #1e3a5f;
+  --success: #4ade80;
+  --success-soft: #183c2a;
+  --destructive: #fb7185;
+  --destructive-soft: #4a2228;
+  --warning-soft: #493d17;
+  --purple: #5b3fc0;
+  --purple-soft: #34265e;
+  --on-purple-muted: #f8fafc;
+  --section: #182e4a;
+  --banner: #070b14;
+  --divider: #475569;
+  --border: #64748b;
+  --ring: #93c5fd;
+  --shadow-color: #050816;
+}
+
+.theme-icon-sun {
+  display: none;
+}
+
+:root[data-theme="dark"] .theme-icon-sun {
+  display: block;
+}
+
+:root[data-theme="dark"] .theme-icon-moon {
+  display: none;
+}
+
+@keyframes home-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes home-quiz-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(18px) rotate(1deg);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(0);
+  }
+}
+
+@keyframes home-progress {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.home-hero-copy {
+  animation: home-reveal 450ms ease-out both;
+}
+
+.home-quiz-preview {
+  animation: home-quiz-reveal 550ms 120ms ease-out both;
+}
+
+.home-progress-fill {
+  animation: home-progress 500ms 420ms ease-out both;
+  transform-origin: left;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-hero-copy,
+  .home-quiz-preview,
+  .home-progress-fill {
+    animation: none;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+  font-weight: 700;
+}

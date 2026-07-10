@@ -1,0 +1,27 @@
+{
+  "name": "zunibee",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ZuniBee - Nền tảng quiz giáo dục ứng dụng AI",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "migration:create": "pnpm --filter api migration:create",
+    "migration:generate": "pnpm --filter api migration:generate",
+    "migration:show": "pnpm --filter api migration:show",
+    "migration:run": "pnpm --filter api migration:run",
+    "migration:revert": "pnpm --filter api migration:revert",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md,yml,yaml}\""
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.0.0",
+  "devDependencies": {
+    "prettier": "^3.9.5",
+    "turbo": "^2.10.4",
+    "typescript": "^7.0.2"
+  }
+}
