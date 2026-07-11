@@ -13,9 +13,11 @@ export const ROUTES = {
   studentDashboard: "/student",
   teacherDashboard: "/teacher",
   oauthCallback: "/oauth/callback",
+  oauthSelectRole: "/oauth/select-role",
   forgotPassword: "/forgot-password",
   resetPassword: "/reset-password",
   changePassword: "/change-password",
+  profile: "/profile",
 } as const;
 
 /** Danh sách phẳng, tiện dùng cho menu, kiểm tra quyền hoặc sitemap. */

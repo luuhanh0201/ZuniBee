@@ -6,6 +6,7 @@ import { AppController } from '@/app.controller';
 import { AppService } from '@/app.service';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { UserModule } from '@/modules/user/user.module';
+import { UploadFileModule } from '@/modules/upload-file/upload-file.module';
 
 // File đứng trước có độ ưu tiên cao hơn (không bị file sau override)
 const envFiles =
@@ -40,6 +41,7 @@ const appDir = join(__dirname, '..');
     }),
     AuthModule,
     UserModule,
+    UploadFileModule,
   ],
   controllers: [AppController],
   providers: [AppService],

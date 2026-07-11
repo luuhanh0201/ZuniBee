@@ -17,6 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ROUTES } from "@/config/routes";
+import { HomeAuthGate } from "@/components/home-auth-gate";
 
 const buttonMotion =
   "transition-[transform,box-shadow,background-color] duration-200 ease-out hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-hover active:translate-x-0.5 active:translate-y-0.5 active:shadow-brutal-xs motion-reduce:transform-none motion-reduce:transition-none";
@@ -78,131 +79,133 @@ const steps = [
 
 export default function Home() {
   return (
-    <div className="min-h-dvh overflow-x-hidden bg-background text-foreground">
-      <Header />
+    <HomeAuthGate>
+      <div className="min-h-dvh overflow-x-hidden bg-background text-foreground">
+        <Header />
 
-      <main>
-        <section className="relative px-4 pb-20 pt-16 sm:px-6 sm:pb-24 sm:pt-20 lg:px-8 lg:pb-28">
-          <div
-            aria-hidden="true"
-            className="absolute -left-14 top-32 h-36 w-36 rounded-full border-2 border-foreground bg-purple-soft"
-          />
-          <div
-            aria-hidden="true"
-            className="absolute -right-12 bottom-14 h-28 w-28 rotate-12 rounded-3xl border-2 border-foreground bg-destructive"
-          />
+        <main>
+          <section className="relative px-4 pb-20 pt-16 sm:px-6 sm:pb-24 sm:pt-20 lg:px-8 lg:pb-28">
+            <div
+              aria-hidden="true"
+              className="absolute -left-14 top-32 h-36 w-36 rounded-full border-2 border-foreground bg-purple-soft"
+            />
+            <div
+              aria-hidden="true"
+              className="absolute -right-12 bottom-14 h-28 w-28 rotate-12 rounded-3xl border-2 border-foreground bg-destructive"
+            />
 
-          <div className="relative mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[1.02fr_0.98fr] lg:gap-16">
-            <div className="home-hero-copy text-center lg:text-left">
-              <div className="inline-flex items-center gap-2 rounded-full border-2 border-foreground bg-secondary-soft px-4 py-2 text-sm font-extrabold shadow-brutal-sm">
-                <Users aria-hidden="true" className="h-4 w-4" />
-                Dành cho học sinh và giáo viên
-              </div>
+            <div className="relative mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[1.02fr_0.98fr] lg:gap-16">
+              <div className="home-hero-copy text-center lg:text-left">
+                <div className="inline-flex items-center gap-2 rounded-full border-2 border-foreground bg-secondary-soft px-4 py-2 text-sm font-extrabold shadow-brutal-sm">
+                  <Users aria-hidden="true" className="h-4 w-4" />
+                  Dành cho học sinh và giáo viên
+                </div>
 
-              <h1 className="mt-7 font-display text-[2.6rem] font-bold leading-[1.08] tracking-[-0.04em] sm:text-6xl lg:text-[4.25rem]">
-                Mỗi câu hỏi mở lối cho một giờ học{" "}
-                <span className="relative inline-block whitespace-nowrap text-secondary-strong">
-                  hay hơn
-                  <svg
-                    aria-hidden="true"
-                    className="absolute -bottom-2 left-0 h-3 w-full text-primary"
-                    viewBox="0 0 220 12"
-                    fill="none"
-                    preserveAspectRatio="none"
-                  >
-                    <path
-                      d="M4 8C55 2 144 3 216 7"
-                      stroke="currentColor"
-                      strokeWidth="7"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                </span>
-              </h1>
-
-              <p className="mx-auto mt-7 max-w-2xl text-lg font-semibold leading-relaxed text-muted-foreground sm:text-xl lg:mx-0">
-                Học sinh luyện tập theo nhịp riêng. Giáo viên tạo quiz sinh
-                động, theo dõi tiến bộ và giúp cả lớp hiểu bài sâu hơn.
-              </p>
-
-              <div className="mt-9 flex flex-col items-stretch justify-center gap-4 sm:flex-row sm:items-center lg:justify-start">
-                <Link
-                  href={ROUTES.register}
-                  className={
-                    buttonMotion +
-                    " group inline-flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-primary px-7 text-lg font-extrabold shadow-brutal-lg hover:bg-primary-hover focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-ring"
-                  }
-                >
-                  Bắt đầu với ZuniBee
-                  <ArrowRight
-                    aria-hidden="true"
-                    className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transform-none motion-reduce:transition-none"
-                    strokeWidth={2.7}
-                  />
-                </Link>
-                <Link
-                  href="#cach-hoc"
-                  className={
-                    buttonMotion +
-                    " inline-flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-surface px-7 text-lg font-extrabold shadow-brutal-lg hover:bg-surface-soft focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-ring"
-                  }
-                >
-                  <Play
-                    aria-hidden="true"
-                    className="h-5 w-5"
-                    fill="currentColor"
-                  />
-                  Khám phá cách hoạt động
-                </Link>
-              </div>
-
-              <div className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-3 text-sm font-bold text-muted-foreground lg:justify-start">
-                {["Học theo nhịp riêng", "Tạo hoạt động trong vài phút"].map(
-                  (label) => (
-                    <span
-                      key={label}
-                      className="inline-flex items-center gap-2"
+                <h1 className="mt-7 font-display text-[2.6rem] font-bold leading-[1.08] tracking-[-0.04em] sm:text-6xl lg:text-[4.25rem]">
+                  Mỗi câu hỏi mở lối cho một giờ học{" "}
+                  <span className="relative inline-block whitespace-nowrap text-secondary-strong">
+                    hay hơn
+                    <svg
+                      aria-hidden="true"
+                      className="absolute -bottom-2 left-0 h-3 w-full text-primary"
+                      viewBox="0 0 220 12"
+                      fill="none"
+                      preserveAspectRatio="none"
                     >
-                      <Check
-                        aria-hidden="true"
-                        className="h-5 w-5 rounded-full border-2 border-foreground bg-success p-0.5 text-foreground"
-                        strokeWidth={3}
+                      <path
+                        d="M4 8C55 2 144 3 216 7"
+                        stroke="currentColor"
+                        strokeWidth="7"
+                        strokeLinecap="round"
                       />
-                      {label}
-                    </span>
-                  ),
-                )}
+                    </svg>
+                  </span>
+                </h1>
+
+                <p className="mx-auto mt-7 max-w-2xl text-lg font-semibold leading-relaxed text-muted-foreground sm:text-xl lg:mx-0">
+                  Học sinh luyện tập theo nhịp riêng. Giáo viên tạo quiz sinh
+                  động, theo dõi tiến bộ và giúp cả lớp hiểu bài sâu hơn.
+                </p>
+
+                <div className="mt-9 flex flex-col items-stretch justify-center gap-4 sm:flex-row sm:items-center lg:justify-start">
+                  <Link
+                    href={ROUTES.register}
+                    className={
+                      buttonMotion +
+                      " group inline-flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-primary px-7 text-lg font-extrabold shadow-brutal-lg hover:bg-primary-hover focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                    }
+                  >
+                    Bắt đầu với ZuniBee
+                    <ArrowRight
+                      aria-hidden="true"
+                      className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transform-none motion-reduce:transition-none"
+                      strokeWidth={2.7}
+                    />
+                  </Link>
+                  <Link
+                    href="#cach-hoc"
+                    className={
+                      buttonMotion +
+                      " inline-flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-surface px-7 text-lg font-extrabold shadow-brutal-lg hover:bg-surface-soft focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                    }
+                  >
+                    <Play
+                      aria-hidden="true"
+                      className="h-5 w-5"
+                      fill="currentColor"
+                    />
+                    Khám phá cách hoạt động
+                  </Link>
+                </div>
+
+                <div className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-3 text-sm font-bold text-muted-foreground lg:justify-start">
+                  {["Học theo nhịp riêng", "Tạo hoạt động trong vài phút"].map(
+                    (label) => (
+                      <span
+                        key={label}
+                        className="inline-flex items-center gap-2"
+                      >
+                        <Check
+                          aria-hidden="true"
+                          className="h-5 w-5 rounded-full border-2 border-foreground bg-success p-0.5 text-foreground"
+                          strokeWidth={3}
+                        />
+                        {label}
+                      </span>
+                    ),
+                  )}
+                </div>
               </div>
+
+              <QuizPreview />
             </div>
+          </section>
 
-            <QuizPreview />
-          </div>
-        </section>
+          <section
+            aria-label="Lợi ích nổi bật"
+            className="border-y-[3px] border-foreground bg-banner px-4 py-5 text-white sm:px-6 lg:px-8"
+          >
+            <div className="mx-auto grid max-w-7xl gap-4 sm:grid-cols-3 sm:divide-x sm:divide-white/30">
+              <Benefit icon={BrainCircuit} color="text-primary">
+                Cá nhân hóa theo năng lực
+              </Benefit>
+              <Benefit icon={Sparkles} color="text-secondary">
+                Tạo quiz nhanh cùng AI
+              </Benefit>
+              <Benefit icon={Trophy} color="text-success">
+                Theo dõi tiến bộ rõ ràng
+              </Benefit>
+            </div>
+          </section>
 
-        <section
-          aria-label="Lợi ích nổi bật"
-          className="border-y-[3px] border-foreground bg-banner px-4 py-5 text-white sm:px-6 lg:px-8"
-        >
-          <div className="mx-auto grid max-w-7xl gap-4 sm:grid-cols-3 sm:divide-x sm:divide-white/30">
-            <Benefit icon={BrainCircuit} color="text-primary">
-              Cá nhân hóa theo năng lực
-            </Benefit>
-            <Benefit icon={Sparkles} color="text-secondary">
-              Tạo quiz nhanh cùng AI
-            </Benefit>
-            <Benefit icon={Trophy} color="text-success">
-              Theo dõi tiến bộ rõ ràng
-            </Benefit>
-          </div>
-        </section>
+          <Features />
+          <HowItWorks />
+          <FinalCta />
+        </main>
 
-        <Features />
-        <HowItWorks />
-        <FinalCta />
-      </main>
-
-      <Footer />
-    </div>
+        <Footer />
+      </div>
+    </HomeAuthGate>
   );
 }
 

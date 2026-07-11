@@ -28,6 +28,10 @@ function OAuthCallbackContent() {
         router.replace(ROUTES.login);
         return;
       }
+      if (!user.roleSelected) {
+        router.replace(ROUTES.oauthSelectRole);
+        return;
+      }
       router.replace(
         user.role === UserRole.TEACHER
           ? ROUTES.teacherDashboard

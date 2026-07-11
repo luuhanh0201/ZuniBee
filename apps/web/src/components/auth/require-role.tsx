@@ -41,12 +41,17 @@ export function RequireRole({
       router.replace(ROUTES.login);
       return;
     }
+    if (!user.roleSelected) {
+      router.replace(ROUTES.oauthSelectRole);
+      return;
+    }
     if (user.role !== role) {
       router.replace(DASHBOARD_BY_ROLE[user.role] ?? ROUTES.home);
     }
   }, [isLoading, isDemoMode, user, role, router]);
 
-  const allowed = isDemoMode || (user && user.role === role);
+  const allowed =
+    isDemoMode || (user && user.roleSelected && user.role === role);
 
   if (isLoading || !allowed) {
     return (

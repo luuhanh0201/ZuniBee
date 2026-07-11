@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import {
   ArrowRight,
   BarChart3,
@@ -17,9 +18,10 @@ import {
   Library,
   LogOut,
   Medal,
+  UserRound,
   Plus,
   Sparkles,
-  Target,
+  Snowflake,
   Trophy,
   Users,
   Zap,
@@ -96,46 +98,7 @@ export function DemoDashboard({ role }: { role: DashboardRole }) {
       <DashboardHeader role={role} />
 
       <main className="mx-auto max-w-7xl px-4 pb-16 pt-8 sm:px-6 lg:px-8">
-        <section className="relative overflow-hidden rounded-3xl border-[3px] border-foreground bg-purple px-6 py-8 text-white shadow-brutal-xl sm:px-8 lg:px-10">
-          <div
-            aria-hidden="true"
-            className="absolute -right-8 -top-12 h-40 w-40 rounded-full border-[3px] border-foreground bg-primary"
-          />
-          <div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
-            <div>
-              <span className="inline-flex items-center gap-2 rounded-full border-2 border-foreground bg-surface px-3 py-1.5 text-sm font-bold text-foreground shadow-brutal-sm">
-                <Sparkles aria-hidden="true" className="h-4 w-4" />
-                Dashboard {student ? "học sinh" : "giáo viên"} · Demo
-              </span>
-              <h1 className="mt-5 max-w-3xl font-display text-3xl font-bold sm:text-4xl">
-                {student
-                  ? "Chào Minh! Hôm nay mình tiến thêm một bước nhé."
-                  : "Chào cô Mai! Lớp học hôm nay đang chờ một hoạt động thú vị."}
-              </h1>
-              <p className="mt-3 max-w-2xl font-semibold leading-relaxed text-on-purple-muted">
-                {student
-                  ? "Tiếp tục hành trình Khoa học hoặc thử thách bản thân với quiz mới."
-                  : "Tạo quiz, xem kết quả gần đây và tìm chủ đề học sinh cần hỗ trợ."}
-              </p>
-            </div>
-            <Link
-              href={student ? "#thu-thach" : "#quiz-gan-day"}
-              className="inline-flex min-h-14 cursor-pointer items-center justify-center gap-2 self-start rounded-xl border-2 border-foreground bg-primary px-6 font-bold text-on-primary shadow-brutal-lg transition-[transform,box-shadow,background-color] duration-200 hover:-translate-x-px hover:-translate-y-px hover:bg-primary-hover hover:shadow-brutal-hover motion-reduce:transform-none focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-white"
-            >
-              {student ? (
-                <>
-                  <Target aria-hidden="true" className="h-5 w-5" />
-                  Làm thử thách
-                </>
-              ) : (
-                <>
-                  <Plus aria-hidden="true" className="h-5 w-5" />
-                  Xem khu vực tạo quiz
-                </>
-              )}
-            </Link>
-          </div>
-        </section>
+        {student ? <StudentAttendanceStreak /> : <TeacherWelcomeBanner />}
 
         <section
           aria-label="Tổng quan"
@@ -181,6 +144,201 @@ export function DemoDashboard({ role }: { role: DashboardRole }) {
         {student ? <StudentContent /> : <TeacherContent />}
       </main>
     </div>
+  );
+}
+
+type StreakTheme = "energy" | "frost" | "galaxy";
+
+const streakThemes: Record<
+  StreakTheme,
+  {
+    label: string;
+    icon: LucideIcon;
+    panel: string;
+    accent: string;
+    soft: string;
+    message: string;
+  }
+> = {
+  energy: {
+    label: "Năng lượng",
+    icon: Flame,
+    panel: "bg-warning-soft",
+    accent: "bg-destructive",
+    soft: "bg-primary",
+    message: "Ngọn lửa đang rực cháy!",
+  },
+  frost: {
+    label: "Băng giá",
+    icon: Snowflake,
+    panel: "bg-secondary-soft",
+    accent: "bg-secondary",
+    soft: "bg-surface",
+    message: "Chuỗi học tập mát lạnh!",
+  },
+  galaxy: {
+    label: "Ngân hà",
+    icon: Sparkles,
+    panel: "bg-purple-soft",
+    accent: "bg-purple text-white",
+    soft: "bg-secondary-soft",
+    message: "Bạn đang bay qua dải ngân hà!",
+  },
+};
+
+const attendanceDays = [
+  { day: "T2", date: "07", state: "done" },
+  { day: "T3", date: "08", state: "done" },
+  { day: "T4", date: "09", state: "done" },
+  { day: "T5", date: "10", state: "done" },
+  { day: "T6", date: "11", state: "done" },
+  { day: "T7", date: "12", state: "today" },
+  { day: "CN", date: "13", state: "next" },
+] as const;
+
+function StudentAttendanceStreak() {
+  const [themeName, setThemeName] = useState<StreakTheme>("energy");
+  const [checkedIn, setCheckedIn] = useState(false);
+  const theme = streakThemes[themeName];
+  const ThemeIcon = theme.icon;
+
+  return (
+    <section
+      aria-labelledby="attendance-title"
+      className={`streak-panel relative overflow-hidden rounded-3xl border-[3px] border-foreground p-5 shadow-brutal-xl sm:p-7 ${theme.panel}`}
+    >
+      <div
+        aria-hidden="true"
+        className={`absolute -right-9 -top-10 h-32 w-32 rotate-12 rounded-[2rem] border-[3px] border-foreground opacity-80 ${theme.soft}`}
+      />
+      <div className="relative flex flex-col gap-6">
+        <header className="flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
+          <div className="flex items-center gap-4">
+            <span
+              className={`streak-icon flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border-[3px] border-foreground shadow-brutal-md ${theme.accent}`}
+            >
+              <ThemeIcon className="h-8 w-8" aria-hidden="true" />
+            </span>
+            <div>
+              <p className="text-sm font-extrabold text-muted-foreground">
+                ĐIỂM DANH HỌC TẬP
+              </p>
+              <h1
+                id="attendance-title"
+                className="font-display text-3xl font-bold sm:text-4xl"
+              >
+                7 ngày liên tiếp
+              </h1>
+              <p className="mt-1 font-semibold text-muted-foreground">
+                {theme.message}
+              </p>
+            </div>
+          </div>
+
+          <div
+            className="flex w-fit flex-wrap gap-2 rounded-2xl border-2 border-foreground bg-surface p-2 shadow-brutal-sm"
+            aria-label="Chọn phong cách streak demo"
+          >
+            {(Object.keys(streakThemes) as StreakTheme[]).map((name) => {
+              const option = streakThemes[name];
+              const OptionIcon = option.icon;
+              return (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => setThemeName(name)}
+                  aria-pressed={themeName === name}
+                  className={`inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-xl border-2 px-3 text-sm font-bold transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${themeName === name ? "border-foreground bg-primary" : "border-transparent bg-surface hover:bg-surface-soft"}`}
+                >
+                  <OptionIcon className="h-4 w-4" aria-hidden="true" />
+                  <span className="hidden sm:inline">{option.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </header>
+
+        <div className="grid grid-cols-4 gap-2 sm:grid-cols-7 sm:gap-3">
+          {attendanceDays.map(({ day, date, state }) => {
+            const completed =
+              state === "done" || (state === "today" && checkedIn);
+            const today = state === "today";
+            return (
+              <div
+                key={day}
+                className={`relative flex min-h-24 flex-col items-center justify-center rounded-2xl border-2 border-foreground px-2 py-3 text-center shadow-brutal-sm ${completed ? theme.accent : today ? "bg-surface" : "bg-surface-soft text-muted-foreground"}`}
+              >
+                <span className="text-xs font-extrabold uppercase">{day}</span>
+                <span className="mt-1 font-display text-2xl font-bold tabular-nums">
+                  {date}
+                </span>
+                {completed ? (
+                  <CheckCircle2
+                    className="streak-check mt-1 h-5 w-5"
+                    aria-label="Đã điểm danh"
+                  />
+                ) : today ? (
+                  <span className="mt-1 text-[11px] font-extrabold">
+                    HÔM NAY
+                  </span>
+                ) : (
+                  <span className="mt-1 text-[11px] font-bold">Sắp tới</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+          <p className="font-semibold text-muted-foreground">
+            {checkedIn
+              ? "Tuyệt vời! Bạn vừa nhận 10 XP điểm danh."
+              : "Điểm danh hôm nay để giữ chuỗi và nhận 10 XP."}
+          </p>
+          <button
+            type="button"
+            disabled={checkedIn}
+            onClick={() => setCheckedIn(true)}
+            className="inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-primary px-5 font-bold shadow-brutal-md transition-[transform,box-shadow] duration-200 hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-lg active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:cursor-default disabled:bg-success disabled:transform-none sm:w-auto"
+          >
+            <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+            {checkedIn ? "Đã điểm danh" : "Điểm danh hôm nay"}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TeacherWelcomeBanner() {
+  return (
+    <section className="relative overflow-hidden rounded-3xl border-[3px] border-foreground bg-purple px-6 py-8 text-white shadow-brutal-xl sm:px-8 lg:px-10">
+      <div
+        aria-hidden="true"
+        className="absolute -right-8 -top-12 h-40 w-40 rounded-full border-[3px] border-foreground bg-primary"
+      />
+      <div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
+        <div>
+          <span className="inline-flex items-center gap-2 rounded-full border-2 border-foreground bg-surface px-3 py-1.5 text-sm font-bold text-foreground shadow-brutal-sm">
+            <Sparkles aria-hidden="true" className="h-4 w-4" />
+            Dashboard giáo viên · Demo
+          </span>
+          <h1 className="mt-5 max-w-3xl font-display text-3xl font-bold sm:text-4xl">
+            Chào cô Mai! Lớp học hôm nay đang chờ một hoạt động thú vị.
+          </h1>
+          <p className="mt-3 max-w-2xl font-semibold leading-relaxed text-on-purple-muted">
+            Tạo quiz, xem kết quả gần đây và tìm chủ đề học sinh cần hỗ trợ.
+          </p>
+        </div>
+        <Link
+          href="#quiz-gan-day"
+          className="inline-flex min-h-14 cursor-pointer items-center justify-center gap-2 self-start rounded-xl border-2 border-foreground bg-primary px-6 font-bold text-on-primary shadow-brutal-lg transition-[transform,box-shadow,background-color] duration-200 hover:-translate-x-px hover:-translate-y-px hover:bg-primary-hover hover:shadow-brutal-hover motion-reduce:transform-none focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-white"
+        >
+          <Plus aria-hidden="true" className="h-5 w-5" />
+          Xem khu vực tạo quiz
+        </Link>
+      </div>
+    </section>
   );
 }
 
@@ -241,6 +399,14 @@ function DashboardHeader({ role }: { role: DashboardRole }) {
           </button>
           {user ? (
             <>
+              <Link
+                href={ROUTES.profile}
+                aria-label="Hồ sơ cá nhân"
+                title="Hồ sơ cá nhân"
+                className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl border-2 border-foreground bg-surface shadow-brutal-sm transition-[transform,box-shadow] duration-200 hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-md motion-reduce:transform-none focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring"
+              >
+                <UserRound aria-hidden="true" className="h-5 w-5" />
+              </Link>
               <Link
                 href={ROUTES.changePassword}
                 aria-label="Đổi mật khẩu"

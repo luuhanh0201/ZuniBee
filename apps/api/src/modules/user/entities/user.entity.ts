@@ -21,11 +21,11 @@ export class User {
   @Column({ name: 'full_name', nullable: false })
   fullName!: string;
 
-  @Column({ name: 'phone', nullable: true })
-  phone?: string;
+  @Column({ name: 'phone', type: 'varchar', nullable: true })
+  phone!: string | null;
 
-  @Column({ name: 'avatar', nullable: true })
-  avatar?: string;
+  @Column({ name: 'avatar', type: 'varchar', nullable: true })
+  avatar!: string | null;
 
   @Column({
     name: 'role',
@@ -34,6 +34,9 @@ export class User {
     default: UserRole.STUDENT,
   })
   role!: UserRole;
+
+  @Column({ name: 'role_selected', type: 'boolean', default: true })
+  roleSelected!: boolean;
 
   @Column({
     name: 'status',

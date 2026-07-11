@@ -20,6 +20,7 @@ import { LoginDto } from '@/modules/auth/dto/login.dto';
 import { ForgotPasswordDto } from '@/modules/auth/dto/forgot-password.dto';
 import { ResetPasswordDto } from '@/modules/auth/dto/reset-password.dto';
 import { ChangePasswordDto } from '@/modules/auth/dto/change-password.dto';
+import { SelectRoleDto } from '@/modules/auth/dto/select-role.dto';
 import { Public } from '@/common/decorators/public.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '@/modules/auth/types/authenticated-user.type';
@@ -113,7 +114,25 @@ export class AuthController {
   @Get('me')
   @ApiOperation({ summary: 'Thông tin người dùng đang đăng nhập' })
   me(@CurrentUser() currentUser: AuthenticatedUser) {
-    return currentUser;
+    return this.authService.getCurrentUser(currentUser.id);
+  }
+
+  @Post('select-role')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Chọn vai trò sau lần đăng nhập OAuth đầu tiên' })
+  async selectRole(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() dto: SelectRoleDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { tokens, user } = await this.authService.selectRole(
+      currentUser.id,
+      dto.role,
+      this.contextFrom(req),
+    );
+    this.setRefreshCookie(res, tokens.refreshToken);
+    return { accessToken: tokens.accessToken, user };
   }
 
   @Public()

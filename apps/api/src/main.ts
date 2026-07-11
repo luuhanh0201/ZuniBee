@@ -1,12 +1,14 @@
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { AppModule } from '@/app.module';
+import { UPLOAD_ROOT } from '@/modules/upload-file/upload-file.constants';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   const configService = app.get(ConfigService);
 
@@ -15,6 +17,7 @@ async function bootstrap() {
   const webUrl = configService.get<string>('WEB_URL', 'http://localhost:1111');
 
   app.setGlobalPrefix(prefix);
+  app.useStaticAssets(UPLOAD_ROOT, { prefix: '/uploads/' });
   app.use(cookieParser());
 
   app.enableCors({

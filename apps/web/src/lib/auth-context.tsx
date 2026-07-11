@@ -17,6 +17,9 @@ import {
   type ForgotPasswordRequest,
   type ResetPasswordRequest,
   type ChangePasswordRequest,
+  type SelectRoleRequest,
+  type UpdateProfileRequest,
+  type UploadFileResponse,
 } from "@zunibee/shared";
 import { apiFetch, ApiError } from "./api-client";
 
@@ -33,6 +36,9 @@ type AuthContextValue = {
   forgotPassword: (input: ForgotPasswordRequest) => Promise<void>;
   resetPassword: (input: ResetPasswordRequest) => Promise<AuthUser>;
   changePassword: (input: ChangePasswordRequest) => Promise<void>;
+  selectRole: (input: SelectRoleRequest) => Promise<AuthUser>;
+  updateProfile: (input: UpdateProfileRequest) => Promise<AuthUser>;
+  uploadAvatar: (file: File) => Promise<string>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -142,6 +148,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [accessToken],
   );
 
+  const selectRole = useCallback(
+    async (input: SelectRoleRequest) => {
+      const res = await apiFetch<AuthResponse>("/auth/select-role", {
+        method: "POST",
+        body: input,
+        accessToken: accessToken ?? undefined,
+      });
+      setAccessToken(res.accessToken);
+      setUser(res.user);
+      return res.user;
+    },
+    [accessToken],
+  );
+
+  const updateProfile = useCallback(
+    async (input: UpdateProfileRequest) => {
+      const updatedUser = await apiFetch<AuthUser>("/users/me", {
+        method: "PATCH",
+        body: input,
+        accessToken: accessToken ?? undefined,
+      });
+      setUser(updatedUser);
+      return updatedUser;
+    },
+    [accessToken],
+  );
+
+  const uploadAvatar = useCallback(
+    async (file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      const result = await apiFetch<UploadFileResponse>("/upload-file/avatar", {
+        method: "POST",
+        body: form,
+        accessToken: accessToken ?? undefined,
+      });
+      return result.url;
+    },
+    [accessToken],
+  );
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -154,6 +201,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       forgotPassword,
       resetPassword,
       changePassword,
+      selectRole,
+      updateProfile,
+      uploadAvatar,
     }),
     [
       user,
@@ -166,6 +216,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       forgotPassword,
       resetPassword,
       changePassword,
+      selectRole,
+      updateProfile,
+      uploadAvatar,
     ],
   );
 

@@ -5,7 +5,23 @@ export type AuthUser = {
   email: string | null;
   fullName: string;
   role: UserRole;
+  roleSelected: boolean;
   avatar: string | null;
+  phone: string | null;
+};
+
+export type SelectRoleRequest = {
+  role: UserRole.STUDENT | UserRole.TEACHER;
+};
+
+export type UpdateProfileRequest = {
+  fullName: string;
+  phone?: string | null;
+  avatar?: string | null;
+};
+
+export type UploadFileResponse = {
+  url: string;
 };
 
 export type AuthResponse = {

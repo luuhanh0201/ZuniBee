@@ -65,7 +65,9 @@ function toPublicUser(user: User): AuthUser {
     email: user.email,
     fullName: user.fullName,
     role: user.role,
+    roleSelected: user.roleSelected,
     avatar: user.avatar ?? null,
+    phone: user.phone ?? null,
   };
 }
 
@@ -132,6 +134,7 @@ export class AuthService {
         email: profile.email,
         fullName: profile.fullName || profile.email,
         role: UserRole.STUDENT,
+        roleSelected: false,
         googleId: profile.googleId,
         provider: 'google',
         avatar: profile.avatar,
@@ -152,6 +155,7 @@ export class AuthService {
         email: null,
         fullName: profile.fullName || 'Người dùng Facebook',
         role: UserRole.STUDENT,
+        roleSelected: false,
         facebookId: profile.facebookId,
         provider: 'facebook',
         avatar: profile.avatar,
@@ -299,13 +303,42 @@ export class AuthService {
     await this.userService.setPassword(user.id, newHash);
   }
 
-  private async revokeAllSessions(userId: string): Promise<void> {
+  async getCurrentUser(userId: string): Promise<AuthUser> {
+    const user = await this.userService.findById(userId);
+    if (!user) throw new UnauthorizedException('Người dùng không tồn tại');
+    return toPublicUser(user);
+  }
+
+  async selectRole(
+    userId: string,
+    role: UserRole.STUDENT | UserRole.TEACHER,
+    ctx: RequestContext = {},
+  ) {
+    const user = await this.userService.findById(userId);
+    if (!user) throw new UnauthorizedException('Người dùng không tồn tại');
+    if (user.roleSelected) {
+      throw new ConflictException('Vai trò của tài khoản đã được thiết lập');
+    }
+
+    const updatedUser = await this.userService.selectRole(userId, role);
+    if (!updatedUser) {
+      throw new UnauthorizedException('Người dùng không tồn tại');
+    }
+
+    await this.revokeAllSessions(userId, 'role_selected');
+    return this.issueSession(updatedUser, ctx);
+  }
+
+  private async revokeAllSessions(
+    userId: string,
+    reason = 'password_reset',
+  ): Promise<void> {
     await this.sessionRepository.update(
       { userId, isActive: true },
       {
         isActive: false,
         revokedAt: new Date(),
-        revokeReason: 'password_reset',
+        revokeReason: reason,
       },
     );
   }

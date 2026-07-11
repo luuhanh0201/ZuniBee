@@ -26,14 +26,18 @@ export async function apiFetch<T>(
   { method = "GET", body, accessToken }: RequestOptions = {},
 ): Promise<T> {
   const headers: Record<string, string> = {};
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const isFormData = body instanceof FormData;
+  if (body !== undefined && !isFormData) {
+    headers["Content-Type"] = "application/json";
+  }
   if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
 
   const res = await fetch(`${API_URL}${path}`, {
     method,
     headers,
     credentials: "include",
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body:
+      body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
   });
 
   if (res.status === 204) return undefined as T;
