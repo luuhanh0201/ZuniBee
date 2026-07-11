@@ -9,6 +9,7 @@ type TextFieldProps = {
   name: string;
   autoComplete?: string;
   placeholder?: string;
+  defaultValue?: string;
 };
 
 export function TextField({
@@ -17,6 +18,7 @@ export function TextField({
   name,
   autoComplete,
   placeholder,
+  defaultValue,
 }: TextFieldProps) {
   const id = useId();
   const [showPassword, setShowPassword] = useState(false);
@@ -38,6 +40,7 @@ export function TextField({
           type={inputType}
           autoComplete={autoComplete}
           placeholder={placeholder}
+          defaultValue={defaultValue}
           className="min-h-12 w-full rounded-xl border-2 border-foreground bg-surface px-4 py-3 text-base text-foreground placeholder:text-foreground/40 transition-shadow duration-150 focus:shadow-brutal-sm focus:outline-none"
         />
         {isPassword ? (

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Quicksand, Nunito } from "next/font/google";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AuthProvider } from "@/lib/auth-context";
+import { ToastProvider } from "@/components/ui/toast-provider";
 import "./globals.css";
 
 // Đọc theme đã lưu trước khi React hydrate để tránh flash sai theme.
@@ -37,8 +39,12 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
-        <ThemeToggle />
-        {children}
+        <ToastProvider>
+          <AuthProvider>
+            <ThemeToggle />
+            {children}
+          </AuthProvider>
+        </ToastProvider>
       </body>
     </html>
   );

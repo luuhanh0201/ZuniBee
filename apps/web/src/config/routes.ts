@@ -12,6 +12,10 @@ export const ROUTES = {
   onboarding: "/onboarding",
   studentDashboard: "/student",
   teacherDashboard: "/teacher",
+  oauthCallback: "/oauth/callback",
+  forgotPassword: "/forgot-password",
+  resetPassword: "/reset-password",
+  changePassword: "/change-password",
 } as const;
 
 /** Danh sách phẳng, tiện dùng cho menu, kiểm tra quyền hoặc sitemap. */

@@ -1,23 +1,53 @@
 "use client";
 
-import { TextField } from "@/components/ui/text-field";
-import { SocialButtons } from "@/components/auth/social-buttons";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { UserRole } from "@zunibee/shared";
+import { TextField } from "@/components/ui/text-field";
+import { SubmitButton } from "@/components/ui/submit-button";
+import { Divider } from "@/components/ui/divider";
+import { SocialButtons } from "@/components/auth/social-buttons";
+import { useAuth, ApiError } from "@/lib/auth-context";
+import { useToast } from "@/components/ui/toast-provider";
 import { ROUTES } from "@/config/routes";
 
 export function LoginForm() {
   const router = useRouter();
+  const { login } = useAuth();
+  const { showToast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const form = new FormData(event.currentTarget);
+    const email = String(form.get("email") ?? "");
+    const password = String(form.get("password") ?? "");
+
+    setIsSubmitting(true);
+    try {
+      const user = await login({ email, password });
+      showToast("success", "Đăng nhập thành công!");
+      router.push(
+        user.role === UserRole.TEACHER
+          ? ROUTES.teacherDashboard
+          : ROUTES.studentDashboard,
+      );
+    } catch (err) {
+      showToast(
+        "error",
+        err instanceof ApiError
+          ? err.message
+          : "Không thể đăng nhập, vui lòng thử lại",
+      );
+      setIsSubmitting(false);
+    }
+  }
 
   return (
     <div className="space-y-5">
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          router.push(ROUTES.onboarding);
-        }}
-        noValidate
-        className="space-y-4"
-      >
+      <form onSubmit={handleSubmit} noValidate className="space-y-4">
         <TextField
           label="Email"
           name="email"
@@ -41,29 +71,22 @@ export function LoginForm() {
             />
             Ghi nhớ đăng nhập
           </label>
-          <a
-            href="#"
+          <Link
+            href={ROUTES.forgotPassword}
             className="cursor-pointer font-semibold text-foreground underline decoration-2 underline-offset-2 hover:text-primary"
           >
             Quên mật khẩu?
-          </a>
+          </Link>
         </div>
 
-        <button
-          type="submit"
-          className="inline-flex min-h-12 w-full cursor-pointer items-center justify-center rounded-xl border-2 border-foreground bg-primary px-6 py-3 font-bold text-foreground shadow-brutal-md transition-[transform,box-shadow] duration-200 ease-out hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-lg active:translate-x-0.5 active:translate-y-0.5 active:shadow-brutal-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          Đăng nhập bản demo
-        </button>
+        <SubmitButton
+          isSubmitting={isSubmitting}
+          label="Đăng nhập"
+          loadingLabel="Đang đăng nhập..."
+        />
       </form>
 
-      <div className="flex items-center gap-3">
-        <div className="h-0.5 flex-1 bg-border" />
-        <span className="text-xs font-bold uppercase tracking-wide text-foreground/50">
-          Hoặc
-        </span>
-        <div className="h-0.5 flex-1 bg-border" />
-      </div>
+      <Divider label="Hoặc" />
 
       <SocialButtons />
     </div>

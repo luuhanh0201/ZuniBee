@@ -2,28 +2,26 @@ import { join } from 'path';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { AppController } from '@/app.controller';
+import { AppService } from '@/app.service';
+import { AuthModule } from '@/modules/auth/auth.module';
+import { UserModule } from '@/modules/user/user.module';
 
 // File đứng trước có độ ưu tiên cao hơn (không bị file sau override)
 const envFiles =
   process.env.NODE_ENV === 'production'
     ? ['.env']
-    : ['.env.local', '.env.development', '.env.example'];
+    : ['.env.local', '.env.development', '.env'];
 
-// Anchor theo vị trí file build (apps/api/dist) thay vì cwd,
-// để load được cả env của app lẫn env ở root monorepo dù chạy từ đâu
+// Anchor theo vị trí file build (apps/api/dist) thay vì cwd để API chỉ đọc
+// env thuộc apps/api, dù được chạy từ root monorepo.
 const appDir = join(__dirname, '..');
-const rootDir = join(__dirname, '../../..');
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: envFiles.flatMap((file) => [
-        join(appDir, file),
-        join(rootDir, file),
-      ]),
+      envFilePath: envFiles.map((file) => join(appDir, file)),
     }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
@@ -40,6 +38,8 @@ const rootDir = join(__dirname, '../../..');
         migrationsRun: false,
       }),
     }),
+    AuthModule,
+    UserModule,
   ],
   controllers: [AppController],
   providers: [AppService],

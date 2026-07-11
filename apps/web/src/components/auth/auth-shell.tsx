@@ -9,7 +9,12 @@ type AuthShellProps = {
   footer: { text: string; linkLabel: string; href: string };
 };
 
-export function AuthShell({ title, subtitle, children, footer }: AuthShellProps) {
+export function AuthShell({
+  title,
+  subtitle,
+  children,
+  footer,
+}: AuthShellProps) {
   return (
     <main className="relative flex flex-1 items-center justify-center overflow-hidden bg-background px-4 py-10 sm:px-6 sm:py-14">
       {/* Hình trang trí — cùng bảng màu brand, ẩn với screen reader */}
@@ -28,7 +33,10 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
           className="mb-6 flex cursor-pointer items-center justify-center gap-2 font-display text-xl font-bold text-foreground"
         >
           <span className="flex h-9 w-9 items-center justify-center rounded-xl border-2 border-foreground bg-primary shadow-brutal-sm">
-            <GraduationCap className="h-5 w-5 text-foreground" strokeWidth={2.5} />
+            <GraduationCap
+              className="h-5 w-5 text-foreground"
+              strokeWidth={2.5}
+            />
           </span>
           ZuniBee
         </Link>

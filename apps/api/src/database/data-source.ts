@@ -3,18 +3,14 @@ import { ConfigModule } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 
 const apiRoot = join(__dirname, '../..');
-const monorepoRoot = join(apiRoot, '../..');
 const envFiles =
   process.env.NODE_ENV === 'production'
     ? ['.env']
-    : ['.env.local', '.env.development', '.env.example'];
+    : ['.env.local', '.env.development', '.env'];
 
 async function createDataSource(): Promise<DataSource> {
   await ConfigModule.forRoot({
-    envFilePath: envFiles.flatMap((file) => [
-      join(apiRoot, file),
-      join(monorepoRoot, file),
-    ]),
+    envFilePath: envFiles.map((file) => join(apiRoot, file)),
   });
 
   return new DataSource({

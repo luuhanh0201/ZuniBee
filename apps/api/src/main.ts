@@ -2,18 +2,20 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { AppModule } from './app.module';
+import cookieParser from 'cookie-parser';
+import { AppModule } from '@/app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   const configService = app.get(ConfigService);
 
-  const port = configService.get<number>('APP_PORT', 4000);
+  const port = configService.get<number>('APP_PORT', 2222);
   const prefix = configService.get<string>('APP_PREFIX', 'api/v1');
-  const webUrl = configService.get<string>('WEB_URL', 'http://localhost:3000');
+  const webUrl = configService.get<string>('WEB_URL', 'http://localhost:1111');
 
   app.setGlobalPrefix(prefix);
+  app.use(cookieParser());
 
   app.enableCors({
     origin: webUrl,
@@ -43,9 +45,14 @@ async function bootstrap() {
   SwaggerModule.setup('docs', app, swaggerDocument);
 
   await app.listen(port);
-
-  console.log(`ZuniBee API: http://localhost:${port}/${prefix}`);
-  console.log(`Swagger: http://localhost:${port}/docs`);
+  console.log('=====================================================');
+  console.log(`| ZuniBee APP: ${webUrl}                |`);
+  console.log(`| ZuniBee API: http://localhost:${port}/${prefix}         |`);
+  console.log(`| Swagger: http://localhost:${port}/docs               |`);
+  console.log('=====================================================');
 }
 
-bootstrap();
+bootstrap().catch((error: unknown) => {
+  console.error('Không thể khởi động ZuniBee API:', error);
+  process.exit(1);
+});

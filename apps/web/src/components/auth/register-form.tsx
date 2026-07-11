@@ -1,23 +1,70 @@
 "use client";
 
-import { TextField } from "@/components/ui/text-field";
-import { SocialButtons } from "@/components/auth/social-buttons";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { UserRole } from "@zunibee/shared";
+import { TextField } from "@/components/ui/text-field";
+import { SubmitButton } from "@/components/ui/submit-button";
+import { Divider } from "@/components/ui/divider";
+import { SocialButtons } from "@/components/auth/social-buttons";
+import { RolePicker } from "@/components/auth/role-picker";
+import { useAuth, ApiError } from "@/lib/auth-context";
+import { useToast } from "@/components/ui/toast-provider";
 import { ROUTES } from "@/config/routes";
 
 export function RegisterForm() {
   const router = useRouter();
+  const { register } = useAuth();
+  const { showToast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const form = new FormData(event.currentTarget);
+    const fullName = String(form.get("fullName") ?? "").trim();
+    const email = String(form.get("email") ?? "");
+    const password = String(form.get("password") ?? "");
+    const confirmPassword = String(form.get("confirmPassword") ?? "");
+    const role = String(form.get("role") ?? "");
+    const agreedTerms = form.get("agreedTerms") === "on";
+
+    if (role !== UserRole.STUDENT && role !== UserRole.TEACHER) {
+      showToast("error", "Vui lòng chọn bạn là Giáo viên hay Học sinh");
+      return;
+    }
+    if (password !== confirmPassword) {
+      showToast("error", "Mật khẩu xác nhận không khớp");
+      return;
+    }
+    if (!agreedTerms) {
+      showToast("error", "Vui lòng đồng ý với Điều khoản dịch vụ");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const user = await register({ email, password, fullName, role });
+      showToast("success", "Tạo tài khoản thành công!");
+      router.push(
+        user.role === UserRole.TEACHER
+          ? ROUTES.teacherDashboard
+          : ROUTES.studentDashboard,
+      );
+    } catch (err) {
+      showToast(
+        "error",
+        err instanceof ApiError
+          ? err.message
+          : "Không thể tạo tài khoản, vui lòng thử lại",
+      );
+      setIsSubmitting(false);
+    }
+  }
 
   return (
     <div className="space-y-5">
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          router.push(ROUTES.onboarding);
-        }}
-        noValidate
-        className="space-y-4"
-      >
+      <form onSubmit={handleSubmit} noValidate className="space-y-4">
         <TextField
           label="Họ và tên"
           name="fullName"
@@ -47,9 +94,12 @@ export function RegisterForm() {
           placeholder="Nhập lại mật khẩu"
         />
 
+        <RolePicker />
+
         <label className="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground/80">
           <input
             type="checkbox"
+            name="agreedTerms"
             className="mt-0.5 h-4 w-4 cursor-pointer rounded border-2 border-foreground accent-primary"
           />
           Tôi đồng ý với{" "}
@@ -62,21 +112,14 @@ export function RegisterForm() {
           của ZuniBee
         </label>
 
-        <button
-          type="submit"
-          className="inline-flex min-h-12 w-full cursor-pointer items-center justify-center rounded-xl border-2 border-foreground bg-primary px-6 py-3 font-bold text-foreground shadow-brutal-md transition-[transform,box-shadow] duration-200 ease-out hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-lg active:translate-x-0.5 active:translate-y-0.5 active:shadow-brutal-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          Tạo tài khoản demo
-        </button>
+        <SubmitButton
+          isSubmitting={isSubmitting}
+          label="Tạo tài khoản"
+          loadingLabel="Đang tạo tài khoản..."
+        />
       </form>
 
-      <div className="flex items-center gap-3">
-        <div className="h-0.5 flex-1 bg-border" />
-        <span className="text-xs font-bold uppercase tracking-wide text-foreground/50">
-          Hoặc
-        </span>
-        <div className="h-0.5 flex-1 bg-border" />
-      </div>
+      <Divider label="Hoặc" />
 
       <SocialButtons />
     </div>

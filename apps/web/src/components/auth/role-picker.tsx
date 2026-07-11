@@ -2,16 +2,21 @@
 
 import { useState } from "react";
 import { GraduationCap, BookOpen, Check } from "lucide-react";
+import { UserRole } from "@zunibee/shared";
 
-type Role = "teacher" | "student";
+type SelectableRole = UserRole.STUDENT | UserRole.TEACHER;
 
-const OPTIONS: { value: Role; label: string; icon: typeof GraduationCap }[] = [
-  { value: "teacher", label: "Giáo viên", icon: GraduationCap },
-  { value: "student", label: "Học sinh", icon: BookOpen },
+const OPTIONS: {
+  value: SelectableRole;
+  label: string;
+  icon: typeof GraduationCap;
+}[] = [
+  { value: UserRole.TEACHER, label: "Giáo viên", icon: GraduationCap },
+  { value: UserRole.STUDENT, label: "Học sinh", icon: BookOpen },
 ];
 
 export function RolePicker() {
-  const [role, setRole] = useState<Role | null>(null);
+  const [role, setRole] = useState<SelectableRole | null>(null);
 
   return (
     <div role="radiogroup" aria-label="Bạn là Giáo viên hay Học sinh?">
@@ -36,7 +41,10 @@ export function RolePicker() {
             >
               {selected ? (
                 <span className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border-2 border-foreground bg-success">
-                  <Check className="h-3.5 w-3.5 text-foreground" strokeWidth={3} />
+                  <Check
+                    className="h-3.5 w-3.5 text-foreground"
+                    strokeWidth={3}
+                  />
                 </span>
               ) : null}
               <Icon className="h-6 w-6" strokeWidth={2.5} />

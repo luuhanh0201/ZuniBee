@@ -110,7 +110,11 @@ export function RouteStatusPage({
               href={primaryAction.href}
               className="group inline-flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-primary px-6 py-3 font-bold text-on-primary shadow-brutal-md transition-[transform,box-shadow] duration-200 ease-out hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-lg active:translate-x-0.5 active:translate-y-0.5 active:shadow-brutal-xs motion-reduce:transform-none motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
-              <PrimaryIcon aria-hidden="true" className="h-5 w-5" strokeWidth={2.5} />
+              <PrimaryIcon
+                aria-hidden="true"
+                className="h-5 w-5"
+                strokeWidth={2.5}
+              />
               {primaryAction.label}
               <ArrowRight
                 aria-hidden="true"
