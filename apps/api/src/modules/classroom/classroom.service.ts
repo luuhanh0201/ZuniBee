@@ -115,6 +115,7 @@ export class ClassroomService {
         teacher: true,
         members: { user: true },
         invitations: true,
+        materials: true,
       },
       order: { createdAt: 'DESC' },
     });
@@ -500,6 +501,7 @@ export class ClassroomService {
         teacher: true,
         members: { user: true },
         invitations: true,
+        materials: true,
       },
     });
     if (!classroom) throw new NotFoundException('Lớp học không tồn tại');
@@ -588,7 +590,21 @@ export class ClassroomService {
         : [],
       // Nội dung học tập sẽ được lấy từ module tài liệu và quiz khi các module
       // đó được triển khai. Giữ contract ổn định để client hiển thị empty state.
-      materials: [],
+      materials: (classroom.materials ?? [])
+        .slice()
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .map((material) => ({
+          id: material.id,
+          title: material.title,
+          description: material.description,
+          type: material.type,
+          url: material.url,
+          originalName: material.originalName,
+          mimeType: material.mimeType,
+          size: material.size,
+          createdAt: material.createdAt.toISOString(),
+          updatedAt: material.updatedAt.toISOString(),
+        })),
       quizzes: [],
     };
   }

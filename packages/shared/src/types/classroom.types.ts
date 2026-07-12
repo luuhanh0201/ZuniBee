@@ -46,8 +46,13 @@ export type ClassroomMaterial = {
   id: string;
   title: string;
   description: string | null;
-  url: string;
+  type: "link" | "file";
+  url: string | null;
+  originalName: string | null;
+  mimeType: string | null;
+  size: number | null;
   createdAt: string;
+  updatedAt: string;
 };
 
 export type ClassroomQuiz = {

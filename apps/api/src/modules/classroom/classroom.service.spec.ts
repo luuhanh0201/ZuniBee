@@ -76,6 +76,7 @@ function classroomFixture(overrides: Partial<Classroom> = {}): Classroom {
     joinToken: 'generic-token',
     members: [],
     invitations: [],
+    materials: [],
     createdAt: new Date('2026-07-12T01:00:00.000Z'),
     updatedAt: new Date('2026-07-12T01:00:00.000Z'),
     ...overrides,

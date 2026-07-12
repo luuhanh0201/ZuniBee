@@ -12,6 +12,7 @@ import {
 import { User } from '@/modules/user/entities/user.entity';
 import { ClassroomMember } from '@/modules/classroom/entities/classroom-member.entity';
 import { ClassroomInvitation } from '@/modules/classroom/entities/classroom-invitation.entity';
+import { ClassroomMaterial } from '@/modules/classroom/entities/classroom-material.entity';
 
 export enum ClassroomStatus {
   ACTIVE = 'active',
@@ -68,6 +69,9 @@ export class Classroom {
 
   @OneToMany(() => ClassroomInvitation, (invitation) => invitation.classroom)
   invitations!: ClassroomInvitation[];
+
+  @OneToMany(() => ClassroomMaterial, (material) => material.classroom)
+  materials!: ClassroomMaterial[];
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

@@ -1,6 +1,7 @@
 import type {
   ClassroomDetail,
   ClassroomJoinPreview,
+  ClassroomMaterial,
   ClassroomSummary,
   CreateClassroomRequest,
   InviteStudentsRequest,
@@ -10,6 +11,7 @@ import type {
   RegenerateClassroomAccessResponse,
 } from "@zunibee/shared";
 import { apiFetch } from "@/lib/api-client";
+import { API_URL, ApiError } from "@/lib/api-client";
 
 export type ClassroomJoinKind = "link" | "invitation";
 
@@ -83,6 +85,98 @@ export function regenerateClassroomAccess(
 
 export function getStudentClassrooms(accessToken?: string) {
   return apiFetch<ClassroomSummary[]>("/classrooms/mine", { accessToken });
+}
+
+export function getClassroomMaterials(
+  classroomId: string,
+  accessToken?: string,
+) {
+  return apiFetch<ClassroomMaterial[]>(`/classrooms/${classroomId}/materials`, {
+    accessToken,
+  });
+}
+
+export function uploadClassroomMaterialFiles(
+  classroomId: string,
+  input: { description?: string; files: File[] },
+  accessToken?: string,
+) {
+  const body = new FormData();
+  if (input.description) body.set("description", input.description);
+  input.files.forEach((file) => body.append("files", file));
+  return apiFetch<ClassroomMaterial[]>(
+    `/classrooms/${classroomId}/materials/files`,
+    {
+      method: "POST",
+      body,
+      accessToken,
+    },
+  );
+}
+
+export function updateClassroomMaterial(
+  classroomId: string,
+  materialId: string,
+  input: { title?: string; description?: string; url?: string },
+  accessToken?: string,
+) {
+  return apiFetch<ClassroomMaterial>(
+    `/classrooms/${classroomId}/materials/${materialId}`,
+    { method: "PATCH", body: input, accessToken },
+  );
+}
+
+export function deleteClassroomMaterial(
+  classroomId: string,
+  materialId: string,
+  accessToken?: string,
+) {
+  return apiFetch<void>(`/classrooms/${classroomId}/materials/${materialId}`, {
+    method: "DELETE",
+    accessToken,
+  });
+}
+
+export async function downloadClassroomMaterial(
+  classroomId: string,
+  material: ClassroomMaterial,
+  accessToken?: string,
+) {
+  const blob = await fetchClassroomMaterialBlob(
+    classroomId,
+    material,
+    accessToken,
+  );
+  const blobUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = blobUrl;
+  anchor.download = material.originalName || material.title;
+  anchor.click();
+  URL.revokeObjectURL(blobUrl);
+}
+
+export async function fetchClassroomMaterialBlob(
+  classroomId: string,
+  material: ClassroomMaterial,
+  accessToken?: string,
+) {
+  const response = await fetch(
+    `${API_URL}/classrooms/${classroomId}/materials/${material.id}/download`,
+    {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      credentials: "include",
+    },
+  );
+  if (!response.ok) {
+    const data = (await response.json().catch(() => null)) as {
+      message?: string | string[];
+    } | null;
+    const message = Array.isArray(data?.message)
+      ? data.message[0]
+      : data?.message || "Không thể tải tài liệu";
+    throw new ApiError(message, response.status);
+  }
+  return response.blob();
 }
 
 export function joinClassroomByCode(

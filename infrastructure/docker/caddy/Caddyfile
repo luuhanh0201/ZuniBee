@@ -1,0 +1,15 @@
+{
+	email {$ADMIN_EMAIL}
+}
+
+# Web (Next.js)
+http://{$DOMAIN}, http://www.{$DOMAIN} {
+	encode gzip zstd
+	reverse_proxy web:1112
+}
+
+# API (NestJS) — bao gồm /uploads (avatar) và /docs (Swagger)
+http://api.{$DOMAIN} {
+	encode gzip zstd
+	reverse_proxy api:2223
+}

@@ -31,12 +31,12 @@ Thumbs.db
 
 # Uploads
 uploads/
+protected-uploads/
 tmp/
 
 # Docker volumes
 docker-data/
 design-system
-pnpm-lock.yaml
 
 docs
 .codex

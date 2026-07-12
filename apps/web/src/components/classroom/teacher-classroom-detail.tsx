@@ -43,6 +43,7 @@ import {
   TeacherClassroomFrame,
 } from "./classroom-ui";
 import { EmailBatchInput } from "./email-batch-input";
+import { TeacherMaterialsManager } from "./teacher-materials-manager";
 import {
   formatDate,
   formatDateTime,
@@ -330,12 +331,11 @@ export function TeacherClassroomDetail({
           ) : null}
 
           {activeTab === "materials" ? (
-            <TeacherEmptyContent
-              id="teacher-classroom-panel-materials"
-              labelledBy="teacher-classroom-tab-materials"
-              icon={FileText}
-              title="Tài liệu học tập"
-              description="Tính năng đăng và quản lý tài liệu cho lớp sẽ được bổ sung tại đây."
+            <TeacherMaterialsManager
+              classroomId={classroom.id}
+              materials={classroom.materials}
+              accessToken={accessToken ?? undefined}
+              onChanged={() => loadClassroom(true)}
             />
           ) : null}
 

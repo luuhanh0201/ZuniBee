@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   BookOpenCheck,
   CalendarDays,
+  Eye,
   FileText,
   GraduationCap,
   LibraryBig,
@@ -24,6 +25,8 @@ import {
   StudentClassroomPageHeader,
 } from "./student-classroom-frame";
 import { formatDate, getErrorMessage } from "./classroom-utils";
+import { MaterialPreviewDialog } from "./material-preview-dialog";
+import { MaterialDescription } from "./material-description";
 
 type ClassroomTab = "overview" | "materials" | "quizzes";
 
@@ -37,6 +40,9 @@ export function StudentClassroomDetail({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ClassroomTab>("overview");
+  const [previewing, setPreviewing] = useState<
+    ClassroomDetail["materials"][number] | null
+  >(null);
 
   const loadClassroom = useCallback(async () => {
     setIsLoading(true);
@@ -179,20 +185,34 @@ export function StudentClassroomDetail({
                 count={classroom.materials.length}
               >
                 {classroom.materials.map((material) => (
-                  <a
+                  <article
                     key={material.id}
-                    href={material.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block cursor-pointer rounded-xl border-2 border-divider bg-surface-soft p-4 font-extrabold transition-colors duration-200 hover:border-foreground hover:bg-secondary-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    className="rounded-xl border-2 border-divider bg-surface-soft p-4"
                   >
-                    {material.title}
-                    {material.description ? (
-                      <span className="mt-1 block text-sm font-semibold text-muted-foreground">
-                        {material.description}
-                      </span>
-                    ) : null}
-                  </a>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <h3 className="break-words font-extrabold">
+                          {material.title}
+                        </h3>
+                        <p className="mt-1 text-sm font-semibold text-muted-foreground">
+                          {material.type === "file"
+                            ? material.originalName || "Tệp tài liệu"
+                            : "Liên kết ngoài"}
+                        </p>
+                        {material.description ? (
+                          <MaterialDescription text={material.description} />
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewing(material)}
+                        className={`${SECONDARY_ACTION_CLASS} shrink-0`}
+                      >
+                        <Eye className="h-4 w-4" aria-hidden="true" />
+                        Xem tài liệu
+                      </button>
+                    </div>
+                  </article>
                 ))}
               </ContentSection>
             </div>
@@ -226,6 +246,14 @@ export function StudentClassroomDetail({
                 ))}
               </ContentSection>
             </div>
+          ) : null}
+          {previewing ? (
+            <MaterialPreviewDialog
+              classroomId={classroomId}
+              material={previewing}
+              accessToken={accessToken ?? undefined}
+              onClose={() => setPreviewing(null)}
+            />
           ) : null}
         </>
       )}
