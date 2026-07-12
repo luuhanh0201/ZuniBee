@@ -3,6 +3,22 @@ import { ConfigService } from '@nestjs/config';
 import { createTransport, type Transporter } from 'nodemailer';
 import { MailTemplateRenderer } from '@/modules/mail/mail-template.renderer';
 
+export type ClassroomInvitationMail = {
+  email: string;
+  teacherName: string;
+  classroomName: string;
+  invitationUrl: string;
+  expiresAt: Date;
+};
+
+export type ClassroomMemberAddedMail = {
+  email: string;
+  studentName: string;
+  teacherName: string;
+  classroomName: string;
+  classroomUrl: string;
+};
+
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
@@ -68,6 +84,84 @@ export class MailService {
       throw error;
     }
   }
+
+  async sendClassroomInvitation(input: ClassroomInvitationMail): Promise<void> {
+    const templateContext = {
+      title: `Lời mời vào lớp ${input.classroomName} — ZuniBee`,
+      preheader: `${input.teacherName} đã mời bạn tham gia lớp ${input.classroomName}.`,
+      teacherName: input.teacherName,
+      classroomName: input.classroomName,
+      invitationUrl: input.invitationUrl,
+      expiresLabel: formatDateTimeVi(input.expiresAt),
+    };
+    const [html, text] = await Promise.all([
+      this.templateRenderer.renderHtml('classroom-invitation', templateContext),
+      this.templateRenderer.renderText('classroom-invitation', templateContext),
+    ]);
+
+    await this.sendMail({
+      to: input.email,
+      subject: `Lời mời vào lớp ${input.classroomName} — ZuniBee`,
+      html,
+      text,
+      errorLabel: 'lời mời lớp học',
+    });
+  }
+
+  async sendClassroomMemberAdded(
+    input: ClassroomMemberAddedMail,
+  ): Promise<void> {
+    const templateContext = {
+      title: `Bạn đã được thêm vào lớp ${input.classroomName} — ZuniBee`,
+      preheader: `${input.teacherName} đã thêm bạn vào lớp ${input.classroomName}.`,
+      studentName: input.studentName,
+      teacherName: input.teacherName,
+      classroomName: input.classroomName,
+      classroomUrl: input.classroomUrl,
+    };
+    const [html, text] = await Promise.all([
+      this.templateRenderer.renderHtml(
+        'classroom-member-added',
+        templateContext,
+      ),
+      this.templateRenderer.renderText(
+        'classroom-member-added',
+        templateContext,
+      ),
+    ]);
+
+    await this.sendMail({
+      to: input.email,
+      subject: `Bạn đã được thêm vào lớp ${input.classroomName} — ZuniBee`,
+      html,
+      text,
+      errorLabel: 'thông báo tham gia lớp học',
+    });
+  }
+
+  private async sendMail(input: {
+    to: string;
+    subject: string;
+    html: string;
+    text: string;
+    errorLabel: string;
+  }): Promise<void> {
+    try {
+      await this.transporter.sendMail({
+        from: this.fromAddress,
+        to: input.to,
+        subject: input.subject,
+        html: input.html,
+        text: input.text,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Gửi ${input.errorLabel} tới ${input.to} thất bại`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw error;
+    }
+  }
 }
 
 function formatDurationVi(duration: string): string {
@@ -80,4 +174,12 @@ function formatDurationVi(duration: string): string {
     d: 'ngày',
   };
   return match[1] + ' ' + unit[match[2]];
+}
+
+function formatDateTimeVi(value: Date): string {
+  return new Intl.DateTimeFormat('vi-VN', {
+    dateStyle: 'long',
+    timeStyle: 'short',
+    timeZone: 'Asia/Ho_Chi_Minh',
+  }).format(value);
 }

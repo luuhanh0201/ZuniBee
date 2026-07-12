@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   ArrowRight,
@@ -321,36 +321,55 @@ function TeacherWelcomeBanner() {
         <div>
           <span className="inline-flex items-center gap-2 rounded-full border-2 border-foreground bg-surface px-3 py-1.5 text-sm font-bold text-foreground shadow-brutal-sm">
             <Sparkles aria-hidden="true" className="h-4 w-4" />
-            Dashboard giáo viên · Demo
+            Không gian lớp học
           </span>
           <h1 className="mt-5 max-w-3xl font-display text-3xl font-bold sm:text-4xl">
-            Chào cô Mai! Lớp học hôm nay đang chờ một hoạt động thú vị.
+            Tạo lớp mới và mời học sinh cùng học trên ZuniBee.
           </h1>
           <p className="mt-3 max-w-2xl font-semibold leading-relaxed text-on-purple-muted">
-            Tạo quiz, xem kết quả gần đây và tìm chủ đề học sinh cần hỗ trợ.
+            Chia sẻ bằng mã lớp, đường link, mã QR hoặc gửi lời mời qua email.
           </p>
         </div>
         <Link
-          href="#quiz-gan-day"
+          href={ROUTES.teacherCreateClassroom}
           className="inline-flex min-h-14 cursor-pointer items-center justify-center gap-2 self-start rounded-xl border-2 border-foreground bg-primary px-6 font-bold text-on-primary shadow-brutal-lg transition-[transform,box-shadow,background-color] duration-200 hover:-translate-x-px hover:-translate-y-px hover:bg-primary-hover hover:shadow-brutal-hover motion-reduce:transform-none focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-white"
         >
           <Plus aria-hidden="true" className="h-5 w-5" />
-          Xem khu vực tạo quiz
+          Tạo lớp mới
         </Link>
       </div>
     </section>
   );
 }
 
-function DashboardHeader({ role }: { role: DashboardRole }) {
+export function DashboardHeader({ role }: { role: DashboardRole }) {
   const student = role === UserRole.STUDENT;
   const { user, logout } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   async function handleLogout() {
     await logout();
     router.push(ROUTES.login);
   }
+
+  const navItems = [
+    {
+      icon: LayoutDashboard,
+      label: "Tổng quan",
+      href: student ? ROUTES.studentDashboard : ROUTES.teacherDashboard,
+    },
+    {
+      icon: student ? BookOpen : Users,
+      label: student ? "Lớp của tôi" : "Lớp học",
+      href: student ? ROUTES.studentClasses : ROUTES.teacherClasses,
+    },
+    {
+      icon: student ? Medal : Library,
+      label: student ? "Thành tích" : "Kho quiz",
+      href: null,
+    },
+  ];
 
   return (
     <header className="border-b-2 border-foreground bg-surface px-4 py-3 sm:px-6 lg:px-8">
@@ -371,22 +390,33 @@ function DashboardHeader({ role }: { role: DashboardRole }) {
           aria-label="Điều hướng dashboard"
           className="hidden items-center gap-2 md:flex"
         >
-          {[
-            [LayoutDashboard, "Tổng quan"],
-            [student ? BookOpen : Users, student ? "Học tập" : "Lớp học"],
-            [student ? Medal : Library, student ? "Thành tích" : "Kho quiz"],
-          ].map(([Icon, label]) => {
-            const NavIcon = Icon as LucideIcon;
-            return (
-              <span
-                key={label as string}
-                className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold text-muted-foreground first:bg-surface-soft first:text-foreground"
+          {navItems.map(({ icon: NavIcon, label, href }) =>
+            href ? (
+              <Link
+                key={label}
+                href={href}
+                aria-current={
+                  pathname === href ||
+                  (href.endsWith("/classes") && pathname.startsWith(`${href}/`))
+                    ? "page"
+                    : undefined
+                }
+                className={`inline-flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-colors duration-200 hover:bg-surface-soft hover:text-foreground focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring ${pathname === href || (href.endsWith("/classes") && pathname.startsWith(`${href}/`)) ? "bg-surface-soft text-foreground" : "text-muted-foreground"}`}
               >
                 <NavIcon aria-hidden="true" className="h-4 w-4" />
-                {label as string}
+                {label}
+              </Link>
+            ) : (
+              <span
+                key={label}
+                aria-disabled="true"
+                className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold text-muted-foreground"
+              >
+                <NavIcon aria-hidden="true" className="h-4 w-4" />
+                {label}
               </span>
-            );
-          })}
+            ),
+          )}
         </nav>
 
         <div className="flex items-center gap-2">
@@ -447,7 +477,7 @@ function StudentContent() {
   return (
     <div className="mt-8 grid gap-7 lg:grid-cols-[1.3fr_0.7fr]">
       <section id="thu-thach">
-        <div className="mb-4 flex items-end justify-between gap-4">
+        <div className="mb-4 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
           <div>
             <p className="text-sm font-extrabold text-secondary-strong">
               GỢI Ý CHO BẠN
@@ -456,9 +486,13 @@ function StudentContent() {
               Tiếp tục học tập
             </h2>
           </div>
-          <span className="text-sm font-bold text-muted-foreground">
-            2 hoạt động
-          </span>
+          <Link
+            href={ROUTES.studentClasses}
+            className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border-2 border-foreground bg-primary px-4 font-bold shadow-brutal-sm transition-[transform,box-shadow] duration-200 hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-md motion-reduce:transform-none focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring"
+          >
+            <Plus aria-hidden="true" className="h-4 w-4" />
+            Tham gia lớp
+          </Link>
         </div>
 
         <div className="grid gap-5 sm:grid-cols-2">

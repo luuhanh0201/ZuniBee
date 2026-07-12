@@ -6,6 +6,10 @@ import { BookOpen, GraduationCap, Loader2, Sparkles } from "lucide-react";
 import { UserRole } from "@zunibee/shared";
 import { ROUTES } from "@/config/routes";
 import { ApiError, useAuth } from "@/lib/auth-context";
+import {
+  clearStoredAuthReturnTo,
+  withReturnTo,
+} from "@/components/classroom/safe-return-to";
 
 type SelectableRole = UserRole.STUDENT | UserRole.TEACHER;
 
@@ -26,7 +30,7 @@ const roleOptions = [
   },
 ] as const;
 
-export function OAuthRoleSelection() {
+export function OAuthRoleSelection({ returnTo }: { returnTo?: string }) {
   const router = useRouter();
   const { user, isLoading, selectRole } = useAuth();
   const [selectedRole, setSelectedRole] = useState<SelectableRole | null>(null);
@@ -36,17 +40,20 @@ export function OAuthRoleSelection() {
   useEffect(() => {
     if (isLoading) return;
     if (!user) {
-      router.replace(ROUTES.login);
+      clearStoredAuthReturnTo();
+      router.replace(withReturnTo(ROUTES.login, returnTo));
       return;
     }
     if (user.roleSelected) {
+      clearStoredAuthReturnTo();
       router.replace(
-        user.role === UserRole.TEACHER
-          ? ROUTES.teacherDashboard
-          : ROUTES.studentDashboard,
+        returnTo ??
+          (user.role === UserRole.TEACHER
+            ? ROUTES.teacherDashboard
+            : ROUTES.studentDashboard),
       );
     }
-  }, [isLoading, router, user]);
+  }, [isLoading, returnTo, router, user]);
 
   async function handleSubmit() {
     if (!selectedRole || isSubmitting) return;
@@ -54,10 +61,12 @@ export function OAuthRoleSelection() {
     setError("");
     try {
       const updatedUser = await selectRole({ role: selectedRole });
+      clearStoredAuthReturnTo();
       router.replace(
-        updatedUser.role === UserRole.TEACHER
-          ? ROUTES.teacherDashboard
-          : ROUTES.studentDashboard,
+        returnTo ??
+          (updatedUser.role === UserRole.TEACHER
+            ? ROUTES.teacherDashboard
+            : ROUTES.studentDashboard),
       );
     } catch (caughtError) {
       setError(

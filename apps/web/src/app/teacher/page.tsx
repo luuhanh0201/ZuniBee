@@ -5,7 +5,7 @@ import { RequireRole } from "@/components/auth/require-role";
 
 export const metadata: Metadata = {
   title: "Dashboard giáo viên — ZuniBee",
-  description: "Trải nghiệm dashboard giáo viên bản demo của ZuniBee.",
+  description: "Quản lý lớp học, học sinh và hoạt động dạy học trên ZuniBee.",
 };
 
 export default function TeacherDashboardPage() {

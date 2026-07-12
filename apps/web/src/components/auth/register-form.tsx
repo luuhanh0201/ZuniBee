@@ -7,12 +7,13 @@ import { TextField } from "@/components/ui/text-field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Divider } from "@/components/ui/divider";
 import { SocialButtons } from "@/components/auth/social-buttons";
+import { clearStoredAuthReturnTo } from "@/components/classroom/safe-return-to";
 import { RolePicker } from "@/components/auth/role-picker";
 import { useAuth, ApiError } from "@/lib/auth-context";
 import { useToast } from "@/components/ui/toast-provider";
 import { ROUTES } from "@/config/routes";
 
-export function RegisterForm() {
+export function RegisterForm({ returnTo }: { returnTo?: string }) {
   const router = useRouter();
   const { register } = useAuth();
   const { showToast } = useToast();
@@ -45,11 +46,13 @@ export function RegisterForm() {
     setIsSubmitting(true);
     try {
       const user = await register({ email, password, fullName, role });
+      clearStoredAuthReturnTo();
       showToast("success", "Tạo tài khoản thành công!");
       router.push(
-        user.role === UserRole.TEACHER
-          ? ROUTES.teacherDashboard
-          : ROUTES.studentDashboard,
+        returnTo ??
+          (user.role === UserRole.TEACHER
+            ? ROUTES.teacherDashboard
+            : ROUTES.studentDashboard),
       );
     } catch (err) {
       showToast(
@@ -121,7 +124,7 @@ export function RegisterForm() {
 
       <Divider label="Hoặc" />
 
-      <SocialButtons />
+      <SocialButtons returnTo={returnTo} />
     </div>
   );
 }

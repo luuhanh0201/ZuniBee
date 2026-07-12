@@ -11,7 +11,11 @@ export const ROUTES = {
   register: "/register",
   onboarding: "/onboarding",
   studentDashboard: "/student",
+  studentClasses: "/student/classes",
   teacherDashboard: "/teacher",
+  teacherClasses: "/teacher/classes",
+  teacherCreateClassroom: "/teacher/classes/new",
+  joinClassroom: "/join",
   oauthCallback: "/oauth/callback",
   oauthSelectRole: "/oauth/select-role",
   forgotPassword: "/forgot-password",
@@ -25,3 +29,15 @@ export const APP_ROUTES = Object.values(ROUTES);
 
 export type RouteName = keyof typeof ROUTES;
 export type AppRoute = (typeof ROUTES)[RouteName];
+
+export function teacherClassroomRoute(classroomId: string): string {
+  return `${ROUTES.teacherClasses}/${encodeURIComponent(classroomId)}`;
+}
+
+export function joinClassroomRoute(
+  token: string,
+  type: "link" | "invitation" = "link",
+): string {
+  const path = `${ROUTES.joinClassroom}/${encodeURIComponent(token)}`;
+  return type === "invitation" ? `${path}?type=invitation` : path;
+}

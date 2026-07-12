@@ -5,6 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { UserRole } from "@zunibee/shared";
 import { useAuth } from "@/lib/auth-context";
+import {
+  clearStoredAuthReturnTo,
+  getStoredAuthReturnTo,
+  withReturnTo,
+} from "@/components/classroom/safe-return-to";
 import { ROUTES } from "@/config/routes";
 
 function OAuthCallbackContent() {
@@ -18,24 +23,29 @@ function OAuthCallbackContent() {
     ranOnce.current = true;
 
     const accessToken = searchParams.get("accessToken");
+    const returnTo = getStoredAuthReturnTo();
     if (!accessToken) {
-      router.replace(ROUTES.login);
+      clearStoredAuthReturnTo();
+      router.replace(withReturnTo(ROUTES.login, returnTo));
       return;
     }
 
     setSession(accessToken).then((user) => {
       if (!user) {
-        router.replace(ROUTES.login);
+        clearStoredAuthReturnTo();
+        router.replace(withReturnTo(ROUTES.login, returnTo));
         return;
       }
       if (!user.roleSelected) {
-        router.replace(ROUTES.oauthSelectRole);
+        router.replace(withReturnTo(ROUTES.oauthSelectRole, returnTo));
         return;
       }
+      clearStoredAuthReturnTo();
       router.replace(
-        user.role === UserRole.TEACHER
-          ? ROUTES.teacherDashboard
-          : ROUTES.studentDashboard,
+        returnTo ??
+          (user.role === UserRole.TEACHER
+            ? ROUTES.teacherDashboard
+            : ROUTES.studentDashboard),
       );
     });
   }, [searchParams, setSession, router]);

@@ -8,11 +8,12 @@ import { TextField } from "@/components/ui/text-field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Divider } from "@/components/ui/divider";
 import { SocialButtons } from "@/components/auth/social-buttons";
+import { clearStoredAuthReturnTo } from "@/components/classroom/safe-return-to";
 import { useAuth, ApiError } from "@/lib/auth-context";
 import { useToast } from "@/components/ui/toast-provider";
 import { ROUTES } from "@/config/routes";
 
-export function LoginForm() {
+export function LoginForm({ returnTo }: { returnTo?: string }) {
   const router = useRouter();
   const { login } = useAuth();
   const { showToast } = useToast();
@@ -28,11 +29,13 @@ export function LoginForm() {
     setIsSubmitting(true);
     try {
       const user = await login({ email, password });
+      clearStoredAuthReturnTo();
       showToast("success", "Đăng nhập thành công!");
       router.push(
-        user.role === UserRole.TEACHER
-          ? ROUTES.teacherDashboard
-          : ROUTES.studentDashboard,
+        returnTo ??
+          (user.role === UserRole.TEACHER
+            ? ROUTES.teacherDashboard
+            : ROUTES.studentDashboard),
       );
     } catch (err) {
       showToast(
@@ -88,7 +91,7 @@ export function LoginForm() {
 
       <Divider label="Hoặc" />
 
-      <SocialButtons />
+      <SocialButtons returnTo={returnTo} />
     </div>
   );
 }

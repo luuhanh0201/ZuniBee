@@ -3,7 +3,8 @@ import Handlebars, { type TemplateDelegate } from 'handlebars';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-export type MailTemplateName = 'temp-password';
+export type MailTemplateName =
+  'temp-password' | 'classroom-invitation' | 'classroom-member-added';
 export type MailTemplateContext = Record<string, unknown>;
 
 @Injectable()
