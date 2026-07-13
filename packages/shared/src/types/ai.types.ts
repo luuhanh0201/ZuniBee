@@ -1,0 +1,125 @@
+import type { QuizDetail, QuizQuestionType } from "./quiz.types";
+
+export type AiProviderKind = "ollama" | "openai_compatible";
+export type AiProvider = {
+  id: string;
+  name: string;
+  kind: AiProviderKind;
+  baseUrl: string;
+  model: string;
+  isActive: boolean;
+  isDefault: boolean;
+  hasApiKey: boolean;
+  baseCreditCost: number;
+  creditCostPer1kTokens: number;
+  createdAt: string;
+  updatedAt: string;
+};
+export type CreateAiProviderRequest = {
+  name: string;
+  kind: AiProviderKind;
+  baseUrl: string;
+  model: string;
+  apiKey?: string;
+  isActive?: boolean;
+  isDefault?: boolean;
+  baseCreditCost?: number;
+  creditCostPer1kTokens?: number;
+};
+export type UpdateAiProviderRequest = Partial<CreateAiProviderRequest>;
+
+export type AiCreditAccount = {
+  userId: string;
+  balance: number;
+  reserved: number;
+  available: number;
+  updatedAt: string;
+};
+export type AiCreditLedgerKind = "grant" | "reserve" | "consume" | "release";
+export type AiCreditLedgerEntry = {
+  id: string;
+  kind: AiCreditLedgerKind;
+  amount: number;
+  balanceAfter: number;
+  reservedAfter: number;
+  referenceType: string;
+  referenceId: string;
+  note: string | null;
+  createdAt: string;
+};
+export type GrantAiCreditRequest = {
+  userId: string;
+  amount: number;
+  note?: string;
+};
+export type AiCreditAdminUser = {
+  id: string;
+  email: string | null;
+  fullName: string;
+  role: string;
+  credit: AiCreditAccount;
+};
+
+export type AiGenerationSourceType = "prompt" | "upload";
+export type AiGenerationStatus = "pending" | "running" | "succeeded" | "failed";
+export type GenerateQuizWithAiRequest = {
+  title: string;
+  description?: string;
+  topic: string;
+  language?: string;
+  difficulty?: "easy" | "medium" | "hard";
+  questionCount: number;
+  questionTypes?: QuizQuestionType[];
+  sourceType?: AiGenerationSourceType;
+};
+export type AiGenerationJob = {
+  id: string;
+  status: AiGenerationStatus;
+  providerId: string;
+  providerName: string;
+  quizId: string | null;
+  reservedCredits: number;
+  chargedCredits: number;
+  inputTokens: number;
+  outputTokens: number;
+  errorMessage: string | null;
+  createdAt: string;
+  completedAt: string | null;
+};
+export type GenerateQuizWithAiResponse = {
+  job: AiGenerationJob;
+  quiz: QuizDetail;
+  credit: AiCreditAccount;
+};
+
+export type QuizWeaknessInsight = {
+  id: string;
+  quizId: string;
+  status: AiGenerationStatus;
+  summary: string | null;
+  strengths: string[];
+  weaknesses: string[];
+  recommendations: string[];
+  sampleSize: number;
+  chargedCredits: number;
+  errorMessage: string | null;
+  generatedAt: string | null;
+  createdAt: string;
+};
+
+export type NotificationOutboxStatus =
+  "pending" | "processing" | "sent" | "failed";
+export type QuizNotificationSummary = {
+  queued: number;
+  skippedGuests: number;
+  alreadyQueued: number;
+};
+export type NotificationOutboxItem = {
+  id: string;
+  recipientEmail: string;
+  status: NotificationOutboxStatus;
+  attempts: number;
+  lastError: string | null;
+  sentAt: string | null;
+  createdAt: string;
+};

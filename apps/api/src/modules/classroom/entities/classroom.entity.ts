@@ -12,6 +12,7 @@ import {
 import { User } from '@/modules/user/entities/user.entity';
 import { ClassroomMember } from '@/modules/classroom/entities/classroom-member.entity';
 import { ClassroomInvitation } from '@/modules/classroom/entities/classroom-invitation.entity';
+import { QuizAssignment } from '@/modules/quiz/entities/quiz-assignment.entity';
 import { ClassroomMaterial } from '@/modules/classroom/entities/classroom-material.entity';
 
 export enum ClassroomStatus {
@@ -69,6 +70,9 @@ export class Classroom {
 
   @OneToMany(() => ClassroomInvitation, (invitation) => invitation.classroom)
   invitations!: ClassroomInvitation[];
+
+  @OneToMany(() => QuizAssignment, (assignment) => assignment.classroom)
+  quizAssignments!: QuizAssignment[];
 
   @OneToMany(() => ClassroomMaterial, (material) => material.classroom)
   materials!: ClassroomMaterial[];

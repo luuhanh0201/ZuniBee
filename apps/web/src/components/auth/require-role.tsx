@@ -10,6 +10,7 @@ import { ROUTES } from "@/config/routes";
 const DASHBOARD_BY_ROLE: Partial<Record<UserRole, string>> = {
   [UserRole.STUDENT]: ROUTES.studentDashboard,
   [UserRole.TEACHER]: ROUTES.teacherDashboard,
+  [UserRole.ADMIN]: ROUTES.adminAi,
 };
 
 /** Cờ demo do OnboardingFlow lưu — cho phép xem dashboard không cần tài khoản thật. */
@@ -25,7 +26,7 @@ export function RequireRole({
   role,
   children,
 }: {
-  role: UserRole.STUDENT | UserRole.TEACHER;
+  role: UserRole;
   children: React.ReactNode;
 }) {
   const { user, isLoading } = useAuth();

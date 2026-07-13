@@ -4,7 +4,10 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 export type MailTemplateName =
-  'temp-password' | 'classroom-invitation' | 'classroom-member-added';
+  | 'temp-password'
+  | 'classroom-invitation'
+  | 'classroom-member-added'
+  | 'quiz-result';
 export type MailTemplateContext = Record<string, unknown>;
 
 @Injectable()

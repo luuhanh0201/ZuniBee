@@ -38,6 +38,7 @@ import {
   ClassroomInvitation,
   ClassroomInvitationStatus,
 } from '@/modules/classroom/entities/classroom-invitation.entity';
+import { QuizStatus } from '@/modules/quiz/entities/quiz.entity';
 
 const JOIN_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const JOIN_CODE_SEGMENT_LENGTH = 4;
@@ -115,6 +116,7 @@ export class ClassroomService {
         teacher: true,
         members: { user: true },
         invitations: true,
+        quizAssignments: { quiz: { questions: true } },
         materials: true,
       },
       order: { createdAt: 'DESC' },
@@ -501,6 +503,7 @@ export class ClassroomService {
         teacher: true,
         members: { user: true },
         invitations: true,
+        quizAssignments: { quiz: { questions: true } },
         materials: true,
       },
     });
@@ -605,7 +608,19 @@ export class ClassroomService {
           createdAt: material.createdAt.toISOString(),
           updatedAt: material.updatedAt.toISOString(),
         })),
-      quizzes: [],
+      quizzes: (classroom.quizAssignments ?? [])
+        .filter(
+          (assignment) =>
+            includeInvitations ||
+            assignment.quiz.status === QuizStatus.PUBLISHED,
+        )
+        .map((assignment) => ({
+          id: assignment.quiz.id,
+          title: assignment.quiz.title,
+          description: assignment.quiz.description,
+          questionCount: assignment.quiz.questions?.length ?? 0,
+          dueAt: assignment.quiz.dueAt?.toISOString() ?? null,
+        })),
     };
   }
 

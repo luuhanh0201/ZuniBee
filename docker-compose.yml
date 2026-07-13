@@ -16,7 +16,11 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-postgres} -d ${DATABASE_NAME:-zunibee}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DATABASE_USER:-postgres} -d ${DATABASE_NAME:-zunibee}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -61,9 +65,14 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
+      AI_PROVIDER_ENCRYPTION_KEY: ${AI_PROVIDER_ENCRYPTION_KEY:?AI_PROVIDER_ENCRYPTION_KEY is required}
+      NOTIFICATION_WORKER_ENABLED: ${NOTIFICATION_WORKER_ENABLED:-true}
       WEB_URL: https://${DOMAIN}
     volumes:
       - api-uploads:/app/apps/api/uploads
+      - api-protected-uploads:/app/apps/api/protected-uploads
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -90,7 +99,13 @@ services:
       DATABASE_NAME: ${DATABASE_NAME:-zunibee}
       DATABASE_USER: ${DATABASE_USER:-postgres}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD}
-    command: ["node_modules/.bin/typeorm", "migration:run", "-d", "dist/database/data-source.js"]
+    command:
+      [
+        "node_modules/.bin/typeorm",
+        "migration:run",
+        "-d",
+        "dist/database/data-source.js",
+      ]
     depends_on:
       postgres:
         condition: service_healthy
@@ -139,5 +154,6 @@ volumes:
   postgres-data:
   redis-data:
   api-uploads:
+  api-protected-uploads:
   caddy-data:
   caddy-config:

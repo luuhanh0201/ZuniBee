@@ -33,9 +33,11 @@ export function LoginForm({ returnTo }: { returnTo?: string }) {
       showToast("success", "Đăng nhập thành công!");
       router.push(
         returnTo ??
-          (user.role === UserRole.TEACHER
-            ? ROUTES.teacherDashboard
-            : ROUTES.studentDashboard),
+          (user.role === UserRole.ADMIN
+            ? ROUTES.adminAi
+            : user.role === UserRole.TEACHER
+              ? ROUTES.teacherDashboard
+              : ROUTES.studentDashboard),
       );
     } catch (err) {
       showToast(

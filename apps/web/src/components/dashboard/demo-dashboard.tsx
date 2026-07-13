@@ -367,7 +367,7 @@ export function DashboardHeader({ role }: { role: DashboardRole }) {
     {
       icon: student ? Medal : Library,
       label: student ? "Thành tích" : "Kho quiz",
-      href: null,
+      href: student ? null : ROUTES.teacherQuizzes,
     },
   ];
 

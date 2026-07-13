@@ -10,6 +10,8 @@ import { ClassroomMaterialController } from '@/modules/classroom/classroom-mater
 import { ClassroomMaterialService } from '@/modules/classroom/classroom-material.service';
 import { MailModule } from '@/modules/mail/mail.module';
 import { User } from '@/modules/user/entities/user.entity';
+import { Quiz } from '@/modules/quiz/entities/quiz.entity';
+import { QuizAssignment } from '@/modules/quiz/entities/quiz-assignment.entity';
 
 @Module({
   imports: [
@@ -19,6 +21,8 @@ import { User } from '@/modules/user/entities/user.entity';
       ClassroomInvitation,
       ClassroomMaterial,
       User,
+      Quiz,
+      QuizAssignment,
     ]),
     MailModule,
   ],

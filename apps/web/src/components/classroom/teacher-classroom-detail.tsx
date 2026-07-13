@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   BookOpen,
   CalendarDays,
@@ -24,6 +25,7 @@ import type {
 } from "@zunibee/shared";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/components/ui/toast-provider";
+import { ROUTES, teacherQuizRoute } from "@/config/routes";
 import {
   getClassroom,
   inviteStudents,
@@ -340,13 +342,49 @@ export function TeacherClassroomDetail({
           ) : null}
 
           {activeTab === "quizzes" ? (
-            <TeacherEmptyContent
+            <section
               id="teacher-classroom-panel-quizzes"
-              labelledBy="teacher-classroom-tab-quizzes"
-              icon={BookOpen}
-              title="Quiz của lớp"
-              description="Tính năng tạo và giao quiz cho lớp sẽ được bổ sung tại đây."
-            />
+              role="tabpanel"
+              aria-labelledby="teacher-classroom-tab-quizzes"
+              className="rounded-2xl border-2 border-foreground bg-surface p-6 shadow-brutal-md"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-display text-2xl font-extrabold">
+                    Quiz của lớp
+                  </h2>
+                  <p className="font-semibold text-muted-foreground">
+                    Các quiz đã phân phối vào lớp này.
+                  </p>
+                </div>
+                <Link
+                  href={ROUTES.teacherQuizzes}
+                  className={PRIMARY_ACTION_CLASS}
+                >
+                  Quản lý kho quiz
+                </Link>
+              </div>
+              {classroom.quizzes.length ? (
+                <div className="mt-5 grid gap-3 md:grid-cols-2">
+                  {classroom.quizzes.map((quiz) => (
+                    <Link
+                      key={quiz.id}
+                      href={teacherQuizRoute(quiz.id)}
+                      className="rounded-xl border-2 border-divider bg-surface-soft p-4 transition-colors hover:border-foreground"
+                    >
+                      <h3 className="font-extrabold">{quiz.title}</h3>
+                      <p className="mt-1 text-sm font-bold text-muted-foreground">
+                        {quiz.questionCount} câu hỏi
+                      </p>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-5 rounded-xl border-2 border-dashed p-8 text-center font-bold text-muted-foreground">
+                  Chưa có quiz được gán vào lớp.
+                </p>
+              )}
+            </section>
           ) : null}
         </>
       )}
@@ -449,37 +487,6 @@ function TeacherClassroomTabs({
         );
       })}
     </div>
-  );
-}
-
-function TeacherEmptyContent({
-  id,
-  labelledBy,
-  icon: Icon,
-  title,
-  description,
-}: {
-  id: string;
-  labelledBy: string;
-  icon: typeof BookOpen;
-  title: string;
-  description: string;
-}) {
-  return (
-    <section
-      id={id}
-      role="tabpanel"
-      aria-labelledby={labelledBy}
-      className="rounded-2xl border-2 border-foreground bg-surface p-8 text-center shadow-brutal-md sm:p-12"
-    >
-      <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-foreground bg-primary shadow-brutal-sm">
-        <Icon className="h-7 w-7" aria-hidden="true" />
-      </span>
-      <h2 className="mt-5 font-display text-2xl font-extrabold">{title}</h2>
-      <p className="mx-auto mt-2 max-w-lg font-semibold text-muted-foreground">
-        {description}
-      </p>
-    </section>
   );
 }
 

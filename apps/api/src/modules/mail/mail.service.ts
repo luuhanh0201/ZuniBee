@@ -19,6 +19,15 @@ export type ClassroomMemberAddedMail = {
   classroomUrl: string;
 };
 
+export type QuizResultMail = {
+  email: string;
+  studentName: string;
+  quizTitle: string;
+  score: number;
+  maxScore: number;
+  resultUrl: string;
+};
+
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
@@ -136,6 +145,29 @@ export class MailService {
       html,
       text,
       errorLabel: 'thông báo tham gia lớp học',
+    });
+  }
+
+  async sendQuizResult(input: QuizResultMail): Promise<void> {
+    const templateContext = {
+      title: `Kết quả ${input.quizTitle} — ZuniBee`,
+      preheader: `Bạn đạt ${input.score}/${input.maxScore} điểm.`,
+      studentName: input.studentName,
+      quizTitle: input.quizTitle,
+      score: input.score,
+      maxScore: input.maxScore,
+      resultUrl: input.resultUrl,
+    };
+    const [html, text] = await Promise.all([
+      this.templateRenderer.renderHtml('quiz-result', templateContext),
+      this.templateRenderer.renderText('quiz-result', templateContext),
+    ]);
+    await this.sendMail({
+      to: input.email,
+      subject: `Kết quả ${input.quizTitle} — ZuniBee`,
+      html,
+      text,
+      errorLabel: 'kết quả quiz',
     });
   }
 

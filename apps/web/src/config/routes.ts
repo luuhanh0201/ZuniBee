@@ -15,6 +15,10 @@ export const ROUTES = {
   teacherDashboard: "/teacher",
   teacherClasses: "/teacher/classes",
   teacherCreateClassroom: "/teacher/classes/new",
+  teacherQuizzes: "/teacher/quizzes",
+  teacherCreateQuiz: "/teacher/quizzes/new",
+  teacherCreateAiQuiz: "/teacher/quizzes/ai",
+  adminAi: "/admin/ai",
   joinClassroom: "/join",
   oauthCallback: "/oauth/callback",
   oauthSelectRole: "/oauth/select-role",
@@ -32,6 +36,18 @@ export type AppRoute = (typeof ROUTES)[RouteName];
 
 export function teacherClassroomRoute(classroomId: string): string {
   return `${ROUTES.teacherClasses}/${encodeURIComponent(classroomId)}`;
+}
+
+export function teacherQuizRoute(quizId: string): string {
+  return `${ROUTES.teacherQuizzes}/${encodeURIComponent(quizId)}`;
+}
+
+export function publicQuizRoute(quizId: string): string {
+  return `/q/${encodeURIComponent(quizId)}`;
+}
+
+export function quizAttemptRoute(attemptId: string): string {
+  return `/attempts/${encodeURIComponent(attemptId)}`;
 }
 
 export function joinClassroomRoute(

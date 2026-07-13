@@ -8,6 +8,9 @@ import { AuthModule } from '@/modules/auth/auth.module';
 import { UserModule } from '@/modules/user/user.module';
 import { UploadFileModule } from '@/modules/upload-file/upload-file.module';
 import { ClassroomModule } from '@/modules/classroom/classroom.module';
+import { QuizModule } from '@/modules/quiz/quiz.module';
+import { AiModule } from '@/modules/ai/ai.module';
+import { NotificationModule } from '@/modules/notification/notification.module';
 
 // File đứng trước có độ ưu tiên cao hơn (không bị file sau override)
 const envFiles =
@@ -44,6 +47,9 @@ const appDir = join(__dirname, '..');
     UserModule,
     UploadFileModule,
     ClassroomModule,
+    QuizModule,
+    AiModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import {
   BookOpenCheck,
   CalendarDays,
@@ -14,6 +15,7 @@ import {
 } from "lucide-react";
 import type { ClassroomDetail } from "@zunibee/shared";
 import { useAuth } from "@/lib/auth-context";
+import { publicQuizRoute } from "@/config/routes";
 import { getClassroom } from "./classroom-api";
 import {
   ClassroomErrorState,
@@ -233,16 +235,17 @@ export function StudentClassroomDetail({
                 count={classroom.quizzes.length}
               >
                 {classroom.quizzes.map((quiz) => (
-                  <article
+                  <Link
                     key={quiz.id}
-                    className="rounded-xl border-2 border-divider bg-surface-soft p-4"
+                    href={publicQuizRoute(quiz.id)}
+                    className="block cursor-pointer rounded-xl border-2 border-divider bg-surface-soft p-4 transition-colors hover:border-foreground hover:bg-secondary-soft"
                   >
                     <h3 className="font-extrabold">{quiz.title}</h3>
                     <p className="mt-1 text-sm font-semibold text-muted-foreground">
                       {quiz.questionCount} câu hỏi
                       {quiz.dueAt ? ` · Hạn ${formatDate(quiz.dueAt)}` : ""}
                     </p>
-                  </article>
+                  </Link>
                 ))}
               </ContentSection>
             </div>
