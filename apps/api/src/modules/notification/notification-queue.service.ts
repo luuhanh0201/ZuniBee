@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Job, Queue, Worker } from 'bullmq';
-import { LessThanOrEqual, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { MailService } from '@/modules/mail/mail.service';
 import {
   NotificationOutboxEntity,
@@ -51,21 +51,21 @@ export class NotificationQueueService implements OnModuleInit, OnModuleDestroy {
       this.logger.error(`Notification Worker: ${error.message}`),
     );
     const pending = await this.outbox.find({
-      where: {
-        status: NotificationOutboxStatus.PENDING,
-        availableAt: LessThanOrEqual(new Date()),
-      },
+      where: { status: NotificationOutboxStatus.PENDING },
       take: 500,
     });
-    await Promise.all(pending.map((row) => this.enqueue(row.id)));
+    await Promise.all(
+      pending.map((row) => this.enqueue(row.id, row.availableAt)),
+    );
   }
-  async enqueue(outboxId: string): Promise<void> {
+  async enqueue(outboxId: string, availableAt = new Date()): Promise<void> {
     if (!this.queue) return;
     await this.queue.add(
       'send',
       { outboxId },
       {
         jobId: outboxId,
+        delay: Math.max(0, availableAt.getTime() - Date.now()),
         attempts: 5,
         backoff: { type: 'exponential', delay: 5000 },
         removeOnComplete: 1000,
@@ -80,16 +80,34 @@ export class NotificationQueueService implements OnModuleInit, OnModuleDestroy {
     row.attempts += 1;
     await this.outbox.save(row);
     try {
-      if (row.type !== 'quiz_result')
+      if (row.type === 'quiz_result') {
+        const payload = row.payload as {
+          studentName: string;
+          quizTitle: string;
+          score: number;
+          maxScore: number;
+          resultUrl: string;
+        };
+        await this.mail.sendQuizResult({
+          email: row.recipientEmail,
+          ...payload,
+        });
+      } else if (row.type === 'quiz_assigned' || row.type === 'quiz_deadline') {
+        const payload = row.payload as {
+          studentName: string;
+          quizTitle: string;
+          message: string;
+          actionLabel: string;
+          quizUrl: string;
+          subject: string;
+        };
+        await this.mail.sendQuizReminder({
+          email: row.recipientEmail,
+          ...payload,
+        });
+      } else {
         throw new Error(`Loại thông báo chưa hỗ trợ: ${row.type}`);
-      const payload = row.payload as {
-        studentName: string;
-        quizTitle: string;
-        score: number;
-        maxScore: number;
-        resultUrl: string;
-      };
-      await this.mail.sendQuizResult({ email: row.recipientEmail, ...payload });
+      }
       row.status = NotificationOutboxStatus.SENT;
       row.sentAt = new Date();
       row.lastError = null;

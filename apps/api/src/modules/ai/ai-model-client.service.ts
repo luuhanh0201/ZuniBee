@@ -4,6 +4,7 @@ import {
   type AiProviderEntity,
 } from './entities/ai-provider.entity';
 import { AiProviderService } from './ai-provider.service';
+import { AiProviderUrlPolicyService } from './ai-provider-url-policy.service';
 
 export type AiCompletion = {
   value: unknown;
@@ -13,7 +14,10 @@ export type AiCompletion = {
 
 @Injectable()
 export class AiModelClientService {
-  constructor(private readonly providers: AiProviderService) {}
+  constructor(
+    private readonly providers: AiProviderService,
+    private readonly urlPolicy: AiProviderUrlPolicyService,
+  ) {}
   async completeJson(
     provider: AiProviderEntity,
     system: string,
@@ -22,11 +26,13 @@ export class AiModelClientService {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 120_000);
     try {
+      await this.urlPolicy.assertAllowed(provider.kind, provider.baseUrl);
       const apiKey = this.providers.apiKey(provider);
       const response =
         provider.kind === AiProviderKind.OLLAMA
           ? await fetch(`${provider.baseUrl}/api/chat`, {
               method: 'POST',
+              redirect: 'error',
               signal: controller.signal,
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -42,6 +48,7 @@ export class AiModelClientService {
             })
           : await fetch(`${provider.baseUrl}/chat/completions`, {
               method: 'POST',
+              redirect: 'error',
               signal: controller.signal,
               headers: {
                 'Content-Type': 'application/json',
@@ -58,9 +65,9 @@ export class AiModelClientService {
               }),
             });
       if (!response.ok) {
-        const detail = (await response.text()).slice(0, 500);
+        await response.body?.cancel();
         throw new BadGatewayException(
-          `Provider AI trả lỗi ${response.status}: ${detail || 'không có nội dung'}`,
+          `Provider AI trả lỗi HTTP ${response.status}`,
         );
       }
       const body = (await response.json()) as unknown;

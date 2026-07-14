@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -17,11 +18,12 @@ import type { AuthenticatedUser } from '@/modules/auth/types/authenticated-user.
 import { QuizAttemptService } from './quiz-attempt.service';
 import { StartAttemptDto } from './dto/start-attempt.dto';
 import { SaveAnswerDto } from './dto/save-answer.dto';
+import { GuestAttemptRateLimit } from '@/common/security/rate-limit.decorator';
 
 @Controller('quiz-attempts')
 export class QuizAttemptController {
   constructor(private readonly service: QuizAttemptService) {}
-  @OptionalAuth() @Post() start(
+  @OptionalAuth() @Post() @GuestAttemptRateLimit() start(
     @Body() dto: StartAttemptDto,
     @OptionalCurrentUser() user: AuthenticatedUser | null,
   ) {
@@ -42,27 +44,31 @@ export class QuizAttemptController {
   @OptionalAuth() @Get(':id') get(
     @Param('id', ParseUUIDPipe) id: string,
     @OptionalCurrentUser() user: AuthenticatedUser | null,
+    @Headers('x-guest-token') guestToken?: string,
   ) {
-    return this.service.get(id, user);
+    return this.service.get(id, user, guestToken);
   }
   @OptionalAuth() @Patch(':id/answers/:questionId') saveAnswer(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('questionId', ParseUUIDPipe) questionId: string,
     @Body() dto: SaveAnswerDto,
     @OptionalCurrentUser() user: AuthenticatedUser | null,
+    @Headers('x-guest-token') guestToken?: string,
   ) {
-    return this.service.saveAnswer(id, questionId, dto, user);
+    return this.service.saveAnswer(id, questionId, dto, user, guestToken);
   }
   @OptionalAuth() @Post(':id/submit') submit(
     @Param('id', ParseUUIDPipe) id: string,
     @OptionalCurrentUser() user: AuthenticatedUser | null,
+    @Headers('x-guest-token') guestToken?: string,
   ) {
-    return this.service.submit(id, user);
+    return this.service.submit(id, user, guestToken);
   }
   @OptionalAuth() @Get(':id/result') result(
     @Param('id', ParseUUIDPipe) id: string,
     @OptionalCurrentUser() user: AuthenticatedUser | null,
+    @Headers('x-guest-token') guestToken?: string,
   ) {
-    return this.service.result(id, user);
+    return this.service.result(id, user, guestToken);
   }
 }

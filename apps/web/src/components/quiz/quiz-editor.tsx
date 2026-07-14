@@ -36,17 +36,18 @@ import {
   getTeacherClassrooms,
 } from "@/components/classroom/classroom-api";
 import { QuizQuestionForm } from "./quiz-question-form";
-import { QuizAiTools } from "@/components/ai/quiz-ai-tools";
+import { TeacherQuizResults } from "./teacher-quiz-results";
 import {
   addQuizAssignment,
   addQuizQuestion,
   configureQuiz,
   deleteQuizAssignment,
   deleteQuizQuestion,
+  enqueueQuizAssignedNotifications,
+  enqueueQuizDeadlineNotifications,
   getQuiz,
   getQuizResults,
   publishQuiz,
-  regradeQuiz,
   reorderQuizQuestions,
   updateQuiz,
   updateQuizQuestion,
@@ -377,62 +378,29 @@ export function QuizEditor({ quizId }: { quizId: string }) {
               return getQuiz(quiz.id, accessToken ?? undefined);
             })
           }
+          onNotify={async (kind) => {
+            const summary = await (kind === "assigned"
+              ? enqueueQuizAssignedNotifications(
+                  quiz.id,
+                  accessToken ?? undefined,
+                )
+              : enqueueQuizDeadlineNotifications(
+                  quiz.id,
+                  accessToken ?? undefined,
+                ));
+            return `Đã xếp hàng ${summary.queued} email; ${summary.alreadyQueued} email đã tồn tại.`;
+          }}
         />
       ) : null}
       {tab === "results" ? (
-        <section className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-md">
-          <div className="flex justify-between">
-            <h2 className="font-display text-2xl font-extrabold">
-              Bảng kết quả
-            </h2>
-            {quiz.answersChangedAt ? (
-              <button
-                className={PRIMARY_ACTION_CLASS}
-                onClick={() =>
-                  void (async () => {
-                    await regradeQuiz(quiz.id, accessToken ?? undefined);
-                    await load();
-                    setResults(
-                      await getQuizResults(quiz.id, accessToken ?? undefined),
-                    );
-                  })()
-                }
-              >
-                Chấm lại
-              </button>
-            ) : null}
-          </div>
-          <div className="mt-5 overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b-2">
-                  <th className="p-3">#</th>
-                  <th>Người làm</th>
-                  <th>Điểm</th>
-                  <th>Thời gian</th>
-                </tr>
-              </thead>
-              <tbody>
-                {results.map((row) => (
-                  <tr key={row.attemptId} className="border-b">
-                    <td className="p-3">{row.rank}</td>
-                    <td>{row.identityName}</td>
-                    <td>
-                      {row.score}/{row.maxScore}
-                    </td>
-                    <td>{row.timeTakenSeconds}s</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {results.length === 0 ? (
-              <p className="p-8 text-center font-bold text-muted-foreground">
-                Chưa có lượt nộp bài.
-              </p>
-            ) : null}
-          </div>
-          <QuizAiTools quizId={quiz.id} hasResults={results.length > 0} />
-        </section>
+        <TeacherQuizResults
+          quiz={quiz}
+          results={results}
+          onReload={async () => {
+            await load();
+            setResults(await getQuizResults(quiz.id, accessToken ?? undefined));
+          }}
+        />
       ) : null}
     </TeacherClassroomFrame>
   );
@@ -464,6 +432,15 @@ function QuizConfig({
   const [opensAt, setOpensAt] = useState(quiz.opensAt?.slice(0, 16) ?? "");
   const [dueAt, setDueAt] = useState(quiz.dueAt?.slice(0, 16) ?? "");
   const [leaderboardMode, setLeaderboardMode] = useState(quiz.leaderboardMode);
+  const [resultReleaseMode, setResultReleaseMode] = useState(
+    quiz.resultReleaseMode,
+  );
+  const [showCorrectAnswers, setShowCorrectAnswers] = useState(
+    quiz.showCorrectAnswers,
+  );
+  const [showExplanations, setShowExplanations] = useState(
+    quiz.showExplanations,
+  );
   return (
     <form
       onSubmit={(e) => {
@@ -479,6 +456,9 @@ function QuizConfig({
             opensAt: opensAt ? new Date(opensAt).toISOString() : null,
             dueAt: dueAt ? new Date(dueAt).toISOString() : null,
             leaderboardMode,
+            resultReleaseMode,
+            showCorrectAnswers,
+            showExplanations,
           },
         });
       }}
@@ -566,6 +546,35 @@ function QuizConfig({
           <option value="visible_anonymized">Hiện ẩn danh</option>
         </select>
       </Field>
+      <Field label="Công bố điểm">
+        <select
+          className={INPUT_CLASS}
+          value={resultReleaseMode}
+          onChange={(e) =>
+            setResultReleaseMode(e.target.value as typeof resultReleaseMode)
+          }
+        >
+          <option value="immediately">Ngay sau khi nộp</option>
+          <option value="after_due">Sau hạn nộp</option>
+          <option value="hidden">Chỉ giáo viên xem</option>
+        </select>
+      </Field>
+      <label className="flex cursor-pointer items-center gap-3 rounded-xl border-2 border-foreground bg-surface-soft p-4 font-extrabold">
+        <input
+          type="checkbox"
+          checked={showCorrectAnswers}
+          onChange={(e) => setShowCorrectAnswers(e.target.checked)}
+        />
+        Hiển thị đáp án đúng khi công bố
+      </label>
+      <label className="flex cursor-pointer items-center gap-3 rounded-xl border-2 border-foreground bg-surface-soft p-4 font-extrabold">
+        <input
+          type="checkbox"
+          checked={showExplanations}
+          onChange={(e) => setShowExplanations(e.target.checked)}
+        />
+        Hiển thị lời giải khi công bố
+      </label>
       <button disabled={busy} className={`${PRIMARY_ACTION_CLASS} self-end`}>
         Lưu cấu hình
       </button>
@@ -578,17 +587,57 @@ function QuizDistribution({
   targets,
   onAdd,
   onDelete,
+  onNotify,
 }: {
   quiz: QuizDetail;
   busy: boolean;
   targets: Array<{ id: string; name: string }>;
   onAdd: (id: string) => void;
   onDelete: (id: string) => void;
+  onNotify: (kind: "assigned" | "deadline") => Promise<string>;
 }) {
   const [targetId, setTargetId] = useState("");
+  const [notificationBusy, setNotificationBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  async function notify(kind: "assigned" | "deadline") {
+    setNotificationBusy(true);
+    try {
+      setNotice(await onNotify(kind));
+    } catch (cause) {
+      setNotice(getErrorMessage(cause));
+    } finally {
+      setNotificationBusy(false);
+    }
+  }
   return (
     <section className="rounded-2xl border-2 border-foreground bg-surface p-6">
       <h2 className="font-display text-2xl font-extrabold">Phân phối quiz</h2>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={notificationBusy || !quiz.assignments.length}
+          onClick={() => void notify("assigned")}
+          className={SECONDARY_ACTION_CLASS}
+        >
+          Gửi thông báo quiz mới
+        </button>
+        <button
+          type="button"
+          disabled={notificationBusy || !quiz.assignments.length || !quiz.dueAt}
+          onClick={() => void notify("deadline")}
+          className={SECONDARY_ACTION_CLASS}
+        >
+          Lên lịch nhắc trước hạn 24 giờ
+        </button>
+      </div>
+      {notice ? (
+        <p
+          role="status"
+          className="mt-3 rounded-xl border-2 border-foreground bg-success-soft p-3 font-bold"
+        >
+          {notice}
+        </p>
+      ) : null}
       {quiz.visibility === "public" ? (
         <p className="mt-3 font-bold text-muted-foreground">
           Quiz công khai không cần gán đối tượng.

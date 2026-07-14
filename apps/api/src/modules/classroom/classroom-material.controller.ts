@@ -34,6 +34,7 @@ import {
   MAX_CLASSROOM_MATERIAL_FILES,
   MAX_CLASSROOM_MATERIAL_SIZE,
 } from '@/modules/upload-file/upload-file.constants';
+import { ExpensiveOperationRateLimit } from '@/common/security/rate-limit.decorator';
 
 @ApiTags('classroom-materials')
 @ApiBearerAuth()
@@ -53,6 +54,7 @@ export class ClassroomMaterialController {
 
   @Roles(UserRole.TEACHER)
   @Post('files')
+  @ExpensiveOperationRateLimit()
   @ApiOperation({ summary: 'Giáo viên tải nhiều tệp tài liệu lên lớp' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({

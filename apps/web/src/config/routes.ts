@@ -12,6 +12,7 @@ export const ROUTES = {
   onboarding: "/onboarding",
   studentDashboard: "/student",
   studentClasses: "/student/classes",
+  studentQuizzes: "/student/quizzes",
   teacherDashboard: "/teacher",
   teacherClasses: "/teacher/classes",
   teacherCreateClassroom: "/teacher/classes/new",

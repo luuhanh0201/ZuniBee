@@ -4,20 +4,25 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  PayloadTooLargeException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
+import ExcelJS from 'exceljs';
 import {
   UserRole,
+  type QuizAnalytics,
   type QuizDetail,
   type QuizResultRow,
   type QuizSummary,
+  type StudentQuizItem,
 } from '@zunibee/shared';
 import type { AuthenticatedUser } from '@/modules/auth/types/authenticated-user.type';
 import { User } from '@/modules/user/entities/user.entity';
 import { Classroom } from '@/modules/classroom/entities/classroom.entity';
 import { ClassroomMember } from '@/modules/classroom/entities/classroom-member.entity';
 import { Quiz, QuizStatus, QuizVisibility } from './entities/quiz.entity';
+import { QuizResultReleaseMode } from './entities/quiz.entity';
 import {
   QuizQuestion,
   QuizQuestionType,
@@ -40,6 +45,9 @@ import {
   gradeAnswer,
   redistributeScores,
 } from './quiz-scoring.util';
+
+const MAX_RESULT_ATTEMPTS = 10_000;
+const MAX_REGRADE_ATTEMPTS = 5_000;
 
 @Injectable()
 export class QuizService {
@@ -143,10 +151,23 @@ export class QuizService {
     if (dto.visibility !== undefined) quiz.visibility = dto.visibility;
     if (dto.leaderboardMode !== undefined)
       quiz.leaderboardMode = dto.leaderboardMode;
+    if (dto.resultReleaseMode !== undefined)
+      quiz.resultReleaseMode = dto.resultReleaseMode;
+    if (dto.showCorrectAnswers !== undefined)
+      quiz.showCorrectAnswers = dto.showCorrectAnswers;
+    if (dto.showExplanations !== undefined)
+      quiz.showExplanations = dto.showExplanations;
     if (dto.maxAttempts !== undefined) quiz.maxAttempts = dto.maxAttempts;
     else if (dto.visibility !== undefined && quiz.maxAttempts === 1) {
       quiz.maxAttempts = dto.visibility === QuizVisibility.PUBLIC ? null : 1;
     }
+    if (
+      quiz.resultReleaseMode === QuizResultReleaseMode.AFTER_DUE &&
+      !quiz.dueAt
+    )
+      throw new BadRequestException(
+        'Cần đặt hạn nộp khi chọn công bố kết quả sau hạn',
+      );
     await this.quizzes.save(quiz);
     if (dto.totalScore !== undefined)
       await this.redistribute(id, quiz.totalScore);
@@ -388,6 +409,7 @@ export class QuizService {
     teacherId: string,
   ): Promise<{ regradedAttempts: number }> {
     const quiz = await this.loadOwned(id, teacherId);
+    await this.assertSubmittedAttemptLimit(id, MAX_REGRADE_ATTEMPTS);
     const submitted = await this.attempts.find({
       where: { quizId: id, status: QuizAttemptStatus.SUBMITTED },
       relations: { answers: true },
@@ -416,6 +438,7 @@ export class QuizService {
 
   async results(id: string, teacherId: string): Promise<QuizResultRow[]> {
     await this.loadOwned(id, teacherId);
+    await this.assertSubmittedAttemptLimit(id, MAX_RESULT_ATTEMPTS);
     const attempts = await this.attempts.find({
       where: { quizId: id, status: QuizAttemptStatus.SUBMITTED },
       relations: { user: true },
@@ -425,6 +448,7 @@ export class QuizService {
       rank: index + 1,
       attemptId: attempt.id,
       identityName: attempt.user?.fullName ?? attempt.guestName ?? 'Khách',
+      identityEmail: attempt.user?.email ?? null,
       label: attempt.user?.fullName ?? attempt.guestName ?? 'Khách',
       score: Number(attempt.score),
       maxScore: Number(attempt.maxScore),
@@ -432,6 +456,237 @@ export class QuizService {
       submittedAt: attempt.submittedAt?.toISOString() ?? '',
       attemptNumber: attempt.attemptNumber,
     }));
+  }
+
+  async listForStudent(userId: string): Promise<StudentQuizItem[]> {
+    const memberships = await this.members.find({ where: { userId } });
+    const classroomIds = memberships.map((member) => member.classroomId);
+    const assignmentWhere = [
+      { studentId: userId },
+      ...(classroomIds.length ? [{ classroomId: In(classroomIds) }] : []),
+    ];
+    const assignments = await this.assignments.find({
+      where: assignmentWhere,
+      relations: {
+        quiz: { teacher: true, questions: true, attempts: true },
+      },
+      order: { createdAt: 'DESC' },
+    });
+    const now = new Date();
+    const unique = new Map<string, StudentQuizItem>();
+    for (const assignment of assignments) {
+      const quiz = assignment.quiz;
+      if (quiz.status !== QuizStatus.PUBLISHED || unique.has(quiz.id)) continue;
+      const attempts = (quiz.attempts ?? [])
+        .filter((attempt) => attempt.userId === userId)
+        .sort((left, right) => right.attemptNumber - left.attemptNumber);
+      const inProgress = attempts.find(
+        (attempt) => attempt.status === QuizAttemptStatus.IN_PROGRESS,
+      );
+      const submitted = attempts.find(
+        (attempt) => attempt.status === QuizAttemptStatus.SUBMITTED,
+      );
+      const state =
+        quiz.opensAt && now < quiz.opensAt
+          ? 'upcoming'
+          : inProgress
+            ? 'in_progress'
+            : submitted
+              ? 'completed'
+              : quiz.dueAt && now >= quiz.dueAt
+                ? 'overdue'
+                : 'available';
+      unique.set(quiz.id, {
+        id: quiz.id,
+        title: quiz.title,
+        description: quiz.description,
+        teacherName: quiz.teacher.fullName,
+        questionCount: quiz.questions?.length ?? 0,
+        totalScore: quiz.totalScore,
+        opensAt: quiz.opensAt?.toISOString() ?? null,
+        dueAt: quiz.dueAt?.toISOString() ?? null,
+        maxAttempts: quiz.maxAttempts,
+        attemptsUsed: attempts.length,
+        state,
+        inProgressAttemptId: inProgress?.id ?? null,
+        latestResult: submitted
+          ? {
+              attemptId: submitted.id,
+              score:
+                quiz.resultReleaseMode === QuizResultReleaseMode.IMMEDIATELY ||
+                (quiz.resultReleaseMode === QuizResultReleaseMode.AFTER_DUE &&
+                  Boolean(quiz.dueAt && now >= quiz.dueAt))
+                  ? Number(submitted.score ?? 0)
+                  : null,
+              maxScore: Number(submitted.maxScore),
+              submittedAt: submitted.submittedAt?.toISOString() ?? '',
+            }
+          : null,
+      });
+    }
+    return [...unique.values()].sort((left, right) => {
+      const priority = {
+        in_progress: 0,
+        available: 1,
+        upcoming: 2,
+        completed: 3,
+        overdue: 4,
+      };
+      return priority[left.state] - priority[right.state];
+    });
+  }
+
+  async analytics(id: string, teacherId: string): Promise<QuizAnalytics> {
+    const quiz = await this.loadOwned(id, teacherId);
+    await this.assertSubmittedAttemptLimit(id, MAX_RESULT_ATTEMPTS);
+    const classroomIds = quiz.assignments
+      .map((assignment) => assignment.classroomId)
+      .filter((value): value is string => Boolean(value));
+    const assigned = new Set(
+      quiz.assignments
+        .map((assignment) => assignment.studentId)
+        .filter((value): value is string => Boolean(value)),
+    );
+    if (classroomIds.length) {
+      const members = await this.members.find({
+        where: { classroomId: In(classroomIds) },
+      });
+      members.forEach((member) => assigned.add(member.userId));
+    }
+    const attempts = await this.attempts.find({
+      where: { quizId: id, status: QuizAttemptStatus.SUBMITTED },
+      relations: { answers: true },
+    });
+    const participants = new Set(
+      attempts.map(
+        (attempt) =>
+          attempt.userId ?? `guest:${attempt.guestToken ?? attempt.id}`,
+      ),
+    );
+    const scores = attempts.map((attempt) => Number(attempt.score ?? 0));
+    const percentages = attempts.map((attempt) =>
+      Number(attempt.maxScore)
+        ? (Number(attempt.score ?? 0) / Number(attempt.maxScore)) * 100
+        : 0,
+    );
+    const bands = [
+      { label: '0–4', min: 0, max: 50 },
+      { label: '5–6', min: 50, max: 70 },
+      { label: '7–8', min: 70, max: 90 },
+      { label: '9–10', min: 90, max: 101 },
+    ];
+    return {
+      assignedStudents: assigned.size,
+      participantCount: participants.size,
+      submittedAttempts: attempts.length,
+      completionRate: assigned.size
+        ? round((participants.size / assigned.size) * 100)
+        : 0,
+      averageScore: scores.length
+        ? round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
+        : 0,
+      highestScore: scores.length ? Math.max(...scores) : 0,
+      lowestScore: scores.length ? Math.min(...scores) : 0,
+      distribution: bands.map((band) => ({
+        label: band.label,
+        count: percentages.filter(
+          (percentage) => percentage >= band.min && percentage < band.max,
+        ).length,
+      })),
+      questions: quiz.questions.map((question) => {
+        const answers = attempts
+          .flatMap((attempt) => attempt.answers)
+          .filter((answer) => answer.questionId === question.id);
+        const correctCount = answers.filter(
+          (answer) => answer.isCorrect,
+        ).length;
+        return {
+          questionId: question.id,
+          content: question.content,
+          answeredCount: answers.length,
+          correctCount,
+          correctRate: answers.length
+            ? round((correctCount / answers.length) * 100)
+            : 0,
+          optionSelections: question.options.map((option) => ({
+            optionId: option.id,
+            content: option.content,
+            selectedCount: answers.filter((answer) =>
+              answer.selectedOptionIds.includes(option.id),
+            ).length,
+            isCorrect: option.isCorrect,
+          })),
+        };
+      }),
+    };
+  }
+
+  async exportResultsExcel(id: string, teacherId: string): Promise<Buffer> {
+    const quiz = await this.loadOwned(id, teacherId);
+    const [rows, analytics] = await Promise.all([
+      this.results(id, teacherId),
+      this.analytics(id, teacherId),
+    ]);
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'ZuniBee';
+    workbook.created = new Date();
+    const resultSheet = workbook.addWorksheet('Kết quả');
+    resultSheet.columns = [
+      { header: 'Xếp hạng', key: 'rank', width: 12 },
+      { header: 'Học sinh', key: 'name', width: 28 },
+      { header: 'Email', key: 'email', width: 30 },
+      { header: 'Lượt làm', key: 'attempt', width: 12 },
+      { header: 'Điểm', key: 'score', width: 12 },
+      { header: 'Tổng điểm', key: 'maxScore', width: 14 },
+      { header: 'Thời gian (giây)', key: 'duration', width: 18 },
+      { header: 'Nộp lúc', key: 'submittedAt', width: 24 },
+    ];
+    rows.forEach((row) =>
+      resultSheet.addRow({
+        rank: row.rank,
+        name: row.identityName,
+        email: row.identityEmail ?? '',
+        attempt: row.attemptNumber,
+        score: row.score,
+        maxScore: row.maxScore,
+        duration: row.timeTakenSeconds,
+        submittedAt: row.submittedAt
+          ? new Date(row.submittedAt).toLocaleString('vi-VN')
+          : '',
+      }),
+    );
+    styleWorksheet(resultSheet, quiz.title);
+    const questionSheet = workbook.addWorksheet('Phân tích câu hỏi');
+    questionSheet.columns = [
+      { header: 'Câu hỏi', key: 'content', width: 55 },
+      { header: 'Đã trả lời', key: 'answered', width: 14 },
+      { header: 'Trả lời đúng', key: 'correct', width: 14 },
+      { header: 'Tỉ lệ đúng (%)', key: 'rate', width: 16 },
+    ];
+    analytics.questions.forEach((question) =>
+      questionSheet.addRow({
+        content: question.content,
+        answered: question.answeredCount,
+        correct: question.correctCount,
+        rate: question.correctRate,
+      }),
+    );
+    styleWorksheet(questionSheet, `${quiz.title} — phân tích`);
+    return Buffer.from(await workbook.xlsx.writeBuffer());
+  }
+
+  private async assertSubmittedAttemptLimit(
+    quizId: string,
+    limit: number,
+  ): Promise<void> {
+    const count = await this.attempts.count({
+      where: { quizId, status: QuizAttemptStatus.SUBMITTED },
+    });
+    if (count > limit) {
+      throw new PayloadTooLargeException(
+        `Quiz có quá nhiều lượt nộp để xử lý đồng bộ (tối đa ${limit})`,
+      );
+    }
   }
 
   async assertCanView(
@@ -545,6 +800,9 @@ export class QuizService {
       opensAt: quiz.opensAt?.toISOString() ?? null,
       maxAttempts: quiz.maxAttempts,
       leaderboardMode: quiz.leaderboardMode,
+      resultReleaseMode: quiz.resultReleaseMode,
+      showCorrectAnswers: quiz.showCorrectAnswers,
+      showExplanations: quiz.showExplanations,
       answersChangedAt: quiz.answersChangedAt?.toISOString() ?? null,
       lastRegradedAt: quiz.lastRegradedAt?.toISOString() ?? null,
       isOwner,
@@ -576,6 +834,28 @@ export class QuizService {
         : [],
     };
   }
+}
+
+function round(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function styleWorksheet(sheet: ExcelJS.Worksheet, title: string): void {
+  sheet.views = [{ state: 'frozen', ySplit: 1 }];
+  sheet.autoFilter = {
+    from: 'A1',
+    to: sheet.getRow(1).getCell(Math.max(1, sheet.columnCount)).address,
+  };
+  const header = sheet.getRow(1);
+  header.font = { bold: true, color: { argb: 'FF111827' } };
+  header.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFFACC15' },
+  };
+  header.height = 24;
+  sheet.properties.defaultRowHeight = 20;
+  sheet.headerFooter.oddHeader = `&C&"Arial,Bold"${title}`;
 }
 
 function validateQuestion(question: QuizQuestion): void {

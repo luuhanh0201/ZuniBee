@@ -23,6 +23,7 @@ import {
 import { CreateClassroomMaterialFileDto } from '@/modules/classroom/dto/create-classroom-material-file.dto';
 import { UpdateClassroomMaterialDto } from '@/modules/classroom/dto/update-classroom-material.dto';
 import { CLASSROOM_MATERIAL_UPLOAD_DIR } from '@/modules/upload-file/upload-file.constants';
+import { assertDeclaredFileType } from '@/modules/upload-file/upload-file-validation.util';
 
 const ALLOWED_MATERIAL_MIME_TYPES = new Set([
   'application/pdf',
@@ -79,6 +80,7 @@ export class ClassroomMaterialService {
         `Tệp ${invalidFile.originalname} không thuộc định dạng được hỗ trợ`,
       );
     }
+    files.forEach((file) => assertDeclaredFileType(file));
 
     await mkdir(CLASSROOM_MATERIAL_UPLOAD_DIR, { recursive: true });
     const storedFiles = files.map((file) => {

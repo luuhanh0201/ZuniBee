@@ -27,6 +27,11 @@ export enum QuizLeaderboardMode {
   HIDDEN = 'hidden',
   VISIBLE_ANONYMIZED = 'visible_anonymized',
 }
+export enum QuizResultReleaseMode {
+  IMMEDIATELY = 'immediately',
+  AFTER_DUE = 'after_due',
+  HIDDEN = 'hidden',
+}
 
 @Entity('quizzes')
 export class Quiz {
@@ -69,6 +74,17 @@ export class Quiz {
     default: QuizLeaderboardMode.HIDDEN,
   })
   leaderboardMode!: QuizLeaderboardMode;
+  @Column({
+    name: 'result_release_mode',
+    type: 'enum',
+    enum: QuizResultReleaseMode,
+    default: QuizResultReleaseMode.IMMEDIATELY,
+  })
+  resultReleaseMode!: QuizResultReleaseMode;
+  @Column({ name: 'show_correct_answers', type: 'boolean', default: true })
+  showCorrectAnswers!: boolean;
+  @Column({ name: 'show_explanations', type: 'boolean', default: true })
+  showExplanations!: boolean;
   @Column({ name: 'answers_changed_at', type: 'timestamptz', nullable: true })
   answersChangedAt!: Date | null;
   @Column({ name: 'last_regraded_at', type: 'timestamptz', nullable: true })

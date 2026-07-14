@@ -1,6 +1,7 @@
 export type QuizStatus = "draft" | "published";
 export type QuizVisibility = "private_class" | "assigned" | "public";
 export type QuizLeaderboardMode = "hidden" | "visible_anonymized";
+export type QuizResultReleaseMode = "immediately" | "after_due" | "hidden";
 export type QuizQuestionType =
   "single_choice" | "true_false" | "multiple_choice";
 export type QuizAssignmentTargetType = "classroom" | "student";
@@ -56,6 +57,9 @@ export type QuizDetail = QuizSummary & {
   opensAt: string | null;
   maxAttempts: number | null;
   leaderboardMode: QuizLeaderboardMode;
+  resultReleaseMode: QuizResultReleaseMode;
+  showCorrectAnswers: boolean;
+  showExplanations: boolean;
   answersChangedAt: string | null;
   lastRegradedAt: string | null;
   questions: QuizQuestion[];
@@ -73,6 +77,9 @@ export type ConfigureQuizRequest = {
   maxAttempts?: number | null;
   visibility?: QuizVisibility;
   leaderboardMode?: QuizLeaderboardMode;
+  resultReleaseMode?: QuizResultReleaseMode;
+  showCorrectAnswers?: boolean;
+  showExplanations?: boolean;
 };
 export type CreateQuizQuestionRequest = {
   type: QuizQuestionType;
@@ -116,7 +123,8 @@ export type QuizAttemptResult = {
   quizId: string;
   quizTitle: string;
   status: QuizAttemptStatus;
-  score: number;
+  isReleased: boolean;
+  score: number | null;
   maxScore: number;
   timeTakenSeconds: number;
   answers: Array<{
@@ -124,10 +132,34 @@ export type QuizAttemptResult = {
     content: string;
     selectedOptionIds: string[];
     correctOptionIds: string[];
-    isCorrect: boolean;
+    isCorrect: boolean | null;
     scoreAwarded: number;
     explanation: string | null;
   }>;
+};
+
+export type StudentQuizState =
+  "upcoming" | "available" | "in_progress" | "completed" | "overdue";
+
+export type StudentQuizItem = {
+  id: string;
+  title: string;
+  description: string | null;
+  teacherName: string;
+  questionCount: number;
+  totalScore: number;
+  opensAt: string | null;
+  dueAt: string | null;
+  maxAttempts: number | null;
+  attemptsUsed: number;
+  state: StudentQuizState;
+  inProgressAttemptId: string | null;
+  latestResult: {
+    attemptId: string;
+    score: number | null;
+    maxScore: number;
+    submittedAt: string;
+  } | null;
 };
 export type QuizLeaderboardEntry = {
   rank: number;
@@ -140,5 +172,32 @@ export type QuizLeaderboardEntry = {
 export type QuizResultRow = QuizLeaderboardEntry & {
   attemptId: string;
   identityName: string;
+  identityEmail: string | null;
   attemptNumber: number;
+};
+
+export type QuizQuestionAnalytics = {
+  questionId: string;
+  content: string;
+  answeredCount: number;
+  correctCount: number;
+  correctRate: number;
+  optionSelections: Array<{
+    optionId: string;
+    content: string;
+    selectedCount: number;
+    isCorrect: boolean;
+  }>;
+};
+
+export type QuizAnalytics = {
+  assignedStudents: number;
+  participantCount: number;
+  submittedAttempts: number;
+  completionRate: number;
+  averageScore: number;
+  highestScore: number;
+  lowestScore: number;
+  distribution: Array<{ label: string; count: number }>;
+  questions: QuizQuestionAnalytics[];
 };

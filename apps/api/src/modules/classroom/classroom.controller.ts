@@ -28,6 +28,7 @@ import { ClassroomService } from '@/modules/classroom/classroom.service';
 import { CreateClassroomDto } from '@/modules/classroom/dto/create-classroom.dto';
 import { InviteStudentsDto } from '@/modules/classroom/dto/invite-students.dto';
 import { JoinClassroomByCodeDto } from '@/modules/classroom/dto/join-classroom-by-code.dto';
+import { ExpensiveOperationRateLimit } from '@/common/security/rate-limit.decorator';
 
 @ApiTags('classrooms')
 @ApiBearerAuth()
@@ -107,6 +108,7 @@ export class ClassroomController {
 
   @Roles(UserRole.TEACHER)
   @Post(':id/invitations')
+  @ExpensiveOperationRateLimit()
   @ApiOperation({ summary: 'Mời học sinh vào lớp bằng email' })
   inviteStudents(
     @Param('id', ParseUUIDPipe) classroomId: string,
@@ -122,6 +124,7 @@ export class ClassroomController {
 
   @Roles(UserRole.TEACHER)
   @Post(':id/invitations/:invitationId/resend')
+  @ExpensiveOperationRateLimit()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Gửi lại lời mời lớp học qua email' })
   resendInvitation(

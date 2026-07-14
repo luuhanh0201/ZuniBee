@@ -20,6 +20,7 @@ import { AiController } from './ai.controller';
 import { AdminAiController } from './admin-ai.controller';
 import { QuizWeaknessInsightService } from './quiz-weakness-insight.service';
 import { QuizInsightController } from './quiz-insight.controller';
+import { AiProviderUrlPolicyService } from './ai-provider-url-policy.service';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { QuizInsightController } from './quiz-insight.controller';
     AiProviderService,
     AiCreditService,
     AiModelClientService,
+    AiProviderUrlPolicyService,
     AiMaterialSourceService,
     AiQuizGenerationService,
     QuizWeaknessInsightService,

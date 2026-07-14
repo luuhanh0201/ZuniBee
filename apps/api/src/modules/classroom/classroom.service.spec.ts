@@ -77,6 +77,7 @@ function classroomFixture(overrides: Partial<Classroom> = {}): Classroom {
     members: [],
     invitations: [],
     materials: [],
+    quizAssignments: [],
     createdAt: new Date('2026-07-12T01:00:00.000Z'),
     updatedAt: new Date('2026-07-12T01:00:00.000Z'),
     ...overrides,

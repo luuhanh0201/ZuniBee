@@ -223,6 +223,7 @@ export function MaterialPreviewDialog({
           ) : blobUrl ? (
             <iframe
               src={blobUrl}
+              sandbox="allow-downloads"
               title={`Xem trước ${material.title}`}
               className="h-full w-full rounded-xl border-2 border-divider bg-white"
             />

@@ -1,5 +1,6 @@
 import { join } from 'path';
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from '@/app.controller';
@@ -11,6 +12,12 @@ import { ClassroomModule } from '@/modules/classroom/classroom.module';
 import { QuizModule } from '@/modules/quiz/quiz.module';
 import { AiModule } from '@/modules/ai/ai.module';
 import { NotificationModule } from '@/modules/notification/notification.module';
+import {
+  ThrottlerGuard,
+  ThrottlerModule,
+  ThrottlerStorage,
+} from '@nestjs/throttler';
+import { RedisThrottlerStorage } from '@/common/security/redis-throttler.storage';
 
 // File đứng trước có độ ưu tiên cao hơn (không bị file sau override)
 const envFiles =
@@ -28,6 +35,16 @@ const appDir = join(__dirname, '..');
       isGlobal: true,
       envFilePath: envFiles.map((file) => join(appDir, file)),
     }),
+    ThrottlerModule.forRoot([
+      { name: 'burst', ttl: 10_000, limit: 30, blockDuration: 30_000 },
+      { name: 'default', ttl: 60_000, limit: 300, blockDuration: 60_000 },
+      {
+        name: 'sustained',
+        ttl: 3_600_000,
+        limit: 3_000,
+        blockDuration: 900_000,
+      },
+    ]),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -52,6 +69,11 @@ const appDir = join(__dirname, '..');
     NotificationModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    RedisThrottlerStorage,
+    { provide: ThrottlerStorage, useExisting: RedisThrottlerStorage },
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule {}

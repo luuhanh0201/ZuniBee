@@ -4,18 +4,22 @@ import type {
   CreateQuizQuestionRequest,
   CreateQuizRequest,
   QuizAssignment,
+  QuizAnalytics,
   QuizAttempt,
   QuizAttemptResult,
   QuizDetail,
   QuizLeaderboardEntry,
+  NotificationOutboxItem,
+  QuizNotificationSummary,
   QuizResultRow,
   QuizSummary,
+  StudentQuizItem,
   SaveQuizAnswerRequest,
   StartQuizAttemptRequest,
   UpdateQuizQuestionRequest,
   UpdateQuizRequest,
 } from "@zunibee/shared";
-import { apiFetch } from "@/lib/api-client";
+import { API_URL, apiFetch } from "@/lib/api-client";
 
 export const listQuizzes = (token?: string) =>
   apiFetch<QuizSummary[]>("/quizzes", { accessToken: token });
@@ -118,6 +122,44 @@ export const regradeQuiz = (id: string, token?: string) =>
   });
 export const getQuizResults = (id: string, token?: string) =>
   apiFetch<QuizResultRow[]>(`/quizzes/${id}/results`, { accessToken: token });
+export const getQuizAnalytics = (id: string, token?: string) =>
+  apiFetch<QuizAnalytics>(`/quizzes/${id}/analytics`, { accessToken: token });
+export const listStudentQuizzes = (token?: string) =>
+  apiFetch<StudentQuizItem[]>("/quizzes/student/mine", {
+    accessToken: token,
+  });
+export const enqueueQuizResultNotifications = (id: string, token?: string) =>
+  apiFetch<QuizNotificationSummary>(`/quizzes/${id}/notifications/results`, {
+    method: "POST",
+    accessToken: token,
+  });
+export const enqueueQuizAssignedNotifications = (id: string, token?: string) =>
+  apiFetch<QuizNotificationSummary>(`/quizzes/${id}/notifications/assigned`, {
+    method: "POST",
+    accessToken: token,
+  });
+export const enqueueQuizDeadlineNotifications = (id: string, token?: string) =>
+  apiFetch<QuizNotificationSummary>(`/quizzes/${id}/notifications/deadline`, {
+    method: "POST",
+    accessToken: token,
+  });
+export const listQuizResultNotifications = (id: string, token?: string) =>
+  apiFetch<NotificationOutboxItem[]>(`/quizzes/${id}/notifications/results`, {
+    accessToken: token,
+  });
+export async function downloadQuizResultsExcel(id: string, token?: string) {
+  const response = await fetch(`${API_URL}/quizzes/${id}/results.xlsx`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!response.ok) throw new Error("Không thể xuất file Excel kết quả");
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `ket-qua-quiz-${id}.xlsx`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 export const startQuizAttempt = (
   body: StartQuizAttemptRequest,
   token?: string,
@@ -127,27 +169,46 @@ export const startQuizAttempt = (
     body,
     accessToken: token,
   });
-export const getQuizAttempt = (id: string, token?: string) =>
-  apiFetch<QuizAttempt>(`/quiz-attempts/${id}`, { accessToken: token });
+export const getQuizAttempt = (
+  id: string,
+  token?: string,
+  guestToken?: string,
+) =>
+  apiFetch<QuizAttempt>(`/quiz-attempts/${id}`, {
+    accessToken: token,
+    guestToken,
+  });
 export const saveQuizAnswer = (
   id: string,
   questionId: string,
   body: SaveQuizAnswerRequest,
   token?: string,
+  guestToken?: string,
 ) =>
   apiFetch<QuizAttempt>(`/quiz-attempts/${id}/answers/${questionId}`, {
     method: "PATCH",
     body,
     accessToken: token,
+    guestToken,
   });
-export const submitQuizAttempt = (id: string, token?: string) =>
+export const submitQuizAttempt = (
+  id: string,
+  token?: string,
+  guestToken?: string,
+) =>
   apiFetch<QuizAttemptResult>(`/quiz-attempts/${id}/submit`, {
     method: "POST",
     accessToken: token,
+    guestToken,
   });
-export const getQuizAttemptResult = (id: string, token?: string) =>
+export const getQuizAttemptResult = (
+  id: string,
+  token?: string,
+  guestToken?: string,
+) =>
   apiFetch<QuizAttemptResult>(`/quiz-attempts/${id}/result`, {
     accessToken: token,
+    guestToken,
   });
 export const getQuizLeaderboard = (quizId: string, token?: string) =>
   apiFetch<QuizLeaderboardEntry[]>(

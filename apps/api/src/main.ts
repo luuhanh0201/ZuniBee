@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
 import { AppModule } from '@/app.module';
 import { UPLOAD_ROOT } from '@/modules/upload-file/upload-file.constants';
 
@@ -15,14 +16,40 @@ async function bootstrap() {
   const port = configService.get<number>('APP_PORT', 2222);
   const prefix = configService.get<string>('APP_PREFIX', 'api/v1');
   const webUrl = configService.get<string>('WEB_URL', 'http://localhost:1111');
+  const isProduction = configService.get<string>('NODE_ENV') === 'production';
 
   app.setGlobalPrefix(prefix);
+  if (isProduction) app.set('trust proxy', 1);
+  app.disable('x-powered-by');
+  app.use(
+    helmet({
+      contentSecurityPolicy: isProduction
+        ? {
+            directives: {
+              defaultSrc: ["'none'"],
+              frameAncestors: ["'none'"],
+              baseUri: ["'none'"],
+              formAction: ["'none'"],
+            },
+          }
+        : false,
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
   app.useStaticAssets(UPLOAD_ROOT, { prefix: '/uploads/' });
   app.use(cookieParser());
 
   app.enableCors({
     origin: webUrl,
     credentials: true,
+    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'X-Guest-Token',
+    ],
+    maxAge: 600,
   });
 
   app.useGlobalPipes(
@@ -36,16 +63,16 @@ async function bootstrap() {
     }),
   );
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('ZuniBee API')
-    .setDescription('API documentation for ZuniBee')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-
-  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
-
-  SwaggerModule.setup('docs', app, swaggerDocument);
+  if (!isProduction) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('ZuniBee API')
+      .setDescription('API documentation for ZuniBee')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('docs', app, swaggerDocument);
+  }
 
   await app.listen(port);
   console.log('=====================================================');

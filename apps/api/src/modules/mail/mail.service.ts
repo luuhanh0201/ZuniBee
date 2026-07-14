@@ -28,6 +28,16 @@ export type QuizResultMail = {
   resultUrl: string;
 };
 
+export type QuizReminderMail = {
+  email: string;
+  studentName: string;
+  quizTitle: string;
+  message: string;
+  actionLabel: string;
+  quizUrl: string;
+  subject: string;
+};
+
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
@@ -168,6 +178,29 @@ export class MailService {
       html,
       text,
       errorLabel: 'kết quả quiz',
+    });
+  }
+
+  async sendQuizReminder(input: QuizReminderMail): Promise<void> {
+    const templateContext = {
+      title: input.subject,
+      preheader: input.message,
+      studentName: input.studentName,
+      quizTitle: input.quizTitle,
+      message: input.message,
+      actionLabel: input.actionLabel,
+      quizUrl: input.quizUrl,
+    };
+    const [html, text] = await Promise.all([
+      this.templateRenderer.renderHtml('quiz-reminder', templateContext),
+      this.templateRenderer.renderText('quiz-reminder', templateContext),
+    ]);
+    await this.sendMail({
+      to: input.email,
+      subject: input.subject,
+      html,
+      text,
+      errorLabel: 'nhắc quiz',
     });
   }
 

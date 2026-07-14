@@ -40,6 +40,8 @@ export function PublicQuizLanding({ quizId }: { quizId: string }) {
         { quizId, guestToken, guestName: user ? undefined : name },
         accessToken ?? undefined,
       );
+      if (guestToken)
+        localStorage.setItem(`zunibee-guest-attempt-${attempt.id}`, guestToken);
       router.push(quizAttemptRoute(attempt.id));
     } catch (cause) {
       setError(getErrorMessage(cause));

@@ -2,7 +2,6 @@ import {
   ConflictException,
   Injectable,
   InternalServerErrorException,
-  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -221,9 +220,8 @@ export class AuthService {
   async forgotPassword(dto: ForgotPasswordDto): Promise<void> {
     const user = await this.userService.findByEmail(dto.email);
     if (!user?.email) {
-      throw new NotFoundException(
-        'Email này chưa được đăng ký tài khoản ZuniBee',
-      );
+      // Không tiết lộ email có tồn tại hay không.
+      return;
     }
 
     const tempPassword = generateTempPassword();

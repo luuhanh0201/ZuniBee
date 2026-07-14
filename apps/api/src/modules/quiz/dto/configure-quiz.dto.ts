@@ -1,5 +1,6 @@
 import {
   IsDateString,
+  IsBoolean,
   IsEnum,
   IsIn,
   IsInt,
@@ -7,7 +8,11 @@ import {
   Min,
 } from 'class-validator';
 import type { ConfigureQuizRequest } from '@zunibee/shared';
-import { QuizLeaderboardMode, QuizVisibility } from '../entities/quiz.entity';
+import {
+  QuizLeaderboardMode,
+  QuizResultReleaseMode,
+  QuizVisibility,
+} from '../entities/quiz.entity';
 export class ConfigureQuizDto implements ConfigureQuizRequest {
   @IsOptional()
   @IsIn([10, 100, 1000], { message: 'Tổng điểm chỉ nhận 10, 100 hoặc 1000' })
@@ -31,4 +36,11 @@ export class ConfigureQuizDto implements ConfigureQuizRequest {
   @IsOptional()
   @IsEnum(QuizLeaderboardMode, { message: 'Chế độ bảng xếp hạng không hợp lệ' })
   leaderboardMode?: QuizLeaderboardMode;
+  @IsOptional()
+  @IsEnum(QuizResultReleaseMode, {
+    message: 'Thời điểm công bố kết quả không hợp lệ',
+  })
+  resultReleaseMode?: QuizResultReleaseMode;
+  @IsOptional() @IsBoolean() showCorrectAnswers?: boolean;
+  @IsOptional() @IsBoolean() showExplanations?: boolean;
 }

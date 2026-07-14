@@ -353,7 +353,11 @@ export function DashboardHeader({ role }: { role: DashboardRole }) {
     router.push(ROUTES.login);
   }
 
-  const navItems = [
+  const navItems: Array<{
+    icon: LucideIcon;
+    label: string;
+    href: string | null;
+  }> = [
     {
       icon: LayoutDashboard,
       label: "Tổng quan",
@@ -366,8 +370,8 @@ export function DashboardHeader({ role }: { role: DashboardRole }) {
     },
     {
       icon: student ? Medal : Library,
-      label: student ? "Thành tích" : "Kho quiz",
-      href: student ? null : ROUTES.teacherQuizzes,
+      label: student ? "Quiz của tôi" : "Kho quiz",
+      href: student ? ROUTES.studentQuizzes : ROUTES.teacherQuizzes,
     },
   ];
 

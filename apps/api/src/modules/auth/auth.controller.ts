@@ -27,6 +27,16 @@ import type { AuthenticatedUser } from '@/modules/auth/types/authenticated-user.
 import type { GoogleOAuthProfile } from '@/modules/auth/strategies/google.strategy';
 import type { FacebookOAuthProfile } from '@/modules/auth/strategies/facebook.strategy';
 import { durationToMilliseconds } from '@/common/utils/duration.util';
+import {
+  FacebookOAuthStartGuard,
+  FacebookOAuthStateGuard,
+  GoogleOAuthStartGuard,
+  GoogleOAuthStateGuard,
+} from '@/modules/auth/guards/oauth-state.guard';
+import {
+  LoginRateLimit,
+  PasswordRecoveryRateLimit,
+} from '@/common/security/rate-limit.decorator';
 
 const REFRESH_COOKIE = 'refreshToken';
 
@@ -40,6 +50,7 @@ export class AuthController {
 
   @Public()
   @Post('register')
+  @LoginRateLimit()
   @ApiOperation({ summary: 'Đăng ký tài khoản (Giáo viên hoặc Học sinh)' })
   async register(
     @Body() dto: RegisterDto,
@@ -56,6 +67,7 @@ export class AuthController {
 
   @Public()
   @Post('login')
+  @LoginRateLimit()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Đăng nhập bằng email/mật khẩu' })
   async login(
@@ -73,6 +85,7 @@ export class AuthController {
 
   @Public()
   @Post('refresh')
+  @LoginRateLimit()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Làm mới access token bằng refresh token cookie' })
   async refresh(
@@ -137,6 +150,7 @@ export class AuthController {
 
   @Public()
   @Post('forgot-password')
+  @PasswordRecoveryRateLimit()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Gửi mật khẩu tạm qua email' })
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
@@ -146,6 +160,7 @@ export class AuthController {
 
   @Public()
   @Post('reset-password')
+  @PasswordRecoveryRateLimit()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Đổi mật khẩu bằng mật khẩu tạm nhận qua email' })
   async resetPassword(
@@ -174,7 +189,7 @@ export class AuthController {
 
   @Public()
   @Get('google')
-  @UseGuards(AuthGuard('google'))
+  @UseGuards(GoogleOAuthStartGuard)
   @ApiOperation({ summary: 'Bắt đầu đăng nhập bằng Google' })
   googleAuth() {
     // Passport tự động điều hướng sang Google, không cần thân hàm.
@@ -182,7 +197,7 @@ export class AuthController {
 
   @Public()
   @Get('google/callback')
-  @UseGuards(AuthGuard('google'))
+  @UseGuards(GoogleOAuthStateGuard, AuthGuard('google'))
   @ApiOperation({ summary: 'Callback OAuth Google' })
   async googleCallback(
     @Req() req: Request & { user: GoogleOAuthProfile },
@@ -193,12 +208,12 @@ export class AuthController {
       this.contextFrom(req),
     );
     this.setRefreshCookie(res, tokens.refreshToken);
-    res.redirect(this.oauthRedirectUrl(tokens.accessToken));
+    res.redirect(this.oauthRedirectUrl());
   }
 
   @Public()
   @Get('facebook')
-  @UseGuards(AuthGuard('facebook'))
+  @UseGuards(FacebookOAuthStartGuard)
   @ApiOperation({ summary: 'Bắt đầu đăng nhập bằng Facebook' })
   facebookAuth() {
     // Passport tự động điều hướng sang Facebook, không cần thân hàm.
@@ -206,7 +221,7 @@ export class AuthController {
 
   @Public()
   @Get('facebook/callback')
-  @UseGuards(AuthGuard('facebook'))
+  @UseGuards(FacebookOAuthStateGuard, AuthGuard('facebook'))
   @ApiOperation({ summary: 'Callback OAuth Facebook' })
   async facebookCallback(
     @Req() req: Request & { user: FacebookOAuthProfile },
@@ -217,7 +232,7 @@ export class AuthController {
       this.contextFrom(req),
     );
     this.setRefreshCookie(res, tokens.refreshToken);
-    res.redirect(this.oauthRedirectUrl(tokens.accessToken));
+    res.redirect(this.oauthRedirectUrl());
   }
 
   private getRefreshCookie(req: Request): string | undefined {
@@ -247,9 +262,9 @@ export class AuthController {
     });
   }
 
-  /** Trang FE nhận access token tạm thời trên query để hoàn tất phiên OAuth. */
-  private oauthRedirectUrl(accessToken: string): string {
+  /** FE hoàn tất phiên bằng refresh cookie HttpOnly, không đưa token vào URL. */
+  private oauthRedirectUrl(): string {
     const webUrl = this.config.get<string>('WEB_URL', 'http://localhost:1111');
-    return `${webUrl}/oauth/callback?accessToken=${encodeURIComponent(accessToken)}`;
+    return `${webUrl}/oauth/callback`;
   }
 }

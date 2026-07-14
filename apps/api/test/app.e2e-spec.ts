@@ -5,7 +5,7 @@ import { App } from 'supertest/types';
 import { AppModule } from '@/app.module';
 
 describe('AppController (e2e)', () => {
-  let app: INestApplication<App>;
+  let app: INestApplication<App> | undefined;
 
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -16,14 +16,17 @@ describe('AppController (e2e)', () => {
     await app.init();
   });
 
-  it('/ (GET)', () => {
+  it('/health (GET)', () => {
+    if (!app) throw new Error('Ứng dụng kiểm thử chưa khởi tạo');
     return request(app.getHttpServer())
-      .get('/')
+      .get('/health')
       .expect(200)
-      .expect('Hello World!');
+      .expect(({ body }: { body: { success: boolean } }) => {
+        expect(body.success).toBe(true);
+      });
   });
 
   afterEach(async () => {
-    await app.close();
+    await app?.close();
   });
 });

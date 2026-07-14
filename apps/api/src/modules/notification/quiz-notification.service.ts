@@ -10,7 +10,10 @@ import type {
   NotificationOutboxItem,
   QuizNotificationSummary,
 } from '@zunibee/shared';
-import { Quiz } from '@/modules/quiz/entities/quiz.entity';
+import {
+  Quiz,
+  QuizResultReleaseMode,
+} from '@/modules/quiz/entities/quiz.entity';
 import {
   QuizAttempt,
   QuizAttemptStatus,
@@ -38,6 +41,14 @@ export class QuizNotificationService {
     teacherId: string,
   ): Promise<QuizNotificationSummary> {
     const quiz = await this.assertOwner(quizId, teacherId);
+    if (
+      quiz.resultReleaseMode === QuizResultReleaseMode.HIDDEN ||
+      (quiz.resultReleaseMode === QuizResultReleaseMode.AFTER_DUE &&
+        (!quiz.dueAt || new Date() < quiz.dueAt))
+    )
+      throw new ForbiddenException(
+        'Kết quả chưa được công bố nên chưa thể gửi email',
+      );
     const attempts = await this.attempts.find({
       where: { quizId, status: QuizAttemptStatus.SUBMITTED },
       relations: { user: true },
@@ -85,6 +96,101 @@ export class QuizNotificationService {
     }
     return { queued, skippedGuests: guests, alreadyQueued };
   }
+  async enqueueAssigned(
+    quizId: string,
+    teacherId: string,
+  ): Promise<QuizNotificationSummary> {
+    return this.enqueueAssignedUsers(quizId, teacherId, 'quiz_assigned');
+  }
+
+  async enqueueDeadline(
+    quizId: string,
+    teacherId: string,
+  ): Promise<QuizNotificationSummary> {
+    return this.enqueueAssignedUsers(quizId, teacherId, 'quiz_deadline');
+  }
+
+  private async enqueueAssignedUsers(
+    quizId: string,
+    teacherId: string,
+    type: 'quiz_assigned' | 'quiz_deadline',
+  ): Promise<QuizNotificationSummary> {
+    const quiz = await this.assertOwner(quizId, teacherId, true);
+    const recipients = new Map<
+      string,
+      { id: string; email: string; fullName: string }
+    >();
+    for (const assignment of quiz.assignments ?? []) {
+      if (assignment.student?.email)
+        recipients.set(assignment.student.id, {
+          id: assignment.student.id,
+          email: assignment.student.email,
+          fullName: assignment.student.fullName,
+        });
+      for (const member of assignment.classroom?.members ?? []) {
+        if (member.user?.email)
+          recipients.set(member.user.id, {
+            id: member.user.id,
+            email: member.user.email,
+            fullName: member.user.fullName,
+          });
+      }
+    }
+    let queued = 0;
+    let alreadyQueued = 0;
+    const version =
+      type === 'quiz_deadline'
+        ? (quiz.dueAt?.toISOString() ?? 'no-deadline')
+        : quiz.updatedAt.toISOString();
+    for (const recipient of recipients.values()) {
+      const dedupeKey = `${type}:${quizId}:${recipient.id}:${version}`;
+      if (await this.outbox.exists({ where: { dedupeKey } })) {
+        alreadyQueued++;
+        continue;
+      }
+      const deadline = quiz.dueAt
+        ? new Intl.DateTimeFormat('vi-VN', {
+            dateStyle: 'short',
+            timeStyle: 'short',
+            timeZone: 'Asia/Ho_Chi_Minh',
+          }).format(quiz.dueAt)
+        : null;
+      const assigned = type === 'quiz_assigned';
+      const availableAt =
+        type === 'quiz_deadline' && quiz.dueAt
+          ? new Date(Math.max(Date.now(), quiz.dueAt.getTime() - 86_400_000))
+          : new Date();
+      const row = await this.outbox.save(
+        this.outbox.create({
+          type,
+          recipientUserId: recipient.id,
+          recipientEmail: recipient.email,
+          status: NotificationOutboxStatus.PENDING,
+          attempts: 0,
+          maxAttempts: 5,
+          dedupeKey,
+          lastError: null,
+          availableAt,
+          sentAt: null,
+          payload: {
+            studentName: recipient.fullName,
+            quizTitle: quiz.title,
+            subject: assigned
+              ? `Quiz mới: ${quiz.title} — ZuniBee`
+              : `Sắp đến hạn: ${quiz.title} — ZuniBee`,
+            message: assigned
+              ? `Giáo viên vừa giao cho bạn quiz “${quiz.title}”.${deadline ? ` Hạn hoàn thành: ${deadline}.` : ''}`
+              : `Quiz “${quiz.title}” sắp đến hạn${deadline ? ` vào ${deadline}` : ''}. Hãy hoàn thành bài đúng thời gian.`,
+            actionLabel: assigned ? 'Mở quiz' : 'Tiếp tục làm bài',
+            quizUrl: `${this.config.get<string>('WEB_URL', 'http://localhost:1111')}/q/${quiz.id}`,
+          },
+        }),
+      );
+      await this.queue.enqueue(row.id, availableAt).catch(() => undefined);
+      queued++;
+    }
+    return { queued, skippedGuests: 0, alreadyQueued };
+  }
   async list(
     quizId: string,
     teacherId: string,
@@ -107,8 +213,22 @@ export class QuizNotificationService {
       createdAt: row.createdAt.toISOString(),
     }));
   }
-  private async assertOwner(quizId: string, teacherId: string): Promise<Quiz> {
-    const quiz = await this.quizzes.findOne({ where: { id: quizId } });
+  private async assertOwner(
+    quizId: string,
+    teacherId: string,
+    withRecipients = false,
+  ): Promise<Quiz> {
+    const quiz = await this.quizzes.findOne({
+      where: { id: quizId },
+      relations: withRecipients
+        ? {
+            assignments: {
+              student: true,
+              classroom: { members: { user: true } },
+            },
+          }
+        : undefined,
+    });
     if (!quiz) throw new NotFoundException('Quiz không tồn tại');
     if (quiz.teacherId !== teacherId)
       throw new ForbiddenException(

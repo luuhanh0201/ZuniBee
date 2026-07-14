@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import * as mammoth from 'mammoth';
 import pdfParse from 'pdf-parse';
+import { assertDeclaredFileType } from '@/modules/upload-file/upload-file-validation.util';
 
 const SUPPORTED_MIME_TYPES = new Set([
   'text/plain',
@@ -17,6 +18,7 @@ export class AiMaterialSourceService {
       throw new BadRequestException('Tài liệu AI không được vượt quá 10 MB');
     if (!SUPPORTED_MIME_TYPES.has(file.mimetype))
       throw new BadRequestException('Tài liệu AI chỉ hỗ trợ TXT, DOCX và PDF');
+    assertDeclaredFileType(file);
 
     let text = '';
     if (file.mimetype === 'text/plain') text = file.buffer.toString('utf8');

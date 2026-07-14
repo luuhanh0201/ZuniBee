@@ -31,8 +31,8 @@ type AuthContextValue = {
   login: (input: LoginRequest) => Promise<AuthUser>;
   register: (input: RegisterRequest) => Promise<AuthUser>;
   logout: () => Promise<void>;
-  /** Dùng cho trang /oauth/callback để nạp access token nhận từ redirect OAuth. */
-  setSession: (accessToken: string) => Promise<AuthUser | null>;
+  /** Hoàn tất OAuth bằng refresh cookie HttpOnly, không truyền token qua URL. */
+  completeOAuth: () => Promise<AuthUser | null>;
   forgotPassword: (input: ForgotPasswordRequest) => Promise<void>;
   resetPassword: (input: ResetPasswordRequest) => Promise<AuthUser>;
   changePassword: (input: ChangePasswordRequest) => Promise<void>;
@@ -47,12 +47,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  const fetchMe = useCallback(async (token: string) => {
-    const me = await apiFetch<AuthUser>("/auth/me", { accessToken: token });
-    setUser(me);
-    return me;
-  }, []);
 
   // Khôi phục phiên đăng nhập từ refresh token (httpOnly cookie) khi tải trang.
   useEffect(() => {
@@ -109,19 +103,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, [accessToken]);
 
-  const setSession = useCallback(
-    async (token: string) => {
-      setAccessToken(token);
-      try {
-        return await fetchMe(token);
-      } catch {
-        setAccessToken(null);
-        setUser(null);
-        return null;
-      }
-    },
-    [fetchMe],
-  );
+  const completeOAuth = useCallback(async () => {
+    try {
+      const res = await apiFetch<AuthResponse>("/auth/refresh", {
+        method: "POST",
+      });
+      setAccessToken(res.accessToken);
+      setUser(res.user);
+      return res.user;
+    } catch {
+      setAccessToken(null);
+      setUser(null);
+      return null;
+    }
+  }, []);
 
   const forgotPassword = useCallback(async (input: ForgotPasswordRequest) => {
     await apiFetch("/auth/forgot-password", { method: "POST", body: input });
@@ -197,7 +192,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       register,
       logout,
-      setSession,
+      completeOAuth,
       forgotPassword,
       resetPassword,
       changePassword,
@@ -212,7 +207,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       register,
       logout,
-      setSession,
+      completeOAuth,
       forgotPassword,
       resetPassword,
       changePassword,

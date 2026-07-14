@@ -15,6 +15,7 @@ type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   accessToken?: string;
+  guestToken?: string;
 };
 
 /**
@@ -23,14 +24,17 @@ type RequestOptions = {
  */
 export async function apiFetch<T>(
   path: string,
-  { method = "GET", body, accessToken }: RequestOptions = {},
+  { method = "GET", body, accessToken, guestToken }: RequestOptions = {},
 ): Promise<T> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    "X-Requested-With": "XMLHttpRequest",
+  };
   const isFormData = body instanceof FormData;
   if (body !== undefined && !isFormData) {
     headers["Content-Type"] = "application/json";
   }
   if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+  if (guestToken) headers["X-Guest-Token"] = guestToken;
 
   const res = await fetch(`${API_URL}${path}`, {
     method,

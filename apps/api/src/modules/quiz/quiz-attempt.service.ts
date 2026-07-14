@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import type { FindOptionsWhere } from 'typeorm';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import {
   UserRole,
   type QuizAttempt as QuizAttemptResponse,
@@ -18,6 +20,7 @@ import {
   QuizStatus,
   QuizVisibility,
   QuizLeaderboardMode,
+  QuizResultReleaseMode,
 } from './entities/quiz.entity';
 import { QuizAttempt, QuizAttemptStatus } from './entities/quiz-attempt.entity';
 import { QuizAttemptAnswer } from './entities/quiz-attempt-answer.entity';
@@ -61,14 +64,27 @@ export class QuizAttemptService {
       throw new ForbiddenException('Quiz chưa đến thời gian mở');
     if (quiz.dueAt && now >= quiz.dueAt)
       throw new ForbiddenException('Quiz đã hết hạn');
-    const identityWhere = currentUser
-      ? { quizId: quiz.id, userId: currentUser.id }
-      : { quizId: quiz.id, guestToken: dto.guestToken };
+    const guestTokenHash = dto.guestToken
+      ? hashGuestToken(dto.guestToken)
+      : undefined;
+    const identityWhere:
+      FindOptionsWhere<QuizAttempt> | FindOptionsWhere<QuizAttempt>[] =
+      currentUser
+        ? { quizId: quiz.id, userId: currentUser.id }
+        : [
+            { quizId: quiz.id, guestToken: guestTokenHash },
+            // Tương thích lượt guest đã tạo trước khi token được hash.
+            { quizId: quiz.id, guestToken: dto.guestToken },
+          ];
     const existing = await this.attempts.findOne({
       where: { ...identityWhere, status: QuizAttemptStatus.IN_PROGRESS },
       relations: { quiz: { questions: { options: true } }, answers: true },
     });
     if (existing) {
+      if (!currentUser && existing.guestToken !== guestTokenHash) {
+        existing.guestToken = guestTokenHash!;
+        await this.attempts.save(existing);
+      }
       await this.sync(existing);
       return this.toAttempt(existing);
     }
@@ -82,7 +98,7 @@ export class QuizAttemptService {
       quizId: quiz.id,
       quiz,
       userId: currentUser?.id ?? null,
-      guestToken: currentUser ? null : dto.guestToken!,
+      guestToken: currentUser ? null : guestTokenHash!,
       guestName: currentUser ? null : dto.guestName!.trim(),
       attemptNumber: count + 1,
       status: QuizAttemptStatus.IN_PROGRESS,
@@ -111,9 +127,10 @@ export class QuizAttemptService {
   async get(
     id: string,
     user: AuthenticatedUser | null,
+    guestToken?: string,
   ): Promise<QuizAttemptResponse> {
     const attempt = await this.load(id);
-    this.assertIdentity(attempt, user);
+    this.assertIdentity(attempt, user, guestToken);
     await this.sync(attempt);
     return this.toAttempt(attempt);
   }
@@ -123,9 +140,10 @@ export class QuizAttemptService {
     questionId: string,
     dto: SaveAnswerDto,
     user: AuthenticatedUser | null,
+    guestToken?: string,
   ): Promise<QuizAttemptResponse> {
     const attempt = await this.load(id);
-    this.assertIdentity(attempt, user);
+    this.assertIdentity(attempt, user, guestToken);
     await this.sync(attempt);
     if (attempt.status !== QuizAttemptStatus.IN_PROGRESS)
       throw new ForbiddenException('Lượt làm đã kết thúc');
@@ -158,25 +176,27 @@ export class QuizAttemptService {
   async submit(
     id: string,
     user: AuthenticatedUser | null,
+    guestToken?: string,
   ): Promise<QuizAttemptResult> {
     const attempt = await this.load(id);
-    this.assertIdentity(attempt, user);
+    this.assertIdentity(attempt, user, guestToken);
     await this.sync(attempt);
     if (attempt.status === QuizAttemptStatus.IN_PROGRESS)
       await this.gradeAndSubmit(attempt, new Date());
-    return this.toResult(attempt);
+    return this.toResult(attempt, user?.id ?? null);
   }
 
   async result(
     id: string,
     user: AuthenticatedUser | null,
+    guestToken?: string,
   ): Promise<QuizAttemptResult> {
     const attempt = await this.load(id);
-    this.assertIdentity(attempt, user);
+    this.assertIdentity(attempt, user, guestToken);
     await this.sync(attempt);
     if (attempt.status === QuizAttemptStatus.IN_PROGRESS)
       throw new ForbiddenException('Lượt làm chưa hoàn thành');
-    return this.toResult(attempt);
+    return this.toResult(attempt, user?.id ?? null);
   }
 
   async mine(quizId: string, userId: string): Promise<QuizAttemptResult[]> {
@@ -184,11 +204,12 @@ export class QuizAttemptService {
       where: { quizId, userId },
       relations: { quiz: { questions: { options: true } }, answers: true },
       order: { attemptNumber: 'DESC' },
+      take: 100,
     });
     for (const row of rows) await this.sync(row);
     return rows
       .filter((row) => row.status !== QuizAttemptStatus.IN_PROGRESS)
-      .map((row) => this.toResult(row));
+      .map((row) => this.toResult(row, userId));
   }
 
   async leaderboard(
@@ -205,10 +226,12 @@ export class QuizAttemptService {
     const inProgress = await this.attempts.find({
       where: { quizId, status: QuizAttemptStatus.IN_PROGRESS },
       relations: { quiz: { questions: { options: true } }, answers: true },
+      take: 1_000,
     });
     for (const attempt of inProgress) await this.sync(attempt);
     const rows = await this.attempts.find({
       where: { quizId, status: QuizAttemptStatus.SUBMITTED },
+      take: 10_000,
     });
     const best = new Map<string, QuizAttempt>();
     for (const row of rows) {
@@ -219,6 +242,7 @@ export class QuizAttemptService {
     }
     return [...best.values()]
       .sort(compareAttemptsForRanking)
+      .slice(0, 100)
       .map((row, index) => ({
         rank: index + 1,
         label: anonymizedLabel(quizId, row.userId ?? row.guestToken!),
@@ -246,13 +270,23 @@ export class QuizAttemptService {
     if (!attempt) throw new NotFoundException('Lượt làm không tồn tại');
     return attempt;
   }
-  private assertIdentity(attempt: QuizAttempt, user: AuthenticatedUser | null) {
-    if (
-      attempt.userId &&
-      attempt.userId !== user?.id &&
-      attempt.quiz.teacherId !== user?.id
-    )
+  private assertIdentity(
+    attempt: QuizAttempt,
+    user: AuthenticatedUser | null,
+    guestToken?: string,
+  ) {
+    if (attempt.quiz.teacherId === user?.id) return;
+    if (attempt.userId) {
+      if (attempt.userId === user?.id) return;
       throw new ForbiddenException('Bạn không có quyền truy cập lượt làm này');
+    }
+    if (
+      user ||
+      !guestToken ||
+      !matchesGuestToken(attempt.guestToken, guestToken)
+    ) {
+      throw new ForbiddenException('Mã truy cập lượt làm không hợp lệ');
+    }
   }
   private deadline(attempt: QuizAttempt): Date | null {
     const values = [attempt.expiresAt, attempt.quiz.dueAt].filter(
@@ -331,29 +365,46 @@ export class QuizAttemptService {
       ),
     };
   }
-  private toResult(attempt: QuizAttempt): QuizAttemptResult {
+  private toResult(
+    attempt: QuizAttempt,
+    viewerId: string | null,
+  ): QuizAttemptResult {
+    const teacher = attempt.quiz.teacherId === viewerId;
+    const released =
+      teacher ||
+      attempt.quiz.resultReleaseMode === QuizResultReleaseMode.IMMEDIATELY ||
+      (attempt.quiz.resultReleaseMode === QuizResultReleaseMode.AFTER_DUE &&
+        Boolean(attempt.quiz.dueAt && new Date() >= attempt.quiz.dueAt));
+    const showCorrect = teacher || attempt.quiz.showCorrectAnswers;
+    const showExplanations = teacher || attempt.quiz.showExplanations;
     return {
       attemptId: attempt.id,
       quizId: attempt.quizId,
       quizTitle: attempt.quiz.title,
       status: attempt.status,
-      score: Number(attempt.score ?? 0),
+      isReleased: released,
+      score: released ? Number(attempt.score ?? 0) : null,
       maxScore: Number(attempt.maxScore),
       timeTakenSeconds: attempt.timeTakenSeconds ?? 0,
-      answers: attempt.quiz.questions.map((q) => {
-        const answer = attempt.answers.find((item) => item.questionId === q.id);
-        return {
-          questionId: q.id,
-          content: q.content,
-          selectedOptionIds: answer?.selectedOptionIds ?? [],
-          correctOptionIds: q.options
-            .filter((o) => o.isCorrect)
-            .map((o) => o.id),
-          isCorrect: answer?.isCorrect ?? false,
-          scoreAwarded: Number(answer?.scoreAwarded ?? 0),
-          explanation: q.showExplanation ? q.explanation : null,
-        };
-      }),
+      answers: released
+        ? attempt.quiz.questions.map((q) => {
+            const answer = attempt.answers.find(
+              (item) => item.questionId === q.id,
+            );
+            return {
+              questionId: q.id,
+              content: q.content,
+              selectedOptionIds: answer?.selectedOptionIds ?? [],
+              correctOptionIds: showCorrect
+                ? q.options.filter((o) => o.isCorrect).map((o) => o.id)
+                : [],
+              isCorrect: showCorrect ? (answer?.isCorrect ?? false) : null,
+              scoreAwarded: showCorrect ? Number(answer?.scoreAwarded ?? 0) : 0,
+              explanation:
+                showExplanations && q.showExplanation ? q.explanation : null,
+            };
+          })
+        : [],
     };
   }
 }
@@ -362,4 +413,23 @@ function isUniqueViolation(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const value = error as { code?: string; driverError?: { code?: string } };
   return value.code === '23505' || value.driverError?.code === '23505';
+}
+
+function hashGuestToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+function matchesGuestToken(stored: string | null, candidate: string): boolean {
+  if (!stored) return false;
+  const hashed = hashGuestToken(candidate);
+  return safeEqual(stored, hashed) || safeEqual(stored, candidate);
+}
+
+function safeEqual(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  return (
+    leftBuffer.length === rightBuffer.length &&
+    timingSafeEqual(leftBuffer, rightBuffer)
+  );
 }

@@ -18,6 +18,7 @@ import { AiCreditService } from './ai-credit.service';
 import { AiQuizGenerationService } from './ai-quiz-generation.service';
 import { GenerateQuizWithAiDto } from './dto/generate-quiz-with-ai.dto';
 import { MAX_AI_SOURCE_SIZE } from './ai-material-source.service';
+import { ExpensiveOperationRateLimit } from '@/common/security/rate-limit.decorator';
 
 @Roles(UserRole.TEACHER)
 @Controller('ai')
@@ -35,6 +36,7 @@ export class AiController {
     return this.credits.history(user.id);
   }
   @Post('quiz-generations')
+  @ExpensiveOperationRateLimit()
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {

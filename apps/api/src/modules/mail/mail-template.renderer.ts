@@ -7,7 +7,8 @@ export type MailTemplateName =
   | 'temp-password'
   | 'classroom-invitation'
   | 'classroom-member-added'
-  | 'quiz-result';
+  | 'quiz-result'
+  | 'quiz-reminder';
 export type MailTemplateContext = Record<string, unknown>;
 
 @Injectable()

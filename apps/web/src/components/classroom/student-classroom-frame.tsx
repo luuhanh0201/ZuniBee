@@ -1,7 +1,11 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   ArrowLeft,
   BookOpen,
+  BookOpenCheck,
   LayoutDashboard,
   Sparkles,
   UserRound,
@@ -12,6 +16,12 @@ export function StudentClassroomFrame({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+  const navItems = [
+    { href: "/student", label: "Tổng quan", icon: LayoutDashboard },
+    { href: "/student/classes", label: "Lớp học", icon: BookOpen },
+    { href: "/student/quizzes", label: "Quiz", icon: BookOpenCheck },
+  ];
   return (
     <div className="min-h-dvh bg-background text-foreground">
       <header className="border-b-2 border-foreground bg-surface px-4 py-3 sm:px-6 lg:px-8">
@@ -32,21 +42,26 @@ export function StudentClassroomFrame({
             aria-label="Điều hướng học sinh"
             className="flex items-center gap-2"
           >
-            <Link
-              href="/student"
-              className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-muted-foreground transition-colors duration-200 hover:bg-surface-soft hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:px-4"
-            >
-              <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden sm:inline">Tổng quan</span>
-            </Link>
-            <Link
-              href="/student/classes"
-              aria-current="page"
-              className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border-2 border-foreground bg-primary px-3 py-2 text-sm font-bold shadow-brutal-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:px-4"
-            >
-              <BookOpen className="h-4 w-4" aria-hidden="true" />
-              Lớp học
-            </Link>
+            {navItems.map(({ href, label, icon: Icon }) => {
+              const active =
+                pathname === href ||
+                (href !== "/student" && pathname.startsWith(`${href}/`));
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  aria-current={active ? "page" : undefined}
+                  className={`inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:px-4 ${active ? "border-2 border-foreground bg-primary shadow-brutal-sm" : "text-muted-foreground hover:bg-surface-soft hover:text-foreground"}`}
+                >
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                  <span
+                    className={label === "Tổng quan" ? "hidden sm:inline" : ""}
+                  >
+                    {label}
+                  </span>
+                </Link>
+              );
+            })}
             <Link
               href="/profile"
               aria-label="Hồ sơ cá nhân"

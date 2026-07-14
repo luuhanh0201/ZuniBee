@@ -14,6 +14,13 @@ import { GoogleStrategy } from '@/modules/auth/strategies/google.strategy';
 import { FacebookStrategy } from '@/modules/auth/strategies/facebook.strategy';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '@/modules/auth/guards/roles.guard';
+import {
+  FacebookOAuthStartGuard,
+  FacebookOAuthStateGuard,
+  GoogleOAuthStartGuard,
+  GoogleOAuthStateGuard,
+} from '@/modules/auth/guards/oauth-state.guard';
+import { TrustedOriginGuard } from '@/modules/auth/guards/trusted-origin.guard';
 
 @Module({
   imports: [
@@ -30,8 +37,13 @@ import { RolesGuard } from '@/modules/auth/guards/roles.guard';
     JwtStrategy,
     GoogleStrategy,
     FacebookStrategy,
+    GoogleOAuthStartGuard,
+    GoogleOAuthStateGuard,
+    FacebookOAuthStartGuard,
+    FacebookOAuthStateGuard,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: TrustedOriginGuard },
   ],
 })
 export class AuthModule {}

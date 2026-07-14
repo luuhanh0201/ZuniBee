@@ -9,13 +9,17 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   UserRole,
   type QuizAssignment,
+  type QuizAnalytics,
   type QuizDetail,
   type QuizResultRow,
   type QuizSummary,
+  type StudentQuizItem,
 } from '@zunibee/shared';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
@@ -30,6 +34,7 @@ import { CreateQuestionDto } from './dto/create-question.dto';
 import { UpdateQuestionDto } from './dto/update-question.dto';
 import { ReorderQuestionsDto } from './dto/reorder-questions.dto';
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
+import { ExpensiveOperationRateLimit } from '@/common/security/rate-limit.decorator';
 
 @Controller('quizzes')
 export class QuizController {
@@ -44,6 +49,11 @@ export class QuizController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<QuizSummary[]> {
     return this.service.listMine(user.id);
+  }
+  @Roles(UserRole.STUDENT) @Get('student/mine') studentQuizzes(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<StudentQuizItem[]> {
+    return this.service.listForStudent(user.id);
   }
   @OptionalAuth() @Get(':id') get(
     @Param('id', ParseUUIDPipe) id: string,
@@ -144,7 +154,10 @@ export class QuizController {
   ) {
     return this.service.deleteAssignment(id, assignmentId, user.id);
   }
-  @Roles(UserRole.TEACHER) @Post(':id/regrade') regrade(
+  @Roles(UserRole.TEACHER)
+  @Post(':id/regrade')
+  @ExpensiveOperationRateLimit()
+  regrade(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
@@ -155,5 +168,30 @@ export class QuizController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<QuizResultRow[]> {
     return this.service.results(id, user.id);
+  }
+  @Roles(UserRole.TEACHER) @Get(':id/analytics') analytics(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<QuizAnalytics> {
+    return this.service.analytics(id, user.id);
+  }
+  @Roles(UserRole.TEACHER)
+  @Get(':id/results.xlsx')
+  @ExpensiveOperationRateLimit()
+  async exportResults(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Res() response: Response,
+  ): Promise<void> {
+    const file = await this.service.exportResultsExcel(id, user.id);
+    response.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename="quiz-${id}-results.xlsx"`,
+    );
+    response.send(file);
   }
 }
