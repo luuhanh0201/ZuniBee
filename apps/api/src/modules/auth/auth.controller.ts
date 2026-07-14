@@ -36,6 +36,7 @@ import {
 import {
   LoginRateLimit,
   PasswordRecoveryRateLimit,
+  RefreshRateLimit,
 } from '@/common/security/rate-limit.decorator';
 
 const REFRESH_COOKIE = 'refreshToken';
@@ -85,7 +86,7 @@ export class AuthController {
 
   @Public()
   @Post('refresh')
-  @LoginRateLimit()
+  @RefreshRateLimit()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Làm mới access token bằng refresh token cookie' })
   async refresh(

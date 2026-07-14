@@ -3,7 +3,13 @@ import type {
   AiCreditAdminUser,
   AiCreditLedgerEntry,
   AiProvider,
+  AiProviderMetrics,
+  AiProviderTestResult,
   CreateAiProviderRequest,
+  DiscoverAiProviderModelsRequest,
+  DiscoverAiProviderModelsResponse,
+  TestAiProviderConnectionRequest,
+  TestAiProviderConnectionResponse,
   GenerateQuizWithAiRequest,
   GenerateQuizWithAiResponse,
   GrantAiCreditRequest,
@@ -91,6 +97,48 @@ export const adminUpdateAiProvider = (
     body,
     accessToken: token,
   });
+export const adminDeleteAiProvider = (id: string, token?: string) =>
+  apiFetch<void>(`/admin/ai/providers/${id}`, {
+    method: "DELETE",
+    accessToken: token,
+  });
+export const adminTestAiProvider = (id: string, token?: string) =>
+  apiFetch<AiProviderTestResult>(`/admin/ai/providers/${id}/test`, {
+    method: "POST",
+    accessToken: token,
+  });
+export const adminGetAiProviderMetrics = (token?: string) =>
+  apiFetch<AiProviderMetrics>("/admin/ai/provider-metrics", {
+    accessToken: token,
+  });
+export const adminDiscoverAiProviderModels = (
+  body: DiscoverAiProviderModelsRequest,
+  token?: string,
+) =>
+  apiFetch<DiscoverAiProviderModelsResponse>(
+    "/admin/ai/providers/models/discover",
+    {
+      method: "POST",
+      body,
+      accessToken: token,
+    },
+  );
+export const adminDiscoverSavedAiProviderModels = (
+  id: string,
+  token?: string,
+) =>
+  apiFetch<DiscoverAiProviderModelsResponse>(
+    `/admin/ai/providers/${id}/models/discover`,
+    { method: "POST", accessToken: token },
+  );
+export const adminTestAiProviderConfiguration = (
+  body: TestAiProviderConnectionRequest,
+  token?: string,
+) =>
+  apiFetch<TestAiProviderConnectionResponse>(
+    "/admin/ai/providers/test-config",
+    { method: "POST", body, accessToken: token },
+  );
 export const adminSearchCreditUsers = (query: string, token?: string) =>
   apiFetch<AiCreditAdminUser[]>(
     `/admin/ai/credit-users?query=${encodeURIComponent(query)}`,

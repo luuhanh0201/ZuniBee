@@ -16,7 +16,7 @@ export class AiProviderUrlPolicyService {
       const allowedHosts = csv(
         this.config.get<string>(
           'AI_OLLAMA_ALLOWED_HOSTS',
-          'localhost,127.0.0.1,::1,host.docker.internal,ollama',
+          'localhost,127.0.0.1,::1,host.docker.internal',
         ),
       );
       const allowedPorts = csv(

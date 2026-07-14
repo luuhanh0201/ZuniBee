@@ -20,6 +20,9 @@ import { AiCreditService } from './ai-credit.service';
 import { CreateAiProviderDto } from './dto/create-ai-provider.dto';
 import { UpdateAiProviderDto } from './dto/update-ai-provider.dto';
 import { GrantAiCreditDto } from './dto/grant-ai-credit.dto';
+import { ExpensiveOperationRateLimit } from '@/common/security/rate-limit.decorator';
+import { DiscoverAiProviderModelsDto } from './dto/discover-ai-provider-models.dto';
+import { TestAiProviderConnectionDto } from './dto/test-ai-provider-connection.dto';
 
 @Roles(UserRole.ADMIN)
 @Controller('admin/ai')
@@ -31,8 +34,26 @@ export class AdminAiController {
   @Get('providers') listProviders() {
     return this.providers.list();
   }
+  @Get('provider-metrics') providerMetrics() {
+    return this.providers.metrics();
+  }
   @Post('providers') createProvider(@Body() dto: CreateAiProviderDto) {
     return this.providers.create(dto);
+  }
+  @Post('providers/models/discover')
+  @ExpensiveOperationRateLimit()
+  discoverProviderModels(@Body() dto: DiscoverAiProviderModelsDto) {
+    return this.providers.discoverModels(dto);
+  }
+  @Post('providers/test-config')
+  @ExpensiveOperationRateLimit()
+  testProviderConfiguration(@Body() dto: TestAiProviderConnectionDto) {
+    return this.providers.testConfiguration(dto);
+  }
+  @Post('providers/:id/models/discover')
+  @ExpensiveOperationRateLimit()
+  discoverSavedProviderModels(@Param('id', ParseUUIDPipe) id: string) {
+    return this.providers.discoverSavedModels(id);
   }
   @Patch('providers/:id') updateProvider(
     @Param('id', ParseUUIDPipe) id: string,
@@ -44,6 +65,11 @@ export class AdminAiController {
   @HttpCode(HttpStatus.NO_CONTENT)
   removeProvider(@Param('id', ParseUUIDPipe) id: string) {
     return this.providers.remove(id);
+  }
+  @Post('providers/:id/test')
+  @ExpensiveOperationRateLimit()
+  testProvider(@Param('id', ParseUUIDPipe) id: string) {
+    return this.providers.testConnection(id);
   }
   @Get('credit-users') searchUsers(@Query('query') query?: string) {
     return this.credits.searchUsers(query);

@@ -49,8 +49,8 @@ COPY --from=prod-deps /app .
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 
-RUN mkdir -p /app/apps/api/uploads/avatars /app/apps/api/protected-uploads/classroom-materials \
-  && chown -R nestjs:nodejs /app/apps/api/uploads /app/apps/api/protected-uploads
+RUN mkdir -p /app/apps/api/uploads/avatars /app/apps/api/protected-uploads/classroom-materials /app/apps/api/secrets \
+  && chown -R nestjs:nodejs /app/apps/api/uploads /app/apps/api/protected-uploads /app/apps/api/secrets
 
 USER nestjs
 WORKDIR /app/apps/api

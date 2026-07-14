@@ -1,5 +1,11 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import {
   createCipheriv,
   createDecipheriv,
@@ -9,6 +15,9 @@ import {
 
 @Injectable()
 export class AiSecretService {
+  private readonly logger = new Logger(AiSecretService.name);
+  private encryptionKey?: Buffer;
+
   constructor(private readonly config: ConfigService) {}
   encrypt(value: string): string {
     const iv = randomBytes(12);
@@ -36,14 +45,65 @@ export class AiSecretService {
     ]).toString('utf8');
   }
   private key(): Buffer {
-    const secret = this.config.get<string>('AI_PROVIDER_ENCRYPTION_KEY');
-    if (!secret && this.config.get<string>('NODE_ENV') === 'production') {
+    if (this.encryptionKey) return this.encryptionKey;
+    const configured = this.config.get<string>('AI_PROVIDER_ENCRYPTION_KEY');
+    const secret =
+      configured ||
+      (this.config.get<string>('NODE_ENV') === 'production'
+        ? this.productionFileSecret()
+        : 'zunibee-local-ai-provider-key');
+    this.encryptionKey = createHash('sha256').update(secret).digest();
+    return this.encryptionKey;
+  }
+
+  private productionFileSecret(): string {
+    const path = this.config.get<string>(
+      'AI_PROVIDER_ENCRYPTION_KEY_FILE',
+      '/app/apps/api/secrets/ai-provider-encryption-key',
+    );
+    try {
+      const existing = readSecret(path);
+      if (existing) return existing;
+      mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+      const generated = randomBytes(32).toString('base64url');
+      try {
+        writeFileSync(path, generated, {
+          encoding: 'utf8',
+          flag: 'wx',
+          mode: 0o600,
+        });
+        this.logger.log('Đã tạo khóa mã hóa AI provider trong secret volume');
+        return generated;
+      } catch (error) {
+        const racedValue = readSecret(path);
+        if (racedValue) return racedValue;
+        throw error;
+      }
+    } catch {
+      this.logger.error('Không thể khởi tạo khóa mã hóa AI provider');
       throw new InternalServerErrorException(
-        'Thiếu AI_PROVIDER_ENCRYPTION_KEY',
+        'Không thể đọc hoặc tạo khóa mã hóa AI provider',
       );
     }
-    return createHash('sha256')
-      .update(secret || 'zunibee-local-ai-provider-key')
-      .digest();
   }
+}
+
+function readSecret(path: string): string | null {
+  try {
+    const value = readFileSync(path, 'utf8').trim();
+    if (value.length < 32)
+      throw new Error('AI provider encryption key file is too short');
+    return value;
+  } catch (error) {
+    if (errorCode(error) === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function errorCode(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null) return undefined;
+  const code = (error as Record<string, unknown>).code;
+  return typeof code === 'string' ? code : undefined;
 }

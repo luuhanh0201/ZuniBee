@@ -1,23 +1,31 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Activity,
+  BatteryFull,
+  BatteryLow,
+  BatteryMedium,
   Bot,
+  Brain,
   Check,
   ChevronDown,
   CircleDollarSign,
   CloudCog,
   Cpu,
   Gauge,
+  HardDrive,
   KeyRound,
   LayoutDashboard,
+  Loader2,
   LogOut,
   Menu,
   MoreHorizontal,
   Pencil,
   Plus,
+  RefreshCw,
+  Route,
   Search,
   ServerCog,
   Settings2,
@@ -25,20 +33,83 @@ import {
   Sparkles,
   Trash2,
   Users,
+  Wrench,
   X,
   Zap,
 } from "lucide-react";
-import type { AiProvider, AiProviderKind } from "@zunibee/shared";
+import type {
+  AiProvider,
+  AiProviderKind,
+  AiProviderMetrics,
+  AuthUser,
+  CreateAiProviderRequest,
+} from "@zunibee/shared";
 import { ROUTES } from "@/config/routes";
+import { useAuth } from "@/lib/auth-context";
+import {
+  adminCreateAiProvider,
+  adminDeleteAiProvider,
+  adminDiscoverAiProviderModels,
+  adminDiscoverSavedAiProviderModels,
+  adminGetAiProviderMetrics,
+  adminListAiProviders,
+  adminTestAiProvider,
+  adminTestAiProviderConfiguration,
+  adminUpdateAiProvider,
+} from "./ai-api";
+import {
+  AI_PROVIDER_PRESETS,
+  inferProviderPreset,
+  modelStrength,
+  providerPreset,
+  type AiModelStrength,
+  type AiProviderPresetId,
+} from "./ai-provider-catalog";
+import { SelectMenu } from "@/components/ui/select-menu";
 
-type ProviderHealth = "online" | "offline" | "checking";
-type ProviderRow = AiProvider & {
-  health: ProviderHealth;
-  latencyMs: number | null;
-  requestCount: number;
+function strengthIcon(strength: AiModelStrength | null): React.ReactNode {
+  if (strength === "strong")
+    return (
+      <BatteryFull
+        className="h-4 w-4 shrink-0 text-success"
+        aria-hidden="true"
+      />
+    );
+  if (strength === "medium")
+    return (
+      <BatteryMedium
+        className="h-4 w-4 shrink-0 text-amber-500"
+        aria-hidden="true"
+      />
+    );
+  if (strength === "weak")
+    return (
+      <BatteryLow
+        className="h-4 w-4 shrink-0 text-destructive"
+        aria-hidden="true"
+      />
+    );
+  return undefined;
+}
+
+const STRENGTH_TITLES: Record<AiModelStrength, string> = {
+  strong: "Mạnh — chất lượng cao nhất, chi phí cao hơn",
+  medium: "Trung bình — cân bằng giữa chất lượng và chi phí",
+  weak: "Yếu — nhanh và rẻ, chất lượng thấp hơn",
+};
+
+const PRESET_ICONS: Record<AiProviderPresetId, React.ReactNode> = {
+  google_gemini: <Sparkles className="h-4 w-4 shrink-0" aria-hidden="true" />,
+  openai: <Bot className="h-4 w-4 shrink-0" aria-hidden="true" />,
+  deepseek: <Brain className="h-4 w-4 shrink-0" aria-hidden="true" />,
+  groq: <Zap className="h-4 w-4 shrink-0" aria-hidden="true" />,
+  openrouter: <Route className="h-4 w-4 shrink-0" aria-hidden="true" />,
+  ollama: <HardDrive className="h-4 w-4 shrink-0" aria-hidden="true" />,
+  custom: <Wrench className="h-4 w-4 shrink-0" aria-hidden="true" />,
 };
 
 type ProviderDraft = {
+  presetId: AiProviderPresetId;
   name: string;
   kind: AiProviderKind;
   baseUrl: string;
@@ -48,65 +119,20 @@ type ProviderDraft = {
   creditCostPer1kTokens: number;
 };
 
-const INITIAL_PROVIDERS: ProviderRow[] = [
-  {
-    id: "provider-openai",
-    name: "OpenAI Production",
-    kind: "openai_compatible",
-    baseUrl: "https://api.openai.com/v1",
-    model: "gpt-4.1-mini",
-    isActive: true,
-    isDefault: true,
-    hasApiKey: true,
-    baseCreditCost: 2,
-    creditCostPer1kTokens: 1,
-    createdAt: "2026-07-08T08:00:00.000Z",
-    updatedAt: "2026-07-13T03:20:00.000Z",
-    health: "online",
-    latencyMs: 842,
-    requestCount: 12840,
-  },
-  {
-    id: "provider-ollama",
-    name: "Ollama nội bộ",
-    kind: "ollama",
-    baseUrl: "http://host.docker.internal:11434",
-    model: "llama3.2:latest",
-    isActive: true,
-    isDefault: false,
-    hasApiKey: false,
-    baseCreditCost: 1,
-    creditCostPer1kTokens: 0,
-    createdAt: "2026-07-09T08:00:00.000Z",
-    updatedAt: "2026-07-12T10:15:00.000Z",
-    health: "online",
-    latencyMs: 126,
-    requestCount: 3216,
-  },
-  {
-    id: "provider-backup",
-    name: "OpenAI dự phòng",
-    kind: "openai_compatible",
-    baseUrl: "https://gateway.example.com/v1",
-    model: "gpt-4o-mini",
-    isActive: false,
-    isDefault: false,
-    hasApiKey: true,
-    baseCreditCost: 2,
-    creditCostPer1kTokens: 1,
-    createdAt: "2026-07-10T08:00:00.000Z",
-    updatedAt: "2026-07-10T08:00:00.000Z",
-    health: "offline",
-    latencyMs: null,
-    requestCount: 0,
-  },
-];
+type Notice = { tone: "success" | "error"; message: string };
+type DraftConnectionTest = {
+  ok: boolean;
+  message: string;
+  latencyMs: number | null;
+  fingerprint: string;
+};
 
 const EMPTY_DRAFT: ProviderDraft = {
+  presetId: "google_gemini",
   name: "",
   kind: "openai_compatible",
-  baseUrl: "https://api.openai.com/v1",
-  model: "",
+  baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+  model: "gemini-3.5-flash",
   apiKey: "",
   baseCreditCost: 1,
   creditCostPer1kTokens: 1,
@@ -115,15 +141,71 @@ const EMPTY_DRAFT: ProviderDraft = {
 const buttonFocus =
   "focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring";
 
+const fetchProviderData = (accessToken: string) =>
+  Promise.all([
+    adminListAiProviders(accessToken),
+    adminGetAiProviderMetrics(accessToken),
+  ]);
+
 export function AdminAiConsole() {
-  const [providers, setProviders] = useState<ProviderRow[]>(INITIAL_PROVIDERS);
+  const { accessToken, logout, user } = useAuth();
+  const [providers, setProviders] = useState<AiProvider[]>([]);
+  const [metrics, setMetrics] = useState<AiProviderMetrics | null>(null);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"all" | "active" | "inactive">("all");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ProviderDraft>(EMPTY_DRAFT);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [actionId, setActionId] = useState<string | null>(null);
+  const [checkingIds, setCheckingIds] = useState<Set<string>>(new Set());
+  const [loadError, setLoadError] = useState("");
+  const [modelOptions, setModelOptions] = useState<string[]>(
+    providerPreset(EMPTY_DRAFT.presetId).suggestedModels,
+  );
+  const [isDiscoveringModels, setIsDiscoveringModels] = useState(false);
+  const [isTestingDraft, setIsTestingDraft] = useState(false);
+  const [draftConnectionTest, setDraftConnectionTest] =
+    useState<DraftConnectionTest | null>(null);
+
+  const loadData = useCallback(async () => {
+    if (!accessToken) return;
+    try {
+      const [providerRows, providerMetrics] =
+        await fetchProviderData(accessToken);
+      setProviders(providerRows);
+      setMetrics(providerMetrics);
+      setLoadError("");
+    } catch (cause) {
+      setLoadError(getErrorMessage(cause));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    let active = true;
+    void fetchProviderData(accessToken)
+      .then(([providerRows, providerMetrics]) => {
+        if (!active) return;
+        setProviders(providerRows);
+        setMetrics(providerMetrics);
+        setLoadError("");
+      })
+      .catch((cause: unknown) => {
+        if (active) setLoadError(getErrorMessage(cause));
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [accessToken]);
 
   const filteredProviders = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("vi");
@@ -141,20 +223,24 @@ export function AdminAiConsole() {
     });
   }, [providers, query, status]);
 
-  const activeCount = providers.filter((provider) => provider.isActive).length;
-  const onlineCount = providers.filter(
-    (provider) => provider.health === "online",
-  ).length;
+  const activeCount = metrics?.activeProviders ?? 0;
+  const onlineCount = metrics?.onlineProviders ?? 0;
+  const systemStatus = getSystemStatus(metrics, isLoading);
 
   function openCreate() {
     setEditingId(null);
     setDraft(EMPTY_DRAFT);
+    setModelOptions(providerPreset(EMPTY_DRAFT.presetId).suggestedModels);
+    setDraftConnectionTest(null);
     setEditorOpen(true);
   }
 
-  function openEdit(provider: ProviderRow) {
+  function openEdit(provider: AiProvider) {
+    const presetId = inferProviderPreset(provider.kind, provider.baseUrl);
+    const suggested = providerPreset(presetId).suggestedModels;
     setEditingId(provider.id);
     setDraft({
+      presetId,
       name: provider.name,
       kind: provider.kind,
       baseUrl: provider.baseUrl,
@@ -163,107 +249,251 @@ export function AdminAiConsole() {
       baseCreditCost: provider.baseCreditCost,
       creditCostPer1kTokens: provider.creditCostPer1kTokens,
     });
+    setModelOptions(
+      suggested.includes(provider.model)
+        ? suggested
+        : [provider.model, ...suggested],
+    );
+    setDraftConnectionTest(null);
     setEditorOpen(true);
   }
 
-  function saveProvider() {
-    if (editingId) {
-      setProviders((current) =>
-        current.map((provider) =>
-          provider.id === editingId
-            ? {
-                ...provider,
-                ...draft,
-                hasApiKey: Boolean(draft.apiKey) || provider.hasApiKey,
-                updatedAt: new Date().toISOString(),
-              }
-            : provider,
-        ),
-      );
-      setNotice("Đã cập nhật cấu hình provider.");
-    } else {
-      const provider: ProviderRow = {
-        id: crypto.randomUUID(),
-        name: draft.name,
-        kind: draft.kind,
-        baseUrl: draft.baseUrl,
-        model: draft.model,
-        isActive: true,
-        isDefault: providers.length === 0,
-        hasApiKey: Boolean(draft.apiKey),
-        baseCreditCost: draft.baseCreditCost,
-        creditCostPer1kTokens: draft.creditCostPer1kTokens,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        health: "offline",
-        latencyMs: null,
-        requestCount: 0,
-      };
-      setProviders((current) => [provider, ...current]);
-      setNotice("Đã thêm provider mới vào danh sách demo.");
+  function updateDraft(next: ProviderDraft) {
+    if (
+      next.kind !== draft.kind ||
+      next.baseUrl !== draft.baseUrl ||
+      next.model !== draft.model ||
+      next.apiKey !== draft.apiKey
+    ) {
+      setDraftConnectionTest(null);
     }
-    setEditorOpen(false);
+    setDraft(next);
   }
 
-  function toggleProvider(provider: ProviderRow) {
+  function selectProviderPreset(presetId: AiProviderPresetId) {
+    const preset = providerPreset(presetId);
+    setModelOptions(preset.suggestedModels);
+    setDraftConnectionTest(null);
+    setDraft((current) => ({
+      ...current,
+      presetId,
+      kind: preset.kind,
+      baseUrl: preset.baseUrl,
+      model: preset.suggestedModels[0] ?? "",
+      apiKey: "",
+    }));
+  }
+
+  async function discoverModels() {
+    if (!accessToken || isDiscoveringModels) return;
+    setIsDiscoveringModels(true);
+    try {
+      const saved = editingId
+        ? providers.find((provider) => provider.id === editingId)
+        : undefined;
+      const canUseSavedConfiguration =
+        saved &&
+        !draft.apiKey &&
+        saved.kind === draft.kind &&
+        saved.baseUrl.replace(/\/+$/, "") === draft.baseUrl.replace(/\/+$/, "");
+      const result =
+        canUseSavedConfiguration && editingId
+          ? await adminDiscoverSavedAiProviderModels(editingId, accessToken)
+          : await adminDiscoverAiProviderModels(
+              {
+                kind: draft.kind,
+                baseUrl: draft.baseUrl.trim(),
+                ...(draft.apiKey ? { apiKey: draft.apiKey } : {}),
+              },
+              accessToken,
+            );
+      setModelOptions(result.models);
+      if (!result.models.includes(draft.model)) {
+        setDraftConnectionTest(null);
+        setDraft((current) => ({
+          ...current,
+          model: result.models[0] ?? "",
+        }));
+      }
+      setNotice({
+        tone: "success",
+        message: `Đã đồng bộ ${result.models.length} model từ provider.`,
+      });
+    } catch (cause) {
+      setNotice({ tone: "error", message: getErrorMessage(cause) });
+    } finally {
+      setIsDiscoveringModels(false);
+    }
+  }
+
+  async function testDraftConfiguration() {
+    if (!accessToken || isTestingDraft) return;
+    setIsTestingDraft(true);
+    setDraftConnectionTest(null);
+    const fingerprint = providerConnectionFingerprint(draft);
+    try {
+      const result = await adminTestAiProviderConfiguration(
+        {
+          kind: draft.kind,
+          baseUrl: draft.baseUrl.trim(),
+          model: draft.model.trim(),
+          ...(draft.apiKey.trim() ? { apiKey: draft.apiKey.trim() } : {}),
+        },
+        accessToken,
+      );
+      setDraftConnectionTest({ ...result, fingerprint });
+    } catch (cause) {
+      setDraftConnectionTest({
+        ok: false,
+        message: getErrorMessage(cause),
+        latencyMs: null,
+        fingerprint,
+      });
+    } finally {
+      setIsTestingDraft(false);
+    }
+  }
+
+  async function saveProvider() {
+    if (
+      !accessToken ||
+      isSaving ||
+      (!editingId &&
+        (!draftConnectionTest?.ok ||
+          draftConnectionTest.fingerprint !==
+            providerConnectionFingerprint(draft)))
+    )
+      return;
+    setIsSaving(true);
+    const body: CreateAiProviderRequest = {
+      name: draft.name.trim(),
+      kind: draft.kind,
+      baseUrl: draft.baseUrl.trim(),
+      model: draft.model.trim(),
+      baseCreditCost: draft.baseCreditCost,
+      creditCostPer1kTokens: draft.creditCostPer1kTokens,
+      ...(draft.apiKey ? { apiKey: draft.apiKey } : {}),
+    };
+    try {
+      if (editingId) {
+        await adminUpdateAiProvider(editingId, body, accessToken);
+        setNotice({ tone: "success", message: "Đã cập nhật provider thật." });
+      } else {
+        await adminCreateAiProvider(
+          {
+            ...body,
+            isActive: true,
+            isDefault: providers.length === 0,
+          },
+          accessToken,
+        );
+        setNotice({
+          tone: "success",
+          message: "Đã thêm provider vào hệ thống.",
+        });
+      }
+      setEditorOpen(false);
+      await loadData();
+    } catch (cause) {
+      setNotice({ tone: "error", message: getErrorMessage(cause) });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function toggleProvider(provider: AiProvider) {
     if (provider.isDefault && provider.isActive) {
-      setNotice("Provider mặc định phải luôn được bật.");
+      setNotice({
+        tone: "error",
+        message: "Provider mặc định phải luôn được bật.",
+      });
       return;
     }
-    setProviders((current) =>
-      current.map((item) =>
-        item.id === provider.id
-          ? {
-              ...item,
-              isActive: !item.isActive,
-              health: item.isActive ? "offline" : item.health,
-            }
-          : item,
-      ),
-    );
+    if (!accessToken || actionId) return;
+    setActionId(provider.id);
+    try {
+      await adminUpdateAiProvider(
+        provider.id,
+        { isActive: !provider.isActive },
+        accessToken,
+      );
+      setNotice({
+        tone: "success",
+        message: provider.isActive ? "Đã tắt provider." : "Đã bật provider.",
+      });
+      await loadData();
+    } catch (cause) {
+      setNotice({ tone: "error", message: getErrorMessage(cause) });
+    } finally {
+      setActionId(null);
+    }
   }
 
-  function setDefaultProvider(providerId: string) {
-    setProviders((current) =>
-      current.map((provider) => ({
-        ...provider,
-        isDefault: provider.id === providerId,
-        isActive: provider.id === providerId ? true : provider.isActive,
-      })),
-    );
-    setNotice("Đã đổi provider mặc định.");
+  async function setDefaultProvider(providerId: string) {
+    if (!accessToken || actionId) return;
+    setActionId(providerId);
+    try {
+      await adminUpdateAiProvider(
+        providerId,
+        { isDefault: true, isActive: true },
+        accessToken,
+      );
+      setNotice({ tone: "success", message: "Đã đổi provider mặc định." });
+      await loadData();
+    } catch (cause) {
+      setNotice({ tone: "error", message: getErrorMessage(cause) });
+    } finally {
+      setActionId(null);
+    }
   }
 
-  function deleteProvider(provider: ProviderRow) {
+  async function deleteProvider(provider: AiProvider) {
     if (provider.isDefault) {
-      setNotice("Hãy chọn provider mặc định khác trước khi xóa.");
+      setNotice({
+        tone: "error",
+        message: "Hãy chọn provider mặc định khác trước khi xóa.",
+      });
       return;
     }
     if (!window.confirm(`Xóa provider “${provider.name}”?`)) return;
-    setProviders((current) =>
-      current.filter((item) => item.id !== provider.id),
-    );
-    setNotice("Đã xóa provider khỏi danh sách demo.");
+    if (!accessToken || actionId) return;
+    setActionId(provider.id);
+    try {
+      await adminDeleteAiProvider(provider.id, accessToken);
+      setNotice({ tone: "success", message: "Đã xóa provider khỏi hệ thống." });
+      await loadData();
+    } catch (cause) {
+      setNotice({ tone: "error", message: getErrorMessage(cause) });
+    } finally {
+      setActionId(null);
+    }
   }
 
-  function testConnection(providerId: string) {
-    setProviders((current) =>
-      current.map((provider) =>
-        provider.id === providerId
-          ? { ...provider, health: "checking", latencyMs: null }
-          : provider,
-      ),
-    );
-    window.setTimeout(() => {
+  async function testConnection(providerId: string) {
+    if (!accessToken || checkingIds.has(providerId)) return;
+    setCheckingIds((current) => new Set(current).add(providerId));
+    try {
+      const result = await adminTestAiProvider(providerId, accessToken);
       setProviders((current) =>
         current.map((provider) =>
-          provider.id === providerId
-            ? { ...provider, health: "online", latencyMs: 148 }
-            : provider,
+          provider.id === providerId ? result.provider : provider,
         ),
       );
-      setNotice("Kết nối thử thành công — phản hồi trong 148 ms.");
-    }, 900);
+      setNotice({
+        tone: result.ok ? "success" : "error",
+        message: result.message,
+      });
+      const nextMetrics = await adminGetAiProviderMetrics(accessToken);
+      setMetrics(nextMetrics);
+    } catch (cause) {
+      setNotice({ tone: "error", message: getErrorMessage(cause) });
+    } finally {
+      setCheckingIds((current) => {
+        const next = new Set(current);
+        next.delete(providerId);
+        return next;
+      });
+    }
   }
 
   return (
@@ -271,6 +501,8 @@ export function AdminAiConsole() {
       <AdminSidebar
         mobileOpen={mobileNavOpen}
         onClose={() => setMobileNavOpen(false)}
+        user={user!}
+        onLogout={() => void logout()}
       />
 
       <div className="min-w-0">
@@ -294,12 +526,16 @@ export function AdminAiConsole() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="hidden rounded-full border-2 border-foreground bg-success-soft px-3 py-1.5 text-sm font-extrabold sm:inline-flex sm:items-center sm:gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-success" />
-              Hệ thống ổn định
+            <span
+              className={`hidden rounded-full border-2 border-foreground px-3 py-1.5 text-sm font-extrabold sm:inline-flex sm:items-center sm:gap-2 ${systemStatus.containerClass}`}
+            >
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${systemStatus.dotClass}`}
+              />
+              {systemStatus.label}
             </span>
             <span className="flex h-11 w-11 items-center justify-center rounded-xl border-2 border-foreground bg-primary font-display font-extrabold shadow-brutal-sm">
-              AD
+              {initials(user?.fullName ?? "Admin")}
             </span>
           </div>
         </header>
@@ -342,29 +578,33 @@ export function AdminAiConsole() {
             <MetricCard
               icon={ServerCog}
               label="Tổng provider"
-              value={String(providers.length).padStart(2, "0")}
+              value={String(metrics?.totalProviders ?? 0).padStart(2, "0")}
               helper={`${activeCount} đang hoạt động`}
               color="bg-secondary-soft"
             />
             <MetricCard
               icon={Activity}
               label="Kết nối ổn định"
-              value={`${onlineCount}/${providers.length}`}
+              value={`${onlineCount}/${activeCount}`}
               helper="Theo lần kiểm tra gần nhất"
               color="bg-success-soft"
             />
             <MetricCard
               icon={Zap}
-              label="Lượt gọi tháng này"
-              value="16K"
-              helper="+12,4% so với tháng trước"
+              label="Tác vụ AI tháng này"
+              value={formatNumber(metrics?.requestsThisMonth ?? 0)}
+              helper="Sinh quiz và phân tích kết quả"
               color="bg-warning-soft"
             />
             <MetricCard
               icon={Gauge}
               label="Độ trễ trung bình"
-              value="484ms"
-              helper="Trong ngưỡng cho phép"
+              value={
+                metrics?.averageLatencyMs == null
+                  ? "--"
+                  : `${metrics.averageLatencyMs}ms`
+              }
+              helper="Từ các provider online đã kiểm tra"
               color="bg-primary"
             />
           </section>
@@ -372,15 +612,15 @@ export function AdminAiConsole() {
           {notice ? (
             <div
               role="status"
-              className="mt-6 flex items-center justify-between gap-3 rounded-xl border-2 border-foreground bg-success-soft px-4 py-3 font-bold shadow-brutal-sm"
+              className={`mt-6 flex items-center justify-between gap-3 rounded-xl border-2 border-foreground px-4 py-3 font-bold shadow-brutal-sm ${notice.tone === "success" ? "bg-success-soft" : "bg-destructive-soft"}`}
             >
               <span className="flex items-center gap-2">
                 <Check className="h-5 w-5" aria-hidden="true" />
-                {notice}
+                {notice.message}
               </span>
               <button
                 type="button"
-                onClick={() => setNotice("")}
+                onClick={() => setNotice(null)}
                 aria-label="Đóng thông báo"
                 className={`cursor-pointer rounded-md p-1 hover:bg-surface/60 ${buttonFocus}`}
               >
@@ -437,35 +677,59 @@ export function AdminAiConsole() {
             </div>
 
             <div className="grid gap-4 p-4 sm:p-5 xl:grid-cols-2">
-              {filteredProviders.map((provider) => (
-                <ProviderCard
-                  key={provider.id}
-                  provider={provider}
-                  onEdit={() => openEdit(provider)}
-                  onToggle={() => toggleProvider(provider)}
-                  onDefault={() => setDefaultProvider(provider.id)}
-                  onDelete={() => deleteProvider(provider)}
-                  onTest={() => testConnection(provider.id)}
-                />
-              ))}
-              {!filteredProviders.length ? (
+              {isLoading ? (
+                <div className="flex min-h-52 items-center justify-center gap-3 font-bold text-muted-foreground xl:col-span-2">
+                  <Loader2
+                    className="h-6 w-6 animate-spin"
+                    aria-hidden="true"
+                  />
+                  Đang tải cấu hình provider thật...
+                </div>
+              ) : loadError ? (
+                <div className="rounded-2xl border-2 border-destructive bg-destructive-soft p-8 text-center xl:col-span-2">
+                  <p className="font-extrabold">{loadError}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsLoading(true);
+                      void loadData();
+                    }}
+                    className={`mt-4 min-h-10 cursor-pointer rounded-xl border-2 border-foreground bg-surface px-4 font-bold ${buttonFocus}`}
+                  >
+                    Thử tải lại
+                  </button>
+                </div>
+              ) : null}
+              {!isLoading && !loadError
+                ? filteredProviders.map((provider) => (
+                    <ProviderCard
+                      key={provider.id}
+                      provider={provider}
+                      onEdit={() => openEdit(provider)}
+                      onToggle={() => void toggleProvider(provider)}
+                      onDefault={() => void setDefaultProvider(provider.id)}
+                      onDelete={() => void deleteProvider(provider)}
+                      onTest={() => void testConnection(provider.id)}
+                      checking={checkingIds.has(provider.id)}
+                      busy={actionId === provider.id}
+                    />
+                  ))
+                : null}
+              {!isLoading && !loadError && !filteredProviders.length ? (
                 <div className="rounded-2xl border-2 border-dashed border-foreground bg-surface-soft p-10 text-center xl:col-span-2">
                   <Search className="mx-auto h-8 w-8 text-muted-foreground" />
                   <h3 className="mt-3 font-display text-xl font-extrabold">
                     Không tìm thấy provider
                   </h3>
                   <p className="mt-1 font-semibold text-muted-foreground">
-                    Thử từ khóa hoặc bộ lọc trạng thái khác.
+                    {providers.length
+                      ? "Thử từ khóa hoặc bộ lọc trạng thái khác."
+                      : "Chưa có provider nào trong database. Hãy thêm provider đầu tiên."}
                   </p>
                 </div>
               ) : null}
             </div>
           </section>
-
-          <p className="mt-5 text-center text-sm font-semibold text-muted-foreground">
-            Bản thiết kế UI demo — thay đổi chỉ được lưu tạm thời trên trình
-            duyệt.
-          </p>
         </main>
       </div>
 
@@ -473,9 +737,28 @@ export function AdminAiConsole() {
         <ProviderEditor
           draft={draft}
           editing={Boolean(editingId)}
-          onChange={setDraft}
+          onChange={updateDraft}
           onClose={() => setEditorOpen(false)}
-          onSave={saveProvider}
+          onSave={() => void saveProvider()}
+          saving={isSaving}
+          modelOptions={modelOptions}
+          discoveringModels={isDiscoveringModels}
+          onPresetChange={selectProviderPreset}
+          onDiscoverModels={() => void discoverModels()}
+          testingDraft={isTestingDraft}
+          connectionTest={draftConnectionTest}
+          onTestDraft={() => void testDraftConfiguration()}
+          hasUsableStoredKey={Boolean(
+            editingId &&
+            providers.some(
+              (provider) =>
+                provider.id === editingId &&
+                provider.hasApiKey &&
+                provider.kind === draft.kind &&
+                provider.baseUrl.replace(/\/+$/, "") ===
+                  draft.baseUrl.replace(/\/+$/, ""),
+            ),
+          )}
         />
       ) : null}
     </div>
@@ -485,9 +768,13 @@ export function AdminAiConsole() {
 function AdminSidebar({
   mobileOpen,
   onClose,
+  user,
+  onLogout,
 }: {
   mobileOpen: boolean;
   onClose: () => void;
+  user: AuthUser;
+  onLogout: () => void;
 }) {
   const items = [
     { icon: LayoutDashboard, label: "Tổng quan", active: false },
@@ -555,17 +842,18 @@ function AdminSidebar({
           <div className="rounded-2xl border-2 border-foreground bg-secondary-soft p-4 shadow-brutal-sm">
             <div className="flex items-center gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-foreground bg-surface font-extrabold">
-                LA
+                {initials(user.fullName)}
               </span>
               <div className="min-w-0">
-                <p className="truncate font-extrabold">Lưu Hành</p>
+                <p className="truncate font-extrabold">{user.fullName}</p>
                 <p className="truncate text-xs font-bold text-muted-foreground">
-                  Super Admin
+                  {user.email ?? "Quản trị viên"}
                 </p>
               </div>
             </div>
             <button
               type="button"
+              onClick={onLogout}
               className={`mt-3 flex min-h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-surface px-3 font-bold transition-colors hover:bg-warning-soft ${buttonFocus}`}
             >
               <LogOut className="h-4 w-4" aria-hidden="true" />
@@ -620,22 +908,28 @@ function ProviderCard({
   onDefault,
   onDelete,
   onTest,
+  checking,
+  busy,
 }: {
-  provider: ProviderRow;
+  provider: AiProvider;
   onEdit: () => void;
   onToggle: () => void;
   onDefault: () => void;
   onDelete: () => void;
   onTest: () => void;
+  checking: boolean;
+  busy: boolean;
 }) {
-  const providerLabel =
-    provider.kind === "ollama" ? "Ollama" : "OpenAI-compatible";
-  const healthLabel =
-    provider.health === "checking"
-      ? "Đang kiểm tra"
-      : provider.health === "online"
-        ? "Trực tuyến"
-        : "Ngoại tuyến";
+  const providerLabel = providerPreset(
+    inferProviderPreset(provider.kind, provider.baseUrl),
+  ).label;
+  const healthLabel = checking
+    ? "Đang kiểm tra"
+    : provider.healthStatus === "online"
+      ? "Trực tuyến"
+      : provider.healthStatus === "offline"
+        ? "Ngoại tuyến"
+        : "Chưa kiểm tra";
   return (
     <article
       className={`relative rounded-2xl border-2 border-foreground p-5 transition-colors duration-200 ${provider.isActive ? "bg-background" : "bg-surface-soft"}`}
@@ -687,17 +981,33 @@ function ProviderCard({
             {provider.baseUrl}
           </dd>
         </div>
+        <div>
+          <dt className="font-bold text-muted-foreground">
+            Tác vụ AI ghi nhận
+          </dt>
+          <dd className="mt-1 font-extrabold tabular-nums">
+            {formatNumber(provider.requestCount)}
+          </dd>
+        </div>
+        <div>
+          <dt className="font-bold text-muted-foreground">Kiểm tra gần nhất</dt>
+          <dd className="mt-1 font-extrabold">
+            {provider.lastHealthCheckedAt
+              ? formatDateTime(provider.lastHealthCheckedAt)
+              : "Chưa có"}
+          </dd>
+        </div>
       </dl>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm font-extrabold">
           <span
-            className={`h-2.5 w-2.5 rounded-full ${provider.health === "checking" ? "animate-pulse bg-primary" : provider.health === "online" ? "bg-success" : "bg-destructive"}`}
+            className={`h-2.5 w-2.5 rounded-full ${checking ? "animate-pulse bg-primary" : provider.healthStatus === "online" ? "bg-success" : provider.healthStatus === "offline" ? "bg-destructive" : "bg-divider"}`}
           />
           {healthLabel}
-          {provider.latencyMs ? (
+          {provider.lastHealthLatencyMs != null ? (
             <span className="font-bold text-muted-foreground">
-              · {provider.latencyMs} ms
+              · {provider.lastHealthLatencyMs} ms
             </span>
           ) : null}
         </div>
@@ -707,16 +1017,23 @@ function ProviderCard({
             type="checkbox"
             checked={provider.isActive}
             onChange={onToggle}
+            disabled={busy}
             className="peer sr-only"
           />
           <span className="relative h-7 w-12 rounded-full border-2 border-foreground bg-divider transition-colors peer-checked:bg-success peer-focus-visible:outline peer-focus-visible:outline-3 peer-focus-visible:outline-offset-3 peer-focus-visible:outline-ring after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border-2 after:border-foreground after:bg-surface after:transition-transform peer-checked:after:translate-x-5" />
         </label>
       </div>
 
+      {provider.lastHealthError ? (
+        <p className="mt-3 rounded-lg bg-destructive-soft px-3 py-2 text-xs font-bold text-destructive">
+          {provider.lastHealthError}
+        </p>
+      ) : null}
+
       <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
         <button
           type="button"
-          disabled={provider.health === "checking"}
+          disabled={checking || busy}
           onClick={onTest}
           className={`inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-surface px-3 text-sm font-extrabold transition-colors hover:bg-secondary-soft disabled:cursor-wait disabled:opacity-60 ${buttonFocus}`}
         >
@@ -725,6 +1042,7 @@ function ProviderCard({
         </button>
         <button
           type="button"
+          disabled={busy || checking}
           onClick={onEdit}
           className={`inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-surface px-3 text-sm font-extrabold transition-colors hover:bg-primary ${buttonFocus}`}
         >
@@ -734,6 +1052,7 @@ function ProviderCard({
         {!provider.isDefault ? (
           <button
             type="button"
+            disabled={busy || checking}
             onClick={onDefault}
             className={`inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-warning-soft px-3 text-sm font-extrabold transition-colors hover:bg-primary ${buttonFocus}`}
           >
@@ -743,6 +1062,7 @@ function ProviderCard({
         ) : null}
         <button
           type="button"
+          disabled={busy || checking}
           onClick={onDelete}
           className={`inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-surface px-3 text-sm font-extrabold transition-colors hover:bg-destructive-soft ${buttonFocus}`}
         >
@@ -760,16 +1080,48 @@ function ProviderEditor({
   onChange,
   onClose,
   onSave,
+  saving,
+  modelOptions,
+  discoveringModels,
+  onPresetChange,
+  onDiscoverModels,
+  hasUsableStoredKey,
+  testingDraft,
+  connectionTest,
+  onTestDraft,
 }: {
   draft: ProviderDraft;
   editing: boolean;
   onChange: (draft: ProviderDraft) => void;
   onClose: () => void;
   onSave: () => void;
+  saving: boolean;
+  modelOptions: string[];
+  discoveringModels: boolean;
+  onPresetChange: (presetId: AiProviderPresetId) => void;
+  onDiscoverModels: () => void;
+  hasUsableStoredKey: boolean;
+  testingDraft: boolean;
+  connectionTest: DraftConnectionTest | null;
+  onTestDraft: () => void;
 }) {
   const [showKey, setShowKey] = useState(false);
+  const selectedPreset = providerPreset(draft.presetId);
+  const customModel = !modelOptions.includes(draft.model);
+  const hasRequiredKey =
+    !selectedPreset.apiKeyRequired ||
+    Boolean(draft.apiKey.trim()) ||
+    hasUsableStoredKey;
+  const currentConnectionTest =
+    connectionTest?.fingerprint === providerConnectionFingerprint(draft)
+      ? connectionTest
+      : null;
   const valid =
-    draft.name.trim() && draft.baseUrl.trim() && draft.model.trim();
+    draft.name.trim() &&
+    draft.baseUrl.trim() &&
+    draft.model.trim() &&
+    hasRequiredKey &&
+    (editing || currentConnectionTest?.ok);
   return (
     <div
       role="dialog"
@@ -793,6 +1145,7 @@ function ProviderEditor({
           <button
             type="button"
             onClick={onClose}
+            disabled={saving}
             aria-label="Đóng"
             className={`flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border-2 border-foreground bg-surface shadow-brutal-sm ${buttonFocus}`}
           >
@@ -819,36 +1172,59 @@ function ProviderEditor({
               className="min-h-12 w-full rounded-xl border-2 border-foreground bg-surface px-3 font-semibold outline-none focus:ring-2 focus:ring-ring"
             />
           </EditorField>
-          <EditorField label="Loại provider">
-            <select
-              value={draft.kind}
-              onChange={(event) =>
-                onChange({
-                  ...draft,
-                  kind: event.target.value as AiProviderKind,
-                  baseUrl:
-                    event.target.value === "ollama"
-                      ? "http://host.docker.internal:11434"
-                      : "https://api.openai.com/v1",
-                })
+          <EditorField label="Provider">
+            <SelectMenu
+              value={draft.presetId}
+              onChange={(presetId) =>
+                onPresetChange(presetId as AiProviderPresetId)
               }
-              className="min-h-12 w-full cursor-pointer rounded-xl border-2 border-foreground bg-surface px-3 font-bold outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="openai_compatible">OpenAI-compatible</option>
-              <option value="ollama">Ollama</option>
-            </select>
-          </EditorField>
-          <EditorField label="Tên model">
-            <input
-              required
-              value={draft.model}
-              onChange={(event) =>
-                onChange({ ...draft, model: event.target.value })
-              }
-              placeholder="gpt-4.1-mini"
-              className="min-h-12 w-full rounded-xl border-2 border-foreground bg-surface px-3 font-semibold outline-none focus:ring-2 focus:ring-ring"
+              options={AI_PROVIDER_PRESETS.map((preset) => ({
+                value: preset.id,
+                label: preset.label,
+                icon: PRESET_ICONS[preset.id],
+              }))}
             />
           </EditorField>
+          <EditorField label="Tên model">
+            <SelectMenu
+              value={customModel ? "__custom" : draft.model}
+              onChange={(model) =>
+                onChange({
+                  ...draft,
+                  model: model === "__custom" ? "" : model,
+                })
+              }
+              options={[
+                ...modelOptions.map((model) => {
+                  const strength = modelStrength(selectedPreset, model);
+                  return {
+                    value: model,
+                    label: model,
+                    icon: strengthIcon(strength),
+                    title: strength ? STRENGTH_TITLES[strength] : undefined,
+                  };
+                }),
+                {
+                  value: "__custom",
+                  label: "Model khác...",
+                  title: "Tự nhập model ID chính xác",
+                },
+              ]}
+            />
+          </EditorField>
+          {customModel ? (
+            <EditorField label="Model tùy chỉnh" className="sm:col-span-2">
+              <input
+                required
+                value={draft.model}
+                onChange={(event) =>
+                  onChange({ ...draft, model: event.target.value })
+                }
+                placeholder="Nhập model ID chính xác"
+                className="min-h-12 w-full rounded-xl border-2 border-foreground bg-surface px-3 font-mono text-sm font-semibold outline-none focus:ring-2 focus:ring-ring"
+              />
+            </EditorField>
+          ) : null}
           <EditorField label="Base URL" className="sm:col-span-2">
             <input
               required
@@ -862,7 +1238,11 @@ function ProviderEditor({
           </EditorField>
           <EditorField
             label={editing ? "API key mới (không bắt buộc)" : "API key"}
-            hint="Khóa được che trong giao diện demo."
+            hint={
+              selectedPreset.apiKeyRequired
+                ? "Bắt buộc với provider này. Khóa được mã hóa ở backend."
+                : "Không bắt buộc. Khóa được mã hóa ở backend."
+            }
             className="sm:col-span-2"
           >
             <div className="relative">
@@ -889,6 +1269,66 @@ function ProviderEditor({
               </button>
             </div>
           </EditorField>
+          <div className="sm:col-span-2">
+            <button
+              type="button"
+              onClick={onDiscoverModels}
+              disabled={
+                discoveringModels || !draft.baseUrl.trim() || !hasRequiredKey
+              }
+              className={`inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-secondary-soft px-4 font-extrabold transition-colors hover:bg-primary disabled:cursor-not-allowed disabled:opacity-50 ${buttonFocus}`}
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${discoveringModels ? "animate-spin" : ""}`}
+                aria-hidden="true"
+              />
+              {discoveringModels
+                ? "Đang tải model..."
+                : "Đồng bộ model từ provider"}
+            </button>
+            <p className="mt-2 text-xs font-semibold text-muted-foreground">
+              Danh sách được đọc trực tiếp từ endpoint hiện tại. Provider cloud
+              cần API key hợp lệ; khi chỉnh sửa có thể dùng khóa đã lưu.
+            </p>
+          </div>
+          {!editing ? (
+            <div className="sm:col-span-2">
+              <button
+                type="button"
+                onClick={onTestDraft}
+                disabled={
+                  testingDraft ||
+                  discoveringModels ||
+                  !draft.baseUrl.trim() ||
+                  !draft.model.trim() ||
+                  !hasRequiredKey
+                }
+                className={`inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-warning-soft px-4 font-extrabold transition-colors hover:bg-success-soft disabled:cursor-not-allowed disabled:opacity-50 ${buttonFocus}`}
+              >
+                {testingDraft ? (
+                  <Loader2
+                    className="h-4 w-4 animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                )}
+                {testingDraft ? "Đang kiểm tra..." : "Kiểm tra kết nối"}
+              </button>
+              <p className="mt-2 text-xs font-semibold text-muted-foreground">
+                Provider chỉ có thể được thêm sau khi endpoint, API key và model
+                hiện tại kiểm tra thành công.
+              </p>
+              {currentConnectionTest ? (
+                <p
+                  role={currentConnectionTest.ok ? "status" : "alert"}
+                  className={`mt-3 rounded-xl border-2 border-foreground px-3 py-2 text-sm font-bold ${currentConnectionTest.ok ? "bg-success-soft" : "bg-destructive-soft text-destructive"}`}
+                >
+                  {currentConnectionTest.message}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <EditorField label="Credit cơ bản">
             <input
               type="number"
@@ -922,17 +1362,28 @@ function ProviderEditor({
             <button
               type="button"
               onClick={onClose}
+              disabled={saving}
               className={`min-h-12 cursor-pointer rounded-xl border-2 border-foreground bg-surface px-5 font-extrabold transition-colors hover:bg-surface-soft ${buttonFocus}`}
             >
               Hủy
             </button>
             <button
               type="submit"
-              disabled={!valid}
+              disabled={!valid || saving}
               className={`inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-primary px-5 font-extrabold shadow-brutal-md transition-[transform,box-shadow] hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-lg disabled:cursor-not-allowed disabled:opacity-50 disabled:transform-none ${buttonFocus}`}
             >
-              <Check className="h-5 w-5" aria-hidden="true" />
-              {editing ? "Lưu thay đổi" : "Thêm provider"}
+              {saving ? (
+                <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Check className="h-5 w-5" aria-hidden="true" />
+              )}
+              {saving
+                ? "Đang lưu..."
+                : editing
+                  ? "Lưu thay đổi"
+                  : currentConnectionTest?.ok
+                    ? "Thêm provider"
+                    : "Kiểm tra kết nối trước"}
             </button>
           </div>
         </form>
@@ -963,4 +1414,76 @@ function EditorField({
       <span className="mt-2 block">{children}</span>
     </label>
   );
+}
+
+function getErrorMessage(cause: unknown): string {
+  return cause instanceof Error
+    ? cause.message
+    : "Không thể kết nối tới API quản trị AI";
+}
+
+function getSystemStatus(
+  metrics: AiProviderMetrics | null,
+  loading: boolean,
+): { label: string; containerClass: string; dotClass: string } {
+  if (loading)
+    return {
+      label: "Đang đồng bộ",
+      containerClass: "bg-surface-soft",
+      dotClass: "animate-pulse bg-primary",
+    };
+  if (!metrics?.totalProviders)
+    return {
+      label: "Chưa cấu hình provider",
+      containerClass: "bg-warning-soft",
+      dotClass: "bg-warning",
+    };
+  if (
+    metrics.activeProviders > 0 &&
+    metrics.onlineProviders === metrics.activeProviders
+  )
+    return {
+      label: "Hệ thống ổn định",
+      containerClass: "bg-success-soft",
+      dotClass: "bg-success",
+    };
+  return {
+    label: "Cần kiểm tra kết nối",
+    containerClass: "bg-warning-soft",
+    dotClass: "bg-warning",
+  };
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat("vi-VN", {
+    notation: value >= 10_000 ? "compact" : "standard",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+function formatDateTime(value: string): string {
+  return new Intl.DateTimeFormat("vi-VN", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function initials(name: string): string {
+  return (
+    name
+      .trim()
+      .split(/\s+/)
+      .slice(-2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "AD"
+  );
+}
+
+function providerConnectionFingerprint(draft: ProviderDraft): string {
+  return JSON.stringify([
+    draft.kind,
+    draft.baseUrl.trim().replace(/\/+$/, ""),
+    draft.model.trim(),
+    draft.apiKey.trim(),
+  ]);
 }

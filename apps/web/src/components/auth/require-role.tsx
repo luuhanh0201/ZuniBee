@@ -25,13 +25,16 @@ const DEMO_ROLE_STORAGE_KEY = "zunibee-demo-role";
 export function RequireRole({
   role,
   children,
+  allowDemo = true,
 }: {
   role: UserRole;
   children: React.ReactNode;
+  allowDemo?: boolean;
 }) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
   const isDemoMode =
+    allowDemo &&
     !user &&
     typeof window !== "undefined" &&
     localStorage.getItem(DEMO_ROLE_STORAGE_KEY) === role;

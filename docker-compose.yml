@@ -71,8 +71,9 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
-      AI_PROVIDER_ENCRYPTION_KEY: ${AI_PROVIDER_ENCRYPTION_KEY:?AI_PROVIDER_ENCRYPTION_KEY is required}
-      AI_OLLAMA_ALLOWED_HOSTS: ${AI_OLLAMA_ALLOWED_HOSTS:-host.docker.internal,ollama}
+      AI_PROVIDER_ENCRYPTION_KEY: ${AI_PROVIDER_ENCRYPTION_KEY:-}
+      AI_PROVIDER_ENCRYPTION_KEY_FILE: /app/apps/api/secrets/ai-provider-encryption-key
+      AI_OLLAMA_ALLOWED_HOSTS: ${AI_OLLAMA_ALLOWED_HOSTS:-host.docker.internal}
       AI_OLLAMA_ALLOWED_PORTS: ${AI_OLLAMA_ALLOWED_PORTS:-11434}
       AI_PROVIDER_PRIVATE_HOST_ALLOWLIST: ${AI_PROVIDER_PRIVATE_HOST_ALLOWLIST:-}
       NOTIFICATION_WORKER_ENABLED: ${NOTIFICATION_WORKER_ENABLED:-true}
@@ -80,6 +81,7 @@ services:
     volumes:
       - api-uploads:/app/apps/api/uploads
       - api-protected-uploads:/app/apps/api/protected-uploads
+      - api-secrets:/app/apps/api/secrets
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -178,5 +180,6 @@ volumes:
   redis-data:
   api-uploads:
   api-protected-uploads:
+  api-secrets:
   caddy-data:
   caddy-config:

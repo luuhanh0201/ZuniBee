@@ -11,6 +11,12 @@ export enum AiProviderKind {
   OPENAI_COMPATIBLE = 'openai_compatible',
 }
 
+export enum AiProviderHealthStatus {
+  UNKNOWN = 'unknown',
+  ONLINE = 'online',
+  OFFLINE = 'offline',
+}
+
 @Entity('ai_providers')
 export class AiProviderEntity {
   @PrimaryGeneratedColumn('uuid', {
@@ -31,6 +37,28 @@ export class AiProviderEntity {
   baseCreditCost!: number;
   @Column({ name: 'credit_cost_per_1k_tokens', type: 'integer', default: 1 })
   creditCostPer1kTokens!: number;
+  @Column({
+    name: 'health_status',
+    type: 'varchar',
+    length: 16,
+    default: AiProviderHealthStatus.UNKNOWN,
+  })
+  healthStatus!: AiProviderHealthStatus;
+  @Column({ name: 'last_health_latency_ms', type: 'integer', nullable: true })
+  lastHealthLatencyMs!: number | null;
+  @Column({
+    name: 'last_health_checked_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  lastHealthCheckedAt!: Date | null;
+  @Column({
+    name: 'last_health_error',
+    type: 'varchar',
+    length: 500,
+    nullable: true,
+  })
+  lastHealthError!: string | null;
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })

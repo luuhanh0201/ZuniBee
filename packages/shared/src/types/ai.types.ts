@@ -1,6 +1,7 @@
 import type { QuizDetail, QuizQuestionType } from "./quiz.types";
 
 export type AiProviderKind = "ollama" | "openai_compatible";
+export type AiProviderHealthStatus = "unknown" | "online" | "offline";
 export type AiProvider = {
   id: string;
   name: string;
@@ -12,6 +13,11 @@ export type AiProvider = {
   hasApiKey: boolean;
   baseCreditCost: number;
   creditCostPer1kTokens: number;
+  healthStatus: AiProviderHealthStatus;
+  lastHealthLatencyMs: number | null;
+  lastHealthCheckedAt: string | null;
+  lastHealthError: string | null;
+  requestCount: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -27,6 +33,35 @@ export type CreateAiProviderRequest = {
   creditCostPer1kTokens?: number;
 };
 export type UpdateAiProviderRequest = Partial<CreateAiProviderRequest>;
+export type AiProviderMetrics = {
+  totalProviders: number;
+  activeProviders: number;
+  onlineProviders: number;
+  requestsThisMonth: number;
+  averageLatencyMs: number | null;
+};
+export type AiProviderTestResult = {
+  ok: boolean;
+  message: string;
+  provider: AiProvider;
+};
+export type DiscoverAiProviderModelsRequest = {
+  kind: AiProviderKind;
+  baseUrl: string;
+  apiKey?: string;
+};
+export type DiscoverAiProviderModelsResponse = {
+  models: string[];
+};
+export type TestAiProviderConnectionRequest =
+  DiscoverAiProviderModelsRequest & {
+    model: string;
+  };
+export type TestAiProviderConnectionResponse = {
+  ok: boolean;
+  message: string;
+  latencyMs: number | null;
+};
 
 export type AiCreditAccount = {
   userId: string;

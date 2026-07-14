@@ -1,5 +1,8 @@
 import { BadGatewayException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { parseJsonContent } from './ai-model-client.service';
 import {
   calculateCharge,
@@ -82,6 +85,27 @@ describe('AI Phase 2/3 pure logic', () => {
     const encrypted = service.encrypt('secret-api-key');
     expect(encrypted).not.toContain('secret-api-key');
     expect(service.decrypt(encrypted)).toBe('secret-api-key');
+  });
+
+  it('creates and reuses a production encryption key file', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'zunibee-ai-secret-'));
+    const keyFile = join(directory, 'provider.key');
+    const config = {
+      get: (key: string, fallback?: string) => {
+        if (key === 'NODE_ENV') return 'production';
+        if (key === 'AI_PROVIDER_ENCRYPTION_KEY_FILE') return keyFile;
+        return fallback;
+      },
+    } as ConfigService;
+    try {
+      const first = new AiSecretService(config);
+      const encrypted = first.encrypt('persistent-api-key');
+      expect(existsSync(keyFile)).toBe(true);
+      const afterRestart = new AiSecretService(config);
+      expect(afterRestart.decrypt(encrypted)).toBe('persistent-api-key');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('validates weakness insight without accepting non-string arrays', () => {
