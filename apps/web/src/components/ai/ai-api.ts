@@ -4,7 +4,9 @@ import type {
   AiCreditLedgerEntry,
   AiProvider,
   AiProviderMetrics,
+  AiProviderPricingSuggestion,
   AiProviderTestResult,
+  AiUsageStats,
   CreateAiProviderRequest,
   DiscoverAiProviderModelsRequest,
   DiscoverAiProviderModelsResponse,
@@ -138,6 +140,34 @@ export const adminTestAiProviderConfiguration = (
   apiFetch<TestAiProviderConnectionResponse>(
     "/admin/ai/providers/test-config",
     { method: "POST", body, accessToken: token },
+  );
+export const adminGetAiUsageStats = (
+  params: { from?: string; to?: string },
+  token?: string,
+) => {
+  const query = new URLSearchParams();
+  if (params.from) query.set("from", params.from);
+  if (params.to) query.set("to", params.to);
+  const suffix = query.size ? `?${query.toString()}` : "";
+  return apiFetch<AiUsageStats>(`/admin/ai/usage-stats${suffix}`, {
+    accessToken: token,
+  });
+};
+export const adminDiscoverAiProviderPricing = (
+  body: TestAiProviderConnectionRequest,
+  token?: string,
+) =>
+  apiFetch<AiProviderPricingSuggestion>(
+    "/admin/ai/providers/pricing/discover",
+    { method: "POST", body, accessToken: token },
+  );
+export const adminDiscoverSavedAiProviderPricing = (
+  id: string,
+  token?: string,
+) =>
+  apiFetch<AiProviderPricingSuggestion>(
+    `/admin/ai/providers/${id}/pricing/discover`,
+    { method: "POST", accessToken: token },
   );
 export const adminSearchCreditUsers = (query: string, token?: string) =>
   apiFetch<AiCreditAdminUser[]>(

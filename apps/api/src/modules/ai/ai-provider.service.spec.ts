@@ -20,6 +20,8 @@ function provider(overrides: Partial<AiProviderEntity> = {}): AiProviderEntity {
     isDefault: true,
     baseCreditCost: 1,
     creditCostPer1kTokens: 0,
+    inputUsdPer1m: null,
+    outputUsdPer1m: null,
     healthStatus: AiProviderHealthStatus.UNKNOWN,
     lastHealthLatencyMs: null,
     lastHealthCheckedAt: null,
@@ -75,7 +77,7 @@ describe('AiProviderService', () => {
     const dataSource = {
       transaction: jest.fn(
         async (callback: (transactionManager: typeof manager) => unknown) =>
-          callback(manager),
+          await callback(manager),
       ),
     };
     const service = new AiProviderService(
@@ -285,6 +287,73 @@ describe('AiProviderService', () => {
     expect(fetchCall?.[1]?.method).toBe('GET');
     expect(new Headers(fetchCall?.[1]?.headers).get('Authorization')).toBe(
       'Bearer secret-key',
+    );
+  });
+
+  it('uses Anthropic API key headers when discovering Claude models', async () => {
+    const policy = { assertAllowed: jest.fn().mockResolvedValue(undefined) };
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({
+        data: [{ id: 'claude-fable-5' }, { id: 'claude-sonnet-5' }],
+      }),
+    });
+    const service = new AiProviderService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      policy as never,
+    );
+
+    await expect(
+      service.discoverModels({
+        kind: AiProviderKind.OPENAI_COMPATIBLE,
+        baseUrl: 'https://api.anthropic.com/v1',
+        apiKey: 'anthropic-secret-key',
+      }),
+    ).resolves.toEqual({ models: ['claude-fable-5', 'claude-sonnet-5'] });
+    const fetchCall = (global.fetch as jest.MockedFunction<typeof global.fetch>)
+      .mock.calls[0];
+    const headers = new Headers(fetchCall?.[1]?.headers);
+    expect(headers.get('x-api-key')).toBe('anthropic-secret-key');
+    expect(headers.get('anthropic-version')).toBe('2023-06-01');
+    expect(headers.get('Authorization')).toBeNull();
+  });
+
+  it('reports an Anthropic 401 as an API key error', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      body: { cancel: jest.fn().mockResolvedValue(undefined) },
+    });
+    const service = new AiProviderService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { assertAllowed: jest.fn().mockResolvedValue(undefined) } as never,
+    );
+
+    await expect(
+      service.testConfiguration({
+        kind: AiProviderKind.OPENAI_COMPATIBLE,
+        baseUrl: 'https://api.anthropic.com/v1',
+        model: 'claude-fable-5',
+        apiKey: 'expired-anthropic-key',
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      message:
+        'API key không hợp lệ, đã hết hạn hoặc không đúng loại (HTTP 401)',
+      latencyMs: null,
+    });
+    const fetchCall = (global.fetch as jest.MockedFunction<typeof global.fetch>)
+      .mock.calls[0];
+    expect(new Headers(fetchCall?.[1]?.headers).get('x-api-key')).toBe(
+      'expired-anthropic-key',
     );
   });
 

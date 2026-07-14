@@ -10,6 +10,7 @@ import { DataSource, MoreThanOrEqual, Repository } from 'typeorm';
 import type {
   AiProvider,
   AiProviderMetrics,
+  AiProviderPricingSuggestion,
   AiProviderTestResult,
   DiscoverAiProviderModelsResponse,
   TestAiProviderConnectionResponse,
@@ -119,6 +120,8 @@ export class AiProviderService {
         isActive: dto.isDefault ? true : (dto.isActive ?? true),
         baseCreditCost: dto.baseCreditCost ?? 1,
         creditCostPer1kTokens: dto.creditCostPer1kTokens ?? 1,
+        inputUsdPer1m: dto.inputUsdPer1m ?? null,
+        outputUsdPer1m: dto.outputUsdPer1m ?? null,
         healthStatus: AiProviderHealthStatus.UNKNOWN,
         lastHealthLatencyMs: null,
         lastHealthCheckedAt: null,
@@ -170,6 +173,10 @@ export class AiProviderService {
         current.baseCreditCost = dto.baseCreditCost;
       if (dto.creditCostPer1kTokens !== undefined)
         current.creditCostPer1kTokens = dto.creditCostPer1kTokens;
+      if (dto.inputUsdPer1m !== undefined)
+        current.inputUsdPer1m = dto.inputUsdPer1m;
+      if (dto.outputUsdPer1m !== undefined)
+        current.outputUsdPer1m = dto.outputUsdPer1m;
       if (connectionChanged) resetHealth(current);
       return manager.save(current);
     });
@@ -283,9 +290,11 @@ export class AiProviderService {
           signal: controller.signal,
           headers: {
             Accept: 'application/json',
-            ...(!isOllama && dto.apiKey?.trim()
-              ? { Authorization: `Bearer ${dto.apiKey.trim()}` }
-              : {}),
+            ...providerAuthenticationHeaders(
+              dto.kind,
+              baseUrl,
+              dto.apiKey?.trim() || null,
+            ),
           },
         },
       );
@@ -330,6 +339,74 @@ export class AiProviderService {
     });
   }
 
+  /**
+   * Lấy đơn giá USD/1M token của model từ provider. Hiện chỉ OpenRouter công
+   * bố giá qua API — provider khác trả null để FE dùng giá preset/nhập tay.
+   */
+  async discoverPricing(
+    dto: TestAiProviderConnectionDto,
+  ): Promise<AiProviderPricingSuggestion> {
+    const baseUrl = normalizeBaseUrl(dto.baseUrl);
+    await this.urlPolicy.assertAllowed(dto.kind, baseUrl);
+    const hostname = new URL(baseUrl).hostname.toLowerCase();
+    if (
+      dto.kind === AiProviderKind.OLLAMA ||
+      (hostname !== 'openrouter.ai' && !hostname.endsWith('.openrouter.ai'))
+    ) {
+      return { inputUsdPer1m: null, outputUsdPer1m: null, source: null };
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    try {
+      const response = await fetch(`${baseUrl}/models`, {
+        method: 'GET',
+        redirect: 'error',
+        signal: controller.signal,
+        headers: {
+          Accept: 'application/json',
+          ...(dto.apiKey?.trim()
+            ? { Authorization: `Bearer ${dto.apiKey.trim()}` }
+            : {}),
+        },
+      });
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new BadGatewayException(
+          `Provider trả HTTP ${response.status} khi tải bảng giá`,
+        );
+      }
+      const pricing = extractOpenRouterPricing(
+        await response.json(),
+        dto.model.trim(),
+      );
+      if (!pricing)
+        throw new BadGatewayException(
+          'Provider không công bố giá cho model đã chọn',
+        );
+      return { ...pricing, source: 'openrouter' };
+    } catch (error) {
+      if (error instanceof BadGatewayException) throw error;
+      if (error instanceof Error && error.name === 'AbortError')
+        throw new BadGatewayException(
+          'Provider không phản hồi khi tải bảng giá',
+        );
+      throw new BadGatewayException('Không thể tải bảng giá từ provider');
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async discoverSavedPricing(id: string): Promise<AiProviderPricingSuggestion> {
+    const row = await this.repository.findOne({ where: { id } });
+    if (!row) throw new NotFoundException('Provider AI không tồn tại');
+    return this.discoverPricing({
+      kind: row.kind,
+      baseUrl: row.baseUrl,
+      model: row.model,
+      apiKey: this.apiKey(row) ?? undefined,
+    });
+  }
+
   apiKey(row: AiProviderEntity): string | null {
     return this.secrets.decrypt(row.encryptedApiKey);
   }
@@ -346,6 +423,8 @@ export class AiProviderService {
       hasApiKey: Boolean(row.encryptedApiKey),
       baseCreditCost: row.baseCreditCost,
       creditCostPer1kTokens: row.creditCostPer1kTokens,
+      inputUsdPer1m: row.inputUsdPer1m ?? null,
+      outputUsdPer1m: row.outputUsdPer1m ?? null,
       healthStatus: row.healthStatus ?? AiProviderHealthStatus.UNKNOWN,
       lastHealthLatencyMs: row.lastHealthLatencyMs ?? null,
       lastHealthCheckedAt: row.lastHealthCheckedAt?.toISOString() ?? null,
@@ -377,9 +456,11 @@ export class AiProviderService {
           headers: {
             Accept: 'application/json',
             ...(isOllama ? { 'Content-Type': 'application/json' } : {}),
-            ...(!isOllama && configuration.apiKey
-              ? { Authorization: `Bearer ${configuration.apiKey}` }
-              : {}),
+            ...providerAuthenticationHeaders(
+              configuration.kind,
+              configuration.baseUrl,
+              configuration.apiKey,
+            ),
           },
           body: isOllama
             ? JSON.stringify({ model: configuration.model })
@@ -448,6 +529,8 @@ function providerErrorMessage(error: unknown): string {
   if (error instanceof Error && error.name === 'AbortError')
     return 'Provider không phản hồi trong 15 giây';
   if (error instanceof BadRequestException) return error.message;
+  if (error instanceof Error && error.message === 'Provider trả HTTP 401')
+    return 'API key không hợp lệ, đã hết hạn hoặc không đúng loại (HTTP 401)';
   if (error instanceof Error && /^Provider trả HTTP \d{3}$/.test(error.message))
     return error.message;
   if (
@@ -456,6 +539,22 @@ function providerErrorMessage(error: unknown): string {
   )
     return error.message;
   return 'Không thể kết nối tới provider hoặc model đã cấu hình';
+}
+
+function providerAuthenticationHeaders(
+  kind: AiProviderKind,
+  baseUrl: string,
+  apiKey: string | null,
+): Record<string, string> {
+  if (kind === AiProviderKind.OLLAMA || !apiKey) return {};
+  const hostname = new URL(baseUrl).hostname.toLowerCase();
+  if (hostname === 'api.anthropic.com') {
+    return {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    };
+  }
+  return { Authorization: `Bearer ${apiKey}` };
 }
 
 export function extractProviderModels(
@@ -480,6 +579,45 @@ export function extractProviderModels(
   return [...new Set(values)]
     .sort((left, right) => left.localeCompare(right))
     .slice(0, 500);
+}
+
+/**
+ * OpenRouter trả pricing.prompt/completion là USD trên MỖI token (dạng
+ * string) — nhân 1 triệu để về đơn giá USD/1M token dùng trong hệ thống.
+ */
+export function extractOpenRouterPricing(
+  payload: unknown,
+  model: string,
+): { inputUsdPer1m: number; outputUsdPer1m: number } | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const data = (payload as { data?: unknown }).data;
+  if (!Array.isArray(data)) return null;
+  const match = data.find(
+    (item): item is { id: string; pricing?: unknown } =>
+      Boolean(item) &&
+      typeof item === 'object' &&
+      (item as { id?: unknown }).id === model,
+  );
+  const pricing = match?.pricing as
+    { prompt?: unknown; completion?: unknown } | undefined;
+  const input = Number(pricing?.prompt);
+  const output = Number(pricing?.completion);
+  if (
+    !Number.isFinite(input) ||
+    !Number.isFinite(output) ||
+    input < 0 ||
+    output < 0
+  )
+    return null;
+  return {
+    inputUsdPer1m: roundUsdPer1m(input * 1_000_000),
+    outputUsdPer1m: roundUsdPer1m(output * 1_000_000),
+  };
+}
+
+/** numeric(12,6) trong DB — làm tròn 6 chữ số thập phân, tránh rác float. */
+function roundUsdPer1m(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
 }
 
 function normalizeBaseUrl(value: string): string {

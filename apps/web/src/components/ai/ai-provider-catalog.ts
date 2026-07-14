@@ -2,6 +2,7 @@ import type { AiProviderKind } from "@zunibee/shared";
 
 export type AiProviderPresetId =
   | "openai"
+  | "anthropic"
   | "google_gemini"
   | "deepseek"
   | "groq"
@@ -12,6 +13,12 @@ export type AiProviderPresetId =
 /** Đánh giá tương đối giữa các model trong cùng một provider. */
 export type AiModelStrength = "strong" | "medium" | "weak";
 
+/** Đơn giá USD trên 1 triệu token, tách chiều input/output. */
+export type AiModelReferencePricing = {
+  inputUsdPer1m: number;
+  outputUsdPer1m: number;
+};
+
 export type AiProviderPreset = {
   id: AiProviderPresetId;
   label: string;
@@ -20,6 +27,11 @@ export type AiProviderPreset = {
   suggestedModels: string[];
   /** Note sức mạnh hiển thị cạnh model; model discover động sẽ không có note. */
   modelStrengths?: Record<string, AiModelStrength>;
+  /**
+   * Giá tham khảo theo bảng giá công bố của provider (07/2026) — chỉ để
+   * prefill, admin cần đối chiếu lại. OpenRouter không cần vì lấy giá qua API.
+   */
+  referencePricing?: Record<string, AiModelReferencePricing>;
   apiKeyRequired: boolean;
 };
 
@@ -50,6 +62,15 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
       "gemini-2.5-flash": "medium",
       "gemini-2.5-flash-lite": "weak",
     },
+    referencePricing: {
+      "gemini-3.5-flash": { inputUsdPer1m: 1.5, outputUsdPer1m: 9 },
+      "gemini-3.1-pro-preview": { inputUsdPer1m: 2, outputUsdPer1m: 12 },
+      "gemini-3-flash-preview": { inputUsdPer1m: 0.5, outputUsdPer1m: 3 },
+      "gemini-3.1-flash-lite": { inputUsdPer1m: 0.25, outputUsdPer1m: 1.5 },
+      "gemini-2.5-pro": { inputUsdPer1m: 1.25, outputUsdPer1m: 10 },
+      "gemini-2.5-flash": { inputUsdPer1m: 0.3, outputUsdPer1m: 2.5 },
+      "gemini-2.5-flash-lite": { inputUsdPer1m: 0.1, outputUsdPer1m: 0.4 },
+    },
     apiKeyRequired: true,
   },
   {
@@ -75,6 +96,42 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
       "gpt-5.4": "strong",
       "gpt-5.4-nano": "weak",
     },
+    referencePricing: {
+      "gpt-5.4-mini": { inputUsdPer1m: 0.75, outputUsdPer1m: 4.5 },
+      "gpt-5.6-sol": { inputUsdPer1m: 5, outputUsdPer1m: 30 },
+      "gpt-5.6-terra": { inputUsdPer1m: 2.5, outputUsdPer1m: 15 },
+      "gpt-5.6-luna": { inputUsdPer1m: 1, outputUsdPer1m: 6 },
+      "gpt-5.5": { inputUsdPer1m: 5, outputUsdPer1m: 30 },
+      "gpt-5.4": { inputUsdPer1m: 2.5, outputUsdPer1m: 15 },
+      "gpt-5.4-nano": { inputUsdPer1m: 0.2, outputUsdPer1m: 1.25 },
+    },
+    apiKeyRequired: true,
+  },
+  {
+    id: "anthropic",
+    label: "Anthropic Claude",
+    kind: "openai_compatible",
+    // Backend nhận diện host này và gọi Messages API native của Anthropic.
+    baseUrl: "https://api.anthropic.com/v1",
+    suggestedModels: [
+      "claude-sonnet-5",
+      "claude-haiku-4-5-20251001",
+      "claude-opus-4-8",
+      "claude-fable-5",
+    ],
+    modelStrengths: {
+      "claude-sonnet-5": "strong",
+      "claude-haiku-4-5-20251001": "medium",
+      "claude-opus-4-8": "strong",
+      "claude-fable-5": "strong",
+    },
+    referencePricing: {
+      // Sonnet 5 đang có giá ưu đãi 2/10 tới 31/08/2026 — điền giá chuẩn.
+      "claude-sonnet-5": { inputUsdPer1m: 3, outputUsdPer1m: 15 },
+      "claude-haiku-4-5-20251001": { inputUsdPer1m: 1, outputUsdPer1m: 5 },
+      "claude-opus-4-8": { inputUsdPer1m: 5, outputUsdPer1m: 25 },
+      "claude-fable-5": { inputUsdPer1m: 10, outputUsdPer1m: 50 },
+    },
     apiKeyRequired: true,
   },
   {
@@ -87,6 +144,10 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
       "deepseek-v4-flash": "medium",
       "deepseek-v4-pro": "strong",
     },
+    referencePricing: {
+      "deepseek-v4-flash": { inputUsdPer1m: 0.14, outputUsdPer1m: 0.28 },
+      "deepseek-v4-pro": { inputUsdPer1m: 0.435, outputUsdPer1m: 0.87 },
+    },
     apiKeyRequired: true,
   },
   {
@@ -97,16 +158,17 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
     suggestedModels: [
       "openai/gpt-oss-120b",
       "qwen/qwen3.6-27b",
-      "qwen/qwen3-32b",
       "openai/gpt-oss-20b",
-      "meta-llama/llama-4-scout-17b-16e-instruct",
     ],
     modelStrengths: {
       "openai/gpt-oss-120b": "strong",
       "qwen/qwen3.6-27b": "strong",
-      "qwen/qwen3-32b": "medium",
       "openai/gpt-oss-20b": "medium",
-      "meta-llama/llama-4-scout-17b-16e-instruct": "weak",
+    },
+    referencePricing: {
+      "openai/gpt-oss-120b": { inputUsdPer1m: 0.15, outputUsdPer1m: 0.6 },
+      "qwen/qwen3.6-27b": { inputUsdPer1m: 0.6, outputUsdPer1m: 3 },
+      "openai/gpt-oss-20b": { inputUsdPer1m: 0.075, outputUsdPer1m: 0.3 },
     },
     apiKeyRequired: true,
   },
@@ -160,6 +222,13 @@ export function modelStrength(
   model: string,
 ): AiModelStrength | null {
   return preset.modelStrengths?.[model] ?? null;
+}
+
+export function referencePricing(
+  preset: AiProviderPreset,
+  model: string,
+): AiModelReferencePricing | null {
+  return preset.referencePricing?.[model] ?? null;
 }
 
 export function inferProviderPreset(

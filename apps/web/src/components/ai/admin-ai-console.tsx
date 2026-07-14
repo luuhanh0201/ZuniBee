@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Activity,
+  Asterisk,
+  BarChart3,
   BatteryFull,
   BatteryLow,
   BatteryMedium,
@@ -50,7 +52,9 @@ import {
   adminCreateAiProvider,
   adminDeleteAiProvider,
   adminDiscoverAiProviderModels,
+  adminDiscoverAiProviderPricing,
   adminDiscoverSavedAiProviderModels,
+  adminDiscoverSavedAiProviderPricing,
   adminGetAiProviderMetrics,
   adminListAiProviders,
   adminTestAiProvider,
@@ -62,10 +66,13 @@ import {
   inferProviderPreset,
   modelStrength,
   providerPreset,
+  referencePricing,
   type AiModelStrength,
   type AiProviderPresetId,
 } from "./ai-provider-catalog";
 import { SelectMenu } from "@/components/ui/select-menu";
+import { MetricCard, formatNumber } from "./metric-card";
+import { AdminAiUsageSection } from "./admin-ai-usage-section";
 
 function strengthIcon(strength: AiModelStrength | null): React.ReactNode {
   if (strength === "strong")
@@ -101,6 +108,7 @@ const STRENGTH_TITLES: Record<AiModelStrength, string> = {
 const PRESET_ICONS: Record<AiProviderPresetId, React.ReactNode> = {
   google_gemini: <Sparkles className="h-4 w-4 shrink-0" aria-hidden="true" />,
   openai: <Bot className="h-4 w-4 shrink-0" aria-hidden="true" />,
+  anthropic: <Asterisk className="h-4 w-4 shrink-0" aria-hidden="true" />,
   deepseek: <Brain className="h-4 w-4 shrink-0" aria-hidden="true" />,
   groq: <Zap className="h-4 w-4 shrink-0" aria-hidden="true" />,
   openrouter: <Route className="h-4 w-4 shrink-0" aria-hidden="true" />,
@@ -117,7 +125,29 @@ type ProviderDraft = {
   apiKey: string;
   baseCreditCost: number;
   creditCostPer1kTokens: number;
+  // Giữ dạng string để input trống được (trống = chưa cấu hình giá).
+  inputUsdPer1m: string;
+  outputUsdPer1m: string;
 };
+
+/** Giá tham khảo từ catalog cho cặp preset+model, dạng string cho input. */
+function pricingDraftFor(
+  presetId: AiProviderPresetId,
+  model: string,
+): { inputUsdPer1m: string; outputUsdPer1m: string } {
+  const pricing = referencePricing(providerPreset(presetId), model);
+  return {
+    inputUsdPer1m: pricing ? String(pricing.inputUsdPer1m) : "",
+    outputUsdPer1m: pricing ? String(pricing.outputUsdPer1m) : "",
+  };
+}
+
+function parseUsdPrice(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
 
 type Notice = { tone: "success" | "error"; message: string };
 type DraftConnectionTest = {
@@ -136,6 +166,7 @@ const EMPTY_DRAFT: ProviderDraft = {
   apiKey: "",
   baseCreditCost: 1,
   creditCostPer1kTokens: 1,
+  ...pricingDraftFor("google_gemini", "gemini-3.5-flash"),
 };
 
 const buttonFocus =
@@ -167,7 +198,11 @@ export function AdminAiConsole() {
     providerPreset(EMPTY_DRAFT.presetId).suggestedModels,
   );
   const [isDiscoveringModels, setIsDiscoveringModels] = useState(false);
+  const [isDiscoveringPricing, setIsDiscoveringPricing] = useState(false);
   const [isTestingDraft, setIsTestingDraft] = useState(false);
+  const [activeSection, setActiveSection] = useState<"providers" | "usage">(
+    "providers",
+  );
   const [draftConnectionTest, setDraftConnectionTest] =
     useState<DraftConnectionTest | null>(null);
 
@@ -248,6 +283,10 @@ export function AdminAiConsole() {
       apiKey: "",
       baseCreditCost: provider.baseCreditCost,
       creditCostPer1kTokens: provider.creditCostPer1kTokens,
+      inputUsdPer1m:
+        provider.inputUsdPer1m === null ? "" : String(provider.inputUsdPer1m),
+      outputUsdPer1m:
+        provider.outputUsdPer1m === null ? "" : String(provider.outputUsdPer1m),
     });
     setModelOptions(
       suggested.includes(provider.model)
@@ -281,6 +320,7 @@ export function AdminAiConsole() {
       baseUrl: preset.baseUrl,
       model: preset.suggestedModels[0] ?? "",
       apiKey: "",
+      ...pricingDraftFor(presetId, preset.suggestedModels[0] ?? ""),
     }));
   }
 
@@ -323,6 +363,80 @@ export function AdminAiConsole() {
       setNotice({ tone: "error", message: getErrorMessage(cause) });
     } finally {
       setIsDiscoveringModels(false);
+    }
+  }
+
+  async function discoverPricing() {
+    if (!accessToken || isDiscoveringPricing) return;
+    // Chỉ OpenRouter công bố giá qua API — provider khác dùng giá tham khảo.
+    if (draft.presetId !== "openrouter") {
+      const pricing = referencePricing(
+        providerPreset(draft.presetId),
+        draft.model,
+      );
+      if (!pricing) {
+        setNotice({
+          tone: "error",
+          message:
+            "Không có giá tham khảo cho model này, vui lòng nhập giá thủ công.",
+        });
+        return;
+      }
+      setDraft((current) => ({
+        ...current,
+        inputUsdPer1m: String(pricing.inputUsdPer1m),
+        outputUsdPer1m: String(pricing.outputUsdPer1m),
+      }));
+      setNotice({
+        tone: "success",
+        message:
+          "Đã điền giá tham khảo — hãy đối chiếu với bảng giá mới nhất của provider.",
+      });
+      return;
+    }
+    setIsDiscoveringPricing(true);
+    try {
+      const saved = editingId
+        ? providers.find((provider) => provider.id === editingId)
+        : undefined;
+      const canUseSavedConfiguration =
+        saved &&
+        !draft.apiKey &&
+        saved.kind === draft.kind &&
+        saved.model === draft.model.trim() &&
+        saved.baseUrl.replace(/\/+$/, "") === draft.baseUrl.replace(/\/+$/, "");
+      const result =
+        canUseSavedConfiguration && editingId
+          ? await adminDiscoverSavedAiProviderPricing(editingId, accessToken)
+          : await adminDiscoverAiProviderPricing(
+              {
+                kind: draft.kind,
+                baseUrl: draft.baseUrl.trim(),
+                model: draft.model.trim(),
+                ...(draft.apiKey ? { apiKey: draft.apiKey } : {}),
+              },
+              accessToken,
+            );
+      if (result.inputUsdPer1m === null || result.outputUsdPer1m === null) {
+        setNotice({
+          tone: "error",
+          message: "Provider không công bố giá cho model này.",
+        });
+      } else {
+        setDraft((current) => ({
+          ...current,
+          inputUsdPer1m: String(result.inputUsdPer1m),
+          outputUsdPer1m: String(result.outputUsdPer1m),
+        }));
+        setNotice({
+          tone: "success",
+          message: "Đã lấy giá model trực tiếp từ OpenRouter.",
+        });
+      }
+    } catch (cause) {
+      setNotice({ tone: "error", message: getErrorMessage(cause) });
+    } finally {
+      setIsDiscoveringPricing(false);
     }
   }
 
@@ -372,6 +486,8 @@ export function AdminAiConsole() {
       model: draft.model.trim(),
       baseCreditCost: draft.baseCreditCost,
       creditCostPer1kTokens: draft.creditCostPer1kTokens,
+      inputUsdPer1m: parseUsdPrice(draft.inputUsdPer1m),
+      outputUsdPer1m: parseUsdPrice(draft.outputUsdPer1m),
       ...(draft.apiKey ? { apiKey: draft.apiKey } : {}),
     };
     try {
@@ -503,6 +619,11 @@ export function AdminAiConsole() {
         onClose={() => setMobileNavOpen(false)}
         user={user!}
         onLogout={() => void logout()}
+        activeSection={activeSection}
+        onSelectSection={(section) => {
+          setActiveSection(section);
+          setMobileNavOpen(false);
+        }}
       />
 
       <div className="min-w-0">
@@ -521,7 +642,7 @@ export function AdminAiConsole() {
                 Quản trị hệ thống
               </p>
               <h1 className="font-display text-xl font-extrabold sm:text-2xl">
-                AI Providers
+                {activeSection === "usage" ? "Thống kê AI" : "AI Providers"}
               </h1>
             </div>
           </div>
@@ -541,6 +662,11 @@ export function AdminAiConsole() {
         </header>
 
         <main className="mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-8 lg:py-9">
+          {activeSection === "usage" ? (
+            <AdminAiUsageSection accessToken={accessToken} />
+          ) : null}
+          {activeSection === "providers" ? (
+          <>
           <section className="relative overflow-hidden rounded-3xl border-[3px] border-foreground bg-purple px-5 py-7 text-white shadow-brutal-xl sm:px-8">
             <div
               aria-hidden="true"
@@ -730,6 +856,8 @@ export function AdminAiConsole() {
               ) : null}
             </div>
           </section>
+          </>
+          ) : null}
         </main>
       </div>
 
@@ -743,8 +871,10 @@ export function AdminAiConsole() {
           saving={isSaving}
           modelOptions={modelOptions}
           discoveringModels={isDiscoveringModels}
+          discoveringPricing={isDiscoveringPricing}
           onPresetChange={selectProviderPreset}
           onDiscoverModels={() => void discoverModels()}
+          onDiscoverPricing={() => void discoverPricing()}
           testingDraft={isTestingDraft}
           connectionTest={draftConnectionTest}
           onTestDraft={() => void testDraftConfiguration()}
@@ -770,19 +900,28 @@ function AdminSidebar({
   onClose,
   user,
   onLogout,
+  activeSection,
+  onSelectSection,
 }: {
   mobileOpen: boolean;
   onClose: () => void;
   user: AuthUser;
   onLogout: () => void;
+  activeSection: "providers" | "usage";
+  onSelectSection: (section: "providers" | "usage") => void;
 }) {
-  const items = [
-    { icon: LayoutDashboard, label: "Tổng quan", active: false },
-    { icon: CloudCog, label: "AI Providers", active: true },
-    { icon: CircleDollarSign, label: "AI Credit", active: false },
-    { icon: Users, label: "Người dùng", active: false },
-    { icon: ShieldCheck, label: "Phân quyền", active: false },
-    { icon: Settings2, label: "Cài đặt", active: false },
+  const items: {
+    icon: typeof Cpu;
+    label: string;
+    section?: "providers" | "usage";
+  }[] = [
+    { icon: LayoutDashboard, label: "Tổng quan" },
+    { icon: CloudCog, label: "AI Providers", section: "providers" },
+    { icon: BarChart3, label: "Thống kê AI", section: "usage" },
+    { icon: CircleDollarSign, label: "AI Credit" },
+    { icon: Users, label: "Người dùng" },
+    { icon: ShieldCheck, label: "Phân quyền" },
+    { icon: Settings2, label: "Cài đặt" },
   ];
   return (
     <>
@@ -825,18 +964,22 @@ function AdminSidebar({
           <p className="px-3 pb-2 pt-3 text-xs font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
             Workspace
           </p>
-          {items.map(({ icon: Icon, label, active }) => (
-            <button
-              key={label}
-              type="button"
-              aria-current={active ? "page" : undefined}
-              disabled={!active}
-              className={`flex min-h-11 w-full items-center gap-3 rounded-xl border-2 px-3 text-left font-bold transition-colors duration-200 ${active ? "cursor-pointer border-foreground bg-primary shadow-brutal-sm" : "cursor-not-allowed border-transparent text-muted-foreground"} ${buttonFocus}`}
-            >
-              <Icon className="h-5 w-5" aria-hidden="true" />
-              {label}
-            </button>
-          ))}
+          {items.map(({ icon: Icon, label, section }) => {
+            const active = section === activeSection;
+            return (
+              <button
+                key={label}
+                type="button"
+                aria-current={active ? "page" : undefined}
+                disabled={!section}
+                onClick={section ? () => onSelectSection(section) : undefined}
+                className={`flex min-h-11 w-full items-center gap-3 rounded-xl border-2 px-3 text-left font-bold transition-colors duration-200 ${active ? "cursor-pointer border-foreground bg-primary shadow-brutal-sm" : section ? "cursor-pointer border-transparent hover:bg-surface-soft" : "cursor-not-allowed border-transparent text-muted-foreground"} ${buttonFocus}`}
+              >
+                <Icon className="h-5 w-5" aria-hidden="true" />
+                {label}
+              </button>
+            );
+          })}
         </nav>
         <div className="border-t-2 border-foreground p-4">
           <div className="rounded-2xl border-2 border-foreground bg-secondary-soft p-4 shadow-brutal-sm">
@@ -863,41 +1006,6 @@ function AdminSidebar({
         </div>
       </aside>
     </>
-  );
-}
-
-function MetricCard({
-  icon: Icon,
-  label,
-  value,
-  helper,
-  color,
-}: {
-  icon: typeof Cpu;
-  label: string;
-  value: string;
-  helper: string;
-  color: string;
-}) {
-  return (
-    <article className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-md">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="font-bold text-muted-foreground">{label}</p>
-          <p className="mt-2 font-display text-3xl font-extrabold tabular-nums">
-            {value}
-          </p>
-        </div>
-        <span
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 border-foreground shadow-brutal-sm ${color}`}
-        >
-          <Icon className="h-5 w-5" aria-hidden="true" />
-        </span>
-      </div>
-      <p className="mt-2 text-sm font-semibold text-muted-foreground">
-        {helper}
-      </p>
-    </article>
   );
 }
 
@@ -1083,8 +1191,10 @@ function ProviderEditor({
   saving,
   modelOptions,
   discoveringModels,
+  discoveringPricing,
   onPresetChange,
   onDiscoverModels,
+  onDiscoverPricing,
   hasUsableStoredKey,
   testingDraft,
   connectionTest,
@@ -1098,8 +1208,10 @@ function ProviderEditor({
   saving: boolean;
   modelOptions: string[];
   discoveringModels: boolean;
+  discoveringPricing: boolean;
   onPresetChange: (presetId: AiProviderPresetId) => void;
   onDiscoverModels: () => void;
+  onDiscoverPricing: () => void;
   hasUsableStoredKey: boolean;
   testingDraft: boolean;
   connectionTest: DraftConnectionTest | null;
@@ -1192,6 +1304,11 @@ function ProviderEditor({
                 onChange({
                   ...draft,
                   model: model === "__custom" ? "" : model,
+                  // Đổi model thì đơn giá cũng đổi — prefill giá tham khảo nếu có.
+                  ...(model !== "__custom" &&
+                  referencePricing(selectedPreset, model)
+                    ? pricingDraftFor(draft.presetId, model)
+                    : {}),
                 })
               }
               options={[
@@ -1357,6 +1474,51 @@ function ProviderEditor({
               className="min-h-12 w-full rounded-xl border-2 border-foreground bg-surface px-3 font-semibold outline-none focus:ring-2 focus:ring-ring"
             />
           </EditorField>
+          <EditorField label="Giá input (USD / 1M token)">
+            <input
+              type="number"
+              min={0}
+              step="any"
+              value={draft.inputUsdPer1m}
+              placeholder="Bỏ trống nếu chưa rõ giá"
+              onChange={(event) =>
+                onChange({ ...draft, inputUsdPer1m: event.target.value })
+              }
+              className="min-h-12 w-full rounded-xl border-2 border-foreground bg-surface px-3 font-semibold outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+            />
+          </EditorField>
+          <EditorField label="Giá output (USD / 1M token)">
+            <input
+              type="number"
+              min={0}
+              step="any"
+              value={draft.outputUsdPer1m}
+              placeholder="Bỏ trống nếu chưa rõ giá"
+              onChange={(event) =>
+                onChange({ ...draft, outputUsdPer1m: event.target.value })
+              }
+              className="min-h-12 w-full rounded-xl border-2 border-foreground bg-surface px-3 font-semibold outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+            />
+          </EditorField>
+          <div className="sm:col-span-2">
+            <button
+              type="button"
+              onClick={onDiscoverPricing}
+              disabled={discoveringPricing || !draft.model.trim()}
+              className={`inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-secondary-soft px-4 font-extrabold transition-colors hover:bg-primary disabled:cursor-not-allowed disabled:opacity-50 ${buttonFocus}`}
+            >
+              <CircleDollarSign
+                className={`h-4 w-4 ${discoveringPricing ? "animate-pulse" : ""}`}
+                aria-hidden="true"
+              />
+              {discoveringPricing ? "Đang lấy giá..." : "Lấy giá tự động"}
+            </button>
+            <p className="mt-2 text-sm font-semibold text-muted-foreground">
+              {draft.presetId === "openrouter"
+                ? "Lấy giá model trực tiếp từ API OpenRouter."
+                : "Điền giá tham khảo theo bảng giá công bố — hãy đối chiếu lại trước khi lưu. Dùng để quy đổi token thành chi phí USD trong Thống kê AI."}
+            </p>
+          </div>
 
           <div className="flex flex-col-reverse gap-3 border-t-2 border-divider pt-5 sm:col-span-2 sm:flex-row sm:justify-end">
             <button
@@ -1452,13 +1614,6 @@ function getSystemStatus(
     containerClass: "bg-warning-soft",
     dotClass: "bg-warning",
   };
-}
-
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat("vi-VN", {
-    notation: value >= 10_000 ? "compact" : "standard",
-    maximumFractionDigits: 1,
-  }).format(value);
 }
 
 function formatDateTime(value: string): string {

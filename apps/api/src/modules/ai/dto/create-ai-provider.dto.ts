@@ -2,6 +2,7 @@ import {
   IsBoolean,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUrl,
@@ -36,4 +37,15 @@ export class CreateAiProviderDto implements CreateAiProviderRequest {
   @IsOptional() @IsBoolean() isDefault?: boolean;
   @IsOptional() @IsInt() @Min(0) @Max(100000) baseCreditCost?: number;
   @IsOptional() @IsInt() @Min(0) @Max(100000) creditCostPer1kTokens?: number;
+  // Đơn giá USD / 1 triệu token; gửi null để xoá giá (IsOptional bỏ qua null).
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @Min(0)
+  @Max(1_000_000)
+  inputUsdPer1m?: number | null;
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @Min(0)
+  @Max(1_000_000)
+  outputUsdPer1m?: number | null;
 }

@@ -5,6 +5,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { numericTransformer } from '@/modules/ai/entities/ai-usage-event.entity';
 
 export enum AiProviderKind {
   OLLAMA = 'ollama',
@@ -37,6 +38,25 @@ export class AiProviderEntity {
   baseCreditCost!: number;
   @Column({ name: 'credit_cost_per_1k_tokens', type: 'integer', default: 1 })
   creditCostPer1kTokens!: number;
+  // Đơn giá USD trên 1 triệu token — NULL khi admin chưa cấu hình giá.
+  @Column({
+    name: 'input_usd_per_1m',
+    type: 'numeric',
+    precision: 12,
+    scale: 6,
+    nullable: true,
+    transformer: numericTransformer,
+  })
+  inputUsdPer1m!: number | null;
+  @Column({
+    name: 'output_usd_per_1m',
+    type: 'numeric',
+    precision: 12,
+    scale: 6,
+    nullable: true,
+    transformer: numericTransformer,
+  })
+  outputUsdPer1m!: number | null;
   @Column({
     name: 'health_status',
     type: 'varchar',

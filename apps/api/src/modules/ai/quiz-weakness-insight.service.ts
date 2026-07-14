@@ -125,6 +125,8 @@ export class QuizWeaknessInsightService {
         provider,
         'Bạn là chuyên gia phân tích đánh giá giáo dục. Chỉ trả JSON gồm summary (string), strengths, weaknesses, recommendations (mỗi field là string[]). Không nêu tên cá nhân, không suy đoán ngoài dữ liệu.',
         `Quiz: ${quiz.title}. Có ${submitted} lượt nộp. Thống kê theo câu (answered/correct):\n${JSON.stringify(stats)}`,
+        { source: 'quiz_insight', referenceId: insight.id, userId: teacherId },
+        insightOutputSchema(),
       );
       const result = validateInsight(completion.value);
       const charged = calculateCharge(
@@ -189,6 +191,25 @@ export class QuizWeaknessInsightService {
     };
   }
 }
+
+function insightOutputSchema(): Record<string, unknown> {
+  const stringList = {
+    type: 'array',
+    items: { type: 'string' },
+  };
+  return {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      summary: { type: 'string' },
+      strengths: stringList,
+      weaknesses: stringList,
+      recommendations: stringList,
+    },
+    required: ['summary', 'strengths', 'weaknesses', 'recommendations'],
+  };
+}
+
 export function validateInsight(
   value: unknown,
 ): Pick<

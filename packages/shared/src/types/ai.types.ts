@@ -13,6 +13,8 @@ export type AiProvider = {
   hasApiKey: boolean;
   baseCreditCost: number;
   creditCostPer1kTokens: number;
+  inputUsdPer1m: number | null;
+  outputUsdPer1m: number | null;
   healthStatus: AiProviderHealthStatus;
   lastHealthLatencyMs: number | null;
   lastHealthCheckedAt: string | null;
@@ -31,6 +33,8 @@ export type CreateAiProviderRequest = {
   isDefault?: boolean;
   baseCreditCost?: number;
   creditCostPer1kTokens?: number;
+  inputUsdPer1m?: number | null;
+  outputUsdPer1m?: number | null;
 };
 export type UpdateAiProviderRequest = Partial<CreateAiProviderRequest>;
 export type AiProviderMetrics = {
@@ -39,6 +43,35 @@ export type AiProviderMetrics = {
   onlineProviders: number;
   requestsThisMonth: number;
   averageLatencyMs: number | null;
+};
+export type AiUsageSource = "quiz_generation" | "quiz_insight";
+export type AiUsageStatRow = {
+  providerId: string;
+  providerName: string;
+  model: string;
+  requests: number;
+  inputTokens: number;
+  outputTokens: number;
+  /** null khi mọi event trong nhóm đều thiếu giá tại thời điểm gọi. */
+  costUsd: number | null;
+  unpricedRequests: number;
+};
+export type AiUsageStats = {
+  from: string;
+  to: string;
+  totals: {
+    requests: number;
+    inputTokens: number;
+    outputTokens: number;
+    costUsd: number;
+    unpricedRequests: number;
+  };
+  rows: AiUsageStatRow[];
+};
+export type AiProviderPricingSuggestion = {
+  inputUsdPer1m: number | null;
+  outputUsdPer1m: number | null;
+  source: "openrouter" | null;
 };
 export type AiProviderTestResult = {
   ok: boolean;

@@ -9,11 +9,13 @@ import { AiProviderEntity } from './entities/ai-provider.entity';
 import { AiCreditAccountEntity } from './entities/ai-credit-account.entity';
 import { AiCreditLedgerEntity } from './entities/ai-credit-ledger.entity';
 import { AiGenerationJobEntity } from './entities/ai-generation-job.entity';
+import { AiUsageEventEntity } from './entities/ai-usage-event.entity';
 import { QuizWeaknessInsightEntity } from './entities/quiz-weakness-insight.entity';
 import { AiSecretService } from './ai-secret.service';
 import { AiProviderService } from './ai-provider.service';
 import { AiCreditService } from './ai-credit.service';
 import { AiModelClientService } from './ai-model-client.service';
+import { AiUsageService } from './ai-usage.service';
 import { AiMaterialSourceService } from './ai-material-source.service';
 import { AiQuizGenerationService } from './ai-quiz-generation.service';
 import { AiController } from './ai.controller';
@@ -29,6 +31,7 @@ import { AiProviderUrlPolicyService } from './ai-provider-url-policy.service';
       AiCreditAccountEntity,
       AiCreditLedgerEntity,
       AiGenerationJobEntity,
+      AiUsageEventEntity,
       QuizWeaknessInsightEntity,
       User,
       Quiz,
@@ -43,6 +46,7 @@ import { AiProviderUrlPolicyService } from './ai-provider-url-policy.service';
     AiProviderService,
     AiCreditService,
     AiModelClientService,
+    AiUsageService,
     AiProviderUrlPolicyService,
     AiMaterialSourceService,
     AiQuizGenerationService,
