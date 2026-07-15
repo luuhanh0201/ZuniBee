@@ -25,14 +25,11 @@ describe('AiMaterialSourceService', () => {
   }
 
   it('extracts normalized text from a direct upload', async () => {
-    await expect(
-      service.extract(
-        file(
-          'Đây là nội dung tài liệu đủ dài để hệ thống tạo câu hỏi.  Nội dung có nhiều khoảng trắng.',
-        ),
-      ),
-    ).resolves.toMatchObject({
-      text: 'Đây là nội dung tài liệu đủ dài để hệ thống tạo câu hỏi. Nội dung có nhiều khoảng trắng.',
+    const source = `${'Đây là nội dung tài liệu đủ dài để hệ thống tạo câu hỏi. '.repeat(12)} Nội dung có nhiều khoảng trắng.`;
+    await expect(service.extract(file(source))).resolves.toMatchObject({
+      pages: [
+        expect.objectContaining({ pageNumber: 1, method: 'direct_text' }),
+      ],
       aiVisionPages: 0,
       visionInputTokens: 0,
       visionOutputTokens: 0,
@@ -57,7 +54,7 @@ describe('AiMaterialSourceService', () => {
     const header =
       'level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext';
     const rows = Array.from(
-      { length: 12 },
+      { length: 50 },
       (_, index) =>
         `5\t1\t1\t1\t1\t${index + 1}\t0\t0\t10\t10\t90\tNội_dung_${index + 1}`,
     );

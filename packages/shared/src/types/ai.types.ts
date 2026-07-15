@@ -1,4 +1,4 @@
-import type { QuizDetail, QuizQuestionType } from "./quiz.types";
+import type { QuizQuestionType } from "./quiz.types";
 
 export type AiProviderKind = "ollama" | "openai_compatible";
 export type AiProviderHealthStatus = "unknown" | "online" | "offline";
@@ -267,6 +267,11 @@ export type AiGenerationStatus = "pending" | "running" | "succeeded" | "failed";
 export type AiGenerationStage =
   | "queued"
   | "reading_document"
+  | "analyzing_document"
+  | "planning_quiz"
+  | "generating_candidates"
+  | "selecting_questions"
+  | "reviewing_questions"
   | "generating_quiz"
   | "saving_quiz"
   | "completed"
@@ -288,6 +293,9 @@ export type AiGenerationJob = {
   stage: AiGenerationStage;
   documentTotalPages: number | null;
   documentProcessedPages: number;
+  generationTotalChunks: number | null;
+  generationProcessedChunks: number;
+  attemptCount: number;
   providerId: string;
   providerName: string;
   quizId: string | null;
@@ -301,7 +309,6 @@ export type AiGenerationJob = {
 };
 export type GenerateQuizWithAiResponse = {
   job: AiGenerationJob;
-  quiz: QuizDetail;
   credit: AiCreditAccount;
 };
 

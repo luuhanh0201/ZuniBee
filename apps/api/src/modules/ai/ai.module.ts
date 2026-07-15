@@ -10,6 +10,8 @@ import { AiProviderEntity } from './entities/ai-provider.entity';
 import { AiCreditAccountEntity } from './entities/ai-credit-account.entity';
 import { AiCreditLedgerEntity } from './entities/ai-credit-ledger.entity';
 import { AiGenerationJobEntity } from './entities/ai-generation-job.entity';
+import { AiGenerationDocumentPageEntity } from './entities/ai-generation-document-page.entity';
+import { AiGenerationChunkEntity } from './entities/ai-generation-chunk.entity';
 import { AiUsageEventEntity } from './entities/ai-usage-event.entity';
 import { AiUsageBudgetEntity } from './entities/ai-usage-budget.entity';
 import { QuizWeaknessInsightEntity } from './entities/quiz-weakness-insight.entity';
@@ -25,6 +27,11 @@ import { AdminAiController } from './admin-ai.controller';
 import { QuizWeaknessInsightService } from './quiz-weakness-insight.service';
 import { QuizInsightController } from './quiz-insight.controller';
 import { AiProviderUrlPolicyService } from './ai-provider-url-policy.service';
+import { AiGenerationSourceStorageService } from './ai-generation-source-storage.service';
+import {
+  AI_GENERATION_PROCESSOR,
+  AiGenerationQueueService,
+} from './ai-generation-queue.service';
 
 @Module({
   imports: [
@@ -33,6 +40,8 @@ import { AiProviderUrlPolicyService } from './ai-provider-url-policy.service';
       AiCreditAccountEntity,
       AiCreditLedgerEntity,
       AiGenerationJobEntity,
+      AiGenerationDocumentPageEntity,
+      AiGenerationChunkEntity,
       AiUsageEventEntity,
       AiUsageBudgetEntity,
       QuizWeaknessInsightEntity,
@@ -54,6 +63,12 @@ import { AiProviderUrlPolicyService } from './ai-provider-url-policy.service';
     AiProviderUrlPolicyService,
     AiMaterialSourceService,
     AiQuizGenerationService,
+    AiGenerationSourceStorageService,
+    AiGenerationQueueService,
+    {
+      provide: AI_GENERATION_PROCESSOR,
+      useExisting: AiQuizGenerationService,
+    },
     QuizWeaknessInsightService,
   ],
   exports: [AiProviderService, AiCreditService, AiModelClientService],

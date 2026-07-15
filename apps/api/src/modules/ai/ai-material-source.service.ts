@@ -16,15 +16,16 @@ const SUPPORTED_MIME_TYPES = new Set([
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ]);
 const MIN_DOCUMENT_TEXT = 500;
-const MIN_PAGE_TEXT = 400;
+const MIN_PAGE_TEXT = 40;
 const MIN_OCR_CONFIDENCE = 55;
 const MAX_PDF_PAGES = 5000;
-const MAX_AI_VISION_PAGES = 10;
-const MAX_EXTRACTED_TEXT = 60_000;
+const MAX_AI_VISION_PAGES = 200;
+const MAX_EXTRACTED_TEXT = 2_000_000;
 export const MAX_AI_SOURCE_SIZE = 50 * 1024 * 1024;
 
 export type AiMaterialExtraction = {
   text: string;
+  pages: AiMaterialPage[];
   textLayerPages: number;
   localOcrPages: number;
   aiVisionPages: number;
@@ -37,6 +38,8 @@ export type AiMaterialVisionContext = {
   referenceId: string;
   userId: string;
   onProgress?: (progress: AiMaterialExtractionProgress) => Promise<void>;
+  existingPages?: AiMaterialPage[];
+  onPageExtracted?: (page: AiMaterialPage) => Promise<void>;
 };
 
 export type AiMaterialExtractionProgress = {
@@ -45,6 +48,15 @@ export type AiMaterialExtractionProgress = {
 };
 
 type OcrResult = { text: string; confidence: number };
+
+export type AiMaterialPage = {
+  pageNumber: number;
+  text: string;
+  method: 'direct_text' | 'text_layer' | 'local_ocr' | 'ai_vision';
+  confidence: number | null;
+  visionInputTokens: number;
+  visionOutputTokens: number;
+};
 
 @Injectable()
 export class AiMaterialSourceService {
@@ -66,11 +78,20 @@ export class AiMaterialSourceService {
     if (file.mimetype === 'application/pdf')
       return this.extractPdf(file.buffer, vision);
 
+    const resumed = vision?.existingPages?.[0];
+    if (resumed) {
+      await vision?.onProgress?.({ totalPages: 1, processedPages: 1 });
+      return extractionFromPages([resumed]);
+    }
+
     const text =
       file.mimetype === 'text/plain'
         ? file.buffer.toString('utf8')
         : (await mammoth.extractRawText({ buffer: file.buffer })).value;
-    return extractionFromText(text);
+    const extraction = extractionFromText(text);
+    await vision?.onPageExtracted?.(extraction.pages[0]);
+    await vision?.onProgress?.({ totalPages: 1, processedPages: 1 });
+    return extraction;
   }
 
   private async extractPdf(
@@ -86,6 +107,7 @@ export class AiMaterialSourceService {
       aiVisionPages: 0,
       visionInputTokens: 0,
       visionOutputTokens: 0,
+      pages: [],
     };
     try {
       await writeFile(pdfPath, buffer, { mode: 0o600 });
@@ -96,74 +118,88 @@ export class AiMaterialSourceService {
         );
       await vision?.onProgress?.({ totalPages: pages, processedPages: 0 });
 
-      const pageTexts: string[] = [];
+      const existingPages = new Map(
+        (vision?.existingPages ?? []).map((page) => [page.pageNumber, page]),
+      );
+      const textPages =
+        existingPages.size >= pages
+          ? []
+          : await extractPdfTextPages(pdfPath, pages);
       for (let page = 1; page <= pages; page += 1) {
-        const textLayer = normalizeText(
-          await extractPdfTextPage(pdfPath, page),
-        );
-        if (textLayer.length >= MIN_PAGE_TEXT) {
-          pageTexts.push(`[Trang ${page}] ${textLayer}`);
-          result.textLayerPages += 1;
+        const existing = existingPages.get(page);
+        if (existing) {
+          appendPage(result, existing);
           await vision?.onProgress?.({
             totalPages: pages,
             processedPages: page,
           });
-          if (pageTexts.join(' ').length >= MAX_EXTRACTED_TEXT) break;
           continue;
         }
-
-        const imagePath = await renderPdfPage(pdfPath, directory, page);
-        let ocr: OcrResult | null = null;
-        try {
-          ocr = await runLocalOcr(imagePath);
-        } catch (error) {
-          this.logger.warn(
-            `Local OCR unavailable: page=${page} reason=${safeError(error)}`,
-          );
-        }
-
-        if (ocr && isUsableOcr(ocr)) {
-          pageTexts.push(`[Trang ${page} - OCR] ${normalizeText(ocr.text)}`);
-          result.localOcrPages += 1;
+        const textLayer = normalizeText(textPages[page - 1] ?? '');
+        let extractedPage: AiMaterialPage;
+        if (textLayer.length >= MIN_PAGE_TEXT) {
+          extractedPage = materialPage(page, textLayer, 'text_layer');
         } else {
-          if (!vision)
-            throw new BadRequestException(
-              'Trang scan cần AI vision nhưng chưa có provider AI để xử lý',
+          const imagePath = await renderPdfPage(pdfPath, directory, page);
+          let ocr: OcrResult | null = null;
+          try {
+            ocr = await runLocalOcr(imagePath);
+          } catch (error) {
+            this.logger.warn(
+              `Local OCR unavailable: page=${page} reason=${safeError(error)}`,
             );
-          if (result.aiVisionPages >= MAX_AI_VISION_PAGES)
-            throw new BadRequestException(
-              `Tài liệu có quá nhiều trang cần AI đọc ảnh; tối đa ${MAX_AI_VISION_PAGES} trang mỗi lần`,
+          }
+
+          if (ocr && isUsableOcr(ocr)) {
+            extractedPage = materialPage(
+              page,
+              normalizeText(ocr.text),
+              'local_ocr',
+              ocr.confidence,
             );
-          this.logger.warn(
-            `Falling back to AI vision OCR: provider=${vision.provider.name} model=${vision.provider.model} page=${page} localConfidence=${ocr?.confidence.toFixed(1) ?? 'unavailable'}`,
-          );
-          const completion = await this.client.readImageText(
-            vision.provider,
-            await readFile(imagePath),
-            'image/png',
-            {
-              source: 'document_vision_ocr',
-              referenceId: vision.referenceId,
-              userId: vision.userId,
-            },
-            page,
-          );
-          pageTexts.push(
-            `[Trang ${page} - AI đọc ảnh] ${String(completion.value)}`,
-          );
-          result.aiVisionPages += 1;
-          result.visionInputTokens += completion.inputTokens;
-          result.visionOutputTokens += completion.outputTokens;
+          } else {
+            if (!vision)
+              throw new BadRequestException(
+                'Trang scan cần AI vision nhưng chưa có provider AI để xử lý',
+              );
+            if (result.aiVisionPages >= MAX_AI_VISION_PAGES)
+              throw new BadRequestException(
+                `Tài liệu có quá nhiều trang cần AI đọc ảnh; tối đa ${MAX_AI_VISION_PAGES} trang mỗi lần`,
+              );
+            this.logger.warn(
+              `Falling back to AI vision OCR: provider=${vision.provider.name} model=${vision.provider.model} page=${page} localConfidence=${ocr?.confidence.toFixed(1) ?? 'unavailable'}`,
+            );
+            const completion = await this.client.readImageText(
+              vision.provider,
+              await readFile(imagePath),
+              'image/png',
+              {
+                source: 'document_vision_ocr',
+                referenceId: vision.referenceId,
+                userId: vision.userId,
+              },
+              page,
+            );
+            extractedPage = materialPage(
+              page,
+              String(completion.value),
+              'ai_vision',
+              null,
+              completion.inputTokens,
+              completion.outputTokens,
+            );
+          }
+          await unlink(imagePath).catch(() => undefined);
         }
-        await unlink(imagePath).catch(() => undefined);
+        appendPage(result, extractedPage);
+        await vision?.onPageExtracted?.(extractedPage);
         await vision?.onProgress?.({
           totalPages: pages,
           processedPages: page,
         });
-        if (pageTexts.join(' ').length >= MAX_EXTRACTED_TEXT) break;
       }
 
-      result.text = normalizeText(pageTexts.join('\n')).slice(
+      result.text = normalizeText(result.pages.map(labelPage).join('\n')).slice(
         0,
         MAX_EXTRACTED_TEXT,
       );
@@ -187,14 +223,67 @@ function extractionFromText(text: string): AiMaterialExtraction {
     throw new BadRequestException(
       'Tài liệu không có đủ nội dung chữ để sinh quiz',
     );
-  return {
-    text: normalized.slice(0, MAX_EXTRACTED_TEXT),
+  return extractionFromPages([
+    materialPage(1, normalized.slice(0, MAX_EXTRACTED_TEXT), 'direct_text'),
+  ]);
+}
+
+function extractionFromPages(pages: AiMaterialPage[]): AiMaterialExtraction {
+  const result: AiMaterialExtraction = {
+    text: '',
+    pages: [],
     textLayerPages: 0,
     localOcrPages: 0,
     aiVisionPages: 0,
     visionInputTokens: 0,
     visionOutputTokens: 0,
   };
+  pages.forEach((page) => appendPage(result, page));
+  result.text = normalizeText(result.pages.map(labelPage).join('\n')).slice(
+    0,
+    MAX_EXTRACTED_TEXT,
+  );
+  return result;
+}
+
+function materialPage(
+  pageNumber: number,
+  text: string,
+  method: AiMaterialPage['method'],
+  confidence: number | null = null,
+  visionInputTokens = 0,
+  visionOutputTokens = 0,
+): AiMaterialPage {
+  return {
+    pageNumber,
+    text: normalizeText(text),
+    method,
+    confidence,
+    visionInputTokens,
+    visionOutputTokens,
+  };
+}
+
+function appendPage(
+  extraction: AiMaterialExtraction,
+  page: AiMaterialPage,
+): void {
+  extraction.pages.push(page);
+  if (page.method === 'text_layer') extraction.textLayerPages += 1;
+  if (page.method === 'local_ocr') extraction.localOcrPages += 1;
+  if (page.method === 'ai_vision') extraction.aiVisionPages += 1;
+  extraction.visionInputTokens += page.visionInputTokens;
+  extraction.visionOutputTokens += page.visionOutputTokens;
+}
+
+function labelPage(page: AiMaterialPage): string {
+  const suffix =
+    page.method === 'local_ocr'
+      ? ' - OCR'
+      : page.method === 'ai_vision'
+        ? ' - AI đọc ảnh'
+        : '';
+  return `[Trang ${page.pageNumber}${suffix}] ${page.text}`;
 }
 
 async function pdfPageCount(path: string): Promise<number> {
@@ -214,23 +303,20 @@ async function pdfPageCount(path: string): Promise<number> {
   }
 }
 
-async function extractPdfTextPage(path: string, page: number): Promise<string> {
+async function extractPdfTextPages(
+  path: string,
+  expectedPages: number,
+): Promise<string[]> {
   const { stdout } = await execFileAsync(
     'pdftotext',
-    [
-      '-f',
-      String(page),
-      '-l',
-      String(page),
-      '-layout',
-      '-enc',
-      'UTF-8',
-      path,
-      '-',
-    ],
-    { encoding: 'utf8', timeout: 20_000, maxBuffer: 2 * 1024 * 1024 },
+    ['-layout', '-enc', 'UTF-8', path, '-'],
+    { encoding: 'utf8', timeout: 120_000, maxBuffer: 32 * 1024 * 1024 },
   );
-  return stdout;
+  const pages = stdout.split('\f');
+  return Array.from(
+    { length: expectedPages },
+    (_, index) => pages[index] ?? '',
+  );
 }
 
 async function renderPdfPage(

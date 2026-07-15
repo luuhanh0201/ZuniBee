@@ -32,8 +32,10 @@ describe('AI Phase 2/3 pure logic', () => {
               content: '2 + 2 bằng bao nhiêu?',
               explanation: '2 + 2 = 4',
               options: [
+                { content: '2', isCorrect: false },
                 { content: '3', isCorrect: false },
                 { content: '4', isCorrect: true },
+                { content: '5', isCorrect: false },
               ],
             },
           ],
@@ -57,7 +59,7 @@ describe('AI Phase 2/3 pure logic', () => {
         },
         1,
       ),
-    ).toThrow('số đáp án đúng');
+    ).toThrow('số lựa chọn hoặc đáp án đúng');
   });
 
   it('reserves conservatively and never charges beyond reservation', () => {

@@ -34,9 +34,10 @@ const TYPES: Array<{ value: QuizQuestionType; label: string }> = [
   { value: "true_false", label: "Đúng / Sai" },
   { value: "multiple_choice", label: "Nhiều đáp án" },
 ];
+const ACTIVE_JOB_KEY_PREFIX = "zunibee:ai-quiz-generation:";
 
 export function AiQuizGenerator() {
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
   const router = useRouter();
   const lock = useRef(false);
   const [credit, setCredit] = useState<AiCreditAccount | null>(null);
@@ -66,6 +67,19 @@ export function AiQuizGenerator() {
   }, [accessToken]);
 
   useEffect(() => {
+    if (!user) return;
+    const savedJobId = window.localStorage.getItem(
+      `${ACTIVE_JOB_KEY_PREFIX}${user.id}`,
+    );
+    if (!savedJobId) return;
+    const timer = window.setTimeout(() => {
+      setActiveJobId(savedJobId);
+      setBusy(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [user]);
+
+  useEffect(() => {
     if (!accessToken || !activeJobId) return;
     const token = accessToken;
     const jobId = activeJobId;
@@ -77,7 +91,29 @@ export function AiQuizGenerator() {
         const job = await getAiQuizGenerationJob(jobId, token);
         if (cancelled) return;
         setJobProgress(job);
-        if (job.status === "succeeded" || job.status === "failed") return;
+        if (job.status === "succeeded") {
+          setBusy(false);
+          setActiveJobId(null);
+          if (user)
+            window.localStorage.removeItem(
+              `${ACTIVE_JOB_KEY_PREFIX}${user.id}`,
+            );
+          if (job.quizId) router.push(teacherQuizRoute(job.quizId));
+          return;
+        }
+        if (job.status === "failed") {
+          setBusy(false);
+          setActiveJobId(null);
+          setError(job.errorMessage || "Không thể sinh quiz từ tài liệu này.");
+          if (user)
+            window.localStorage.removeItem(
+              `${ACTIVE_JOB_KEY_PREFIX}${user.id}`,
+            );
+          getMyAiCredit(token)
+            .then(setCredit)
+            .catch(() => undefined);
+          return;
+        }
       } catch {
         // Job có thể chưa được tạo trong vài mili giây đầu của request upload.
       }
@@ -89,7 +125,7 @@ export function AiQuizGenerator() {
       cancelled = true;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [accessToken, activeJobId]);
+  }, [accessToken, activeJobId, router, user]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -100,6 +136,8 @@ export function AiQuizGenerator() {
     const jobId = crypto.randomUUID();
     setActiveJobId(jobId);
     setJobProgress(null);
+    if (user)
+      window.localStorage.setItem(`${ACTIVE_JOB_KEY_PREFIX}${user.id}`, jobId);
     try {
       const result = await generateQuizWithAi(
         {
@@ -117,13 +155,15 @@ export function AiQuizGenerator() {
         accessToken,
       );
       setJobProgress(result.job);
-      router.push(teacherQuizRoute(result.quiz.id));
+      setCredit(result.credit);
     } catch (cause) {
       setError(getErrorMessage(cause));
-    } finally {
-      lock.current = false;
       setBusy(false);
       setActiveJobId(null);
+      if (user)
+        window.localStorage.removeItem(`${ACTIVE_JOB_KEY_PREFIX}${user.id}`);
+    } finally {
+      lock.current = false;
     }
   }
 
@@ -266,7 +306,7 @@ export function AiQuizGenerator() {
               />
               <span className="mt-2 block text-sm font-semibold text-muted-foreground">
                 Hỗ trợ TXT, DOCX, PDF; tối đa 50 MB. Tệp chỉ được đọc trong yêu
-                cầu này.
+                cầu này và được lưu tạm trong lúc job đang chạy.
               </span>
             </Field>
           ) : null}
@@ -327,8 +367,10 @@ function GenerationProgressPanel({
   progress: AiGenerationJob | null;
 }) {
   const total = progress?.documentTotalPages ?? null;
-  const processed = Math.min(progress?.documentProcessedPages ?? 0, total ?? 0);
-  const percent = total ? Math.round((processed / total) * 100) : null;
+  const processed = total
+    ? Math.min(progress?.documentProcessedPages ?? 0, total)
+    : (progress?.documentProcessedPages ?? 0);
+  const percent = generationProgressPercent(sourceType, progress);
   const copy = generationProgressCopy(sourceType, progress, processed, total);
 
   return (
@@ -364,19 +406,20 @@ function GenerationProgressPanel({
 
       <div
         className="mt-3 h-2.5 overflow-hidden rounded-full border border-foreground/20 bg-background"
-        role={percent === null ? undefined : "progressbar"}
-        aria-label={percent === null ? undefined : "Tiến độ đọc tài liệu"}
-        aria-valuemin={percent === null ? undefined : 0}
-        aria-valuemax={percent === null ? undefined : 100}
-        aria-valuenow={percent ?? undefined}
+        role="progressbar"
+        aria-label="Tiến độ sinh quiz"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
       >
         <span
-          className={`block h-full rounded-full bg-primary transition-[width] duration-300 ease-out ${percent === null ? "w-1/3 motion-safe:animate-pulse" : ""}`}
-          style={percent === null ? undefined : { width: `${percent}%` }}
+          className="block h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+          style={{ width: `${percent}%` }}
         />
       </div>
       <p className="mt-3 text-xs font-bold text-muted-foreground">
-        Quá trình có thể mất tới 2 phút. Vui lòng giữ trang này mở.
+        Job chạy nền và tự thử lại khi provider bận. Bạn có thể rời trang rồi
+        quay lại xem tiến độ.
       </p>
     </div>
   );
@@ -402,8 +445,13 @@ function generationProgressCopy(
 
   if (!progress || progress.stage === "queued") {
     return {
-      title: "Đang tải và kiểm tra tài liệu...",
-      detail: "Hệ thống đang nhận tệp và xác định số trang.",
+      title:
+        progress?.attemptCount && progress.attemptCount > 0
+          ? `Đang tự thử lại lần ${progress.attemptCount + 1}...`
+          : "Đang xếp hàng xử lý...",
+      detail:
+        progress?.errorMessage ||
+        "Tài liệu đã được lưu an toàn và đang chờ AI worker xử lý.",
     };
   }
 
@@ -414,6 +462,55 @@ function generationProgressCopy(
     return {
       title: pageLabel,
       detail: "Đã trích xuất nội dung và đang soạn câu hỏi bằng AI.",
+    };
+  }
+  if (progress.stage === "analyzing_document") {
+    const chunkTotal = progress.generationTotalChunks ?? 0;
+    const chunkProcessed = Math.min(
+      progress.generationProcessedChunks,
+      chunkTotal,
+    );
+    return {
+      title: chunkTotal
+        ? `Đã phân tích ${chunkProcessed}/${chunkTotal} phần`
+        : "Đang phân tích trọng tâm tài liệu...",
+      detail:
+        "AI đang nhận diện kiến thức cốt lõi và loại bìa, bản quyền, mục lục cùng chi tiết hành chính.",
+    };
+  }
+  if (progress.stage === "planning_quiz") {
+    return {
+      title: "Đang lập ma trận quiz...",
+      detail:
+        "Hệ thống đang phân bổ mục tiêu học tập và mức tư duy 20% ghi nhớ, 50% hiểu, 30% vận dụng.",
+    };
+  }
+  if (progress.stage === "generating_candidates") {
+    const chunkTotal = progress.generationTotalChunks ?? 0;
+    const chunkProcessed = Math.min(
+      progress.generationProcessedChunks,
+      chunkTotal,
+    );
+    return {
+      title: chunkTotal
+        ? `Đã phân tích ${chunkProcessed}/${chunkTotal} phần`
+        : "Đang chia tài liệu thành các phần...",
+      detail:
+        "AI đang tạo câu hỏi ứng viên theo từng phần và giữ checkpoint sau mỗi phần.",
+    };
+  }
+  if (progress.stage === "selecting_questions") {
+    return {
+      title: "Đang chọn bộ câu hỏi tốt nhất...",
+      detail:
+        "Hệ thống đang phân bổ câu hỏi xuyên suốt tài liệu và loại nội dung trùng lặp.",
+    };
+  }
+  if (progress.stage === "reviewing_questions") {
+    return {
+      title: "Đang kiểm định bộ câu hỏi...",
+      detail:
+        "AI đang loại câu lệch trọng tâm, kiểm tra bằng chứng, distractor và chất lượng phần giải thích.",
     };
   }
   if (progress.stage === "saving_quiz") {
@@ -428,6 +525,36 @@ function generationProgressCopy(
       ? "Hệ thống đang xử lý lần lượt từng trang của tài liệu."
       : "Hệ thống đang trích xuất nội dung tài liệu.",
   };
+}
+
+function generationProgressPercent(
+  sourceType: "prompt" | "upload",
+  progress: AiGenerationJob | null,
+): number {
+  if (!progress) return 2;
+  if (progress.stage === "completed") return 100;
+  if (progress.stage === "saving_quiz") return 98;
+  if (progress.stage === "reviewing_questions") return 94;
+  if (progress.stage === "selecting_questions") return 92;
+  if (progress.stage === "planning_quiz") return 58;
+  if (progress.stage === "generating_quiz")
+    return sourceType === "upload" ? 94 : 55;
+  if (progress.stage === "generating_candidates") {
+    const total = progress.generationTotalChunks ?? 0;
+    const ratio = total ? progress.generationProcessedChunks / total : 0;
+    return Math.round(60 + Math.min(1, ratio) * 28);
+  }
+  if (progress.stage === "analyzing_document") {
+    const total = progress.generationTotalChunks ?? 0;
+    const ratio = total ? progress.generationProcessedChunks / total : 0;
+    return Math.round(35 + Math.min(1, ratio) * 20);
+  }
+  if (progress.stage === "reading_document") {
+    const total = progress.documentTotalPages ?? 0;
+    const ratio = total ? progress.documentProcessedPages / total : 0;
+    return Math.round(5 + Math.min(1, ratio) * 28);
+  }
+  return 2;
 }
 
 function Field({

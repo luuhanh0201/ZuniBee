@@ -85,7 +85,7 @@ services:
       redis-server
       --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
       --appendonly yes
-      --maxmemory 128mb
+      --maxmemory 1gb
       --maxmemory-policy noeviction
     volumes:
       - redis-data:/data
@@ -93,9 +93,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: 160m
+          memory: 1280m
 
   api:
+    image: zunibee-api:latest
     build:
       context: .
       dockerfile: infrastructure/docker/api/Dockerfile
@@ -125,10 +126,9 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       AI_PROVIDER_ENCRYPTION_KEY: ${AI_PROVIDER_ENCRYPTION_KEY:-}
       AI_PROVIDER_ENCRYPTION_KEY_FILE: /app/apps/api/secrets/ai-provider-encryption-key
-      AI_OLLAMA_ALLOWED_HOSTS: ${AI_OLLAMA_ALLOWED_HOSTS:-host.docker.internal}
-      AI_OLLAMA_ALLOWED_PORTS: ${AI_OLLAMA_ALLOWED_PORTS:-11434}
       AI_PROVIDER_PRIVATE_HOST_ALLOWLIST: ${AI_PROVIDER_PRIVATE_HOST_ALLOWLIST:-}
       NOTIFICATION_WORKER_ENABLED: ${NOTIFICATION_WORKER_ENABLED:-true}
+      AI_GENERATION_WORKER_ENABLED: "false"
       WEB_URL: https://${DOMAIN}
     volumes:
       - api-uploads:/app/apps/api/uploads
@@ -147,8 +147,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 40s
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -159,6 +157,45 @@ services:
       resources:
         limits:
           memory: 512m
+
+  ai-worker:
+    image: zunibee-api:latest
+    restart: unless-stopped
+    read_only: true
+    command: ["node", "dist/worker.js"]
+    env_file:
+      - apps/api/.env
+    environment:
+      NODE_ENV: production
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: ${DATABASE_NAME:-zunibee}
+      DATABASE_USER: ${DATABASE_USER:-postgres}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      AI_PROVIDER_ENCRYPTION_KEY: ${AI_PROVIDER_ENCRYPTION_KEY:-}
+      AI_PROVIDER_ENCRYPTION_KEY_FILE: /app/apps/api/secrets/ai-provider-encryption-key
+      AI_PROVIDER_PRIVATE_HOST_ALLOWLIST: ${AI_PROVIDER_PRIVATE_HOST_ALLOWLIST:-}
+      AI_GENERATION_WORKER_ENABLED: "true"
+      AI_GENERATION_WORKER_CONCURRENCY: ${AI_GENERATION_WORKER_CONCURRENCY:-1}
+      NOTIFICATION_WORKER_ENABLED: "false"
+      WEB_URL: https://${DOMAIN}
+    volumes:
+      - api-protected-uploads:/app/apps/api/protected-uploads
+      - api-secrets:/app/apps/api/secrets
+      - ai-worker-tmp:/tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks: [internal, edge]
+    deploy:
+      resources:
+        limits:
+          memory: 1536m
 
   # One-off: chạy migration TypeORM trên image "api" đã build (không tự chạy khi start).
   migrate:
@@ -236,3 +273,4 @@ volumes:
   api-uploads:
   api-protected-uploads:
   api-secrets:
+  ai-worker-tmp:

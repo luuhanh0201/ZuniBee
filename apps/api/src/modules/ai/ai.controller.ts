@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Post,
@@ -36,6 +37,7 @@ export class AiController {
     return this.credits.history(user.id);
   }
   @Post('quiz-generations')
+  @HttpCode(202)
   @ExpensiveOperationRateLimit()
   @ApiConsumes('multipart/form-data')
   @ApiBody({
