@@ -114,6 +114,21 @@ export function uploadClassroomMaterialFiles(
   );
 }
 
+export function createClassroomMaterialLink(
+  classroomId: string,
+  input: { title: string; description?: string; url: string },
+  accessToken?: string,
+) {
+  return apiFetch<ClassroomMaterial>(
+    `/classrooms/${classroomId}/materials/links`,
+    {
+      method: "POST",
+      body: input,
+      accessToken,
+    },
+  );
+}
+
 export function updateClassroomMaterial(
   classroomId: string,
   materialId: string,

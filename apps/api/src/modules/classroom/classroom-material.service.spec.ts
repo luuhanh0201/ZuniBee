@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import type { Repository } from 'typeorm';
 import { UserRole } from '@zunibee/shared';
 import type { AuthenticatedUser } from '@/modules/auth/types/authenticated-user.type';
@@ -105,6 +105,141 @@ describe('ClassroomMaterialService', () => {
     await expect(
       service.createFiles('classroom-id', 'another-teacher', {}, undefined),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('creates a Google Drive link without writing to file storage', async () => {
+    classroomRepository.findOne.mockResolvedValue({
+      id: 'classroom-id',
+      teacherId: teacher.id,
+    });
+    materialRepository.save.mockImplementation((material) =>
+      Promise.resolve({
+        ...(material as ClassroomMaterial),
+        id: 'material-link',
+        createdAt: new Date('2026-07-15T01:00:00.000Z'),
+        updatedAt: new Date('2026-07-15T01:00:00.000Z'),
+      }),
+    );
+
+    await expect(
+      service.createLink('classroom-id', teacher.id, {
+        title: 'Giáo trình tiếng Anh',
+        description: 'Bản gốc dùng để in',
+        url: 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view#page=2',
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: 'material-link',
+        title: 'Giáo trình tiếng Anh',
+        type: ClassroomMaterialType.LINK,
+        url: 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view',
+      }),
+    );
+    expect(materialRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: ClassroomMaterialType.LINK,
+        storageName: null,
+        url: 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view',
+      }),
+    );
+    expect(storage.store).not.toHaveBeenCalled();
+  });
+
+  it('rejects a Drive link from a teacher who does not own the classroom', async () => {
+    classroomRepository.findOne.mockResolvedValue({
+      id: 'classroom-id',
+      teacherId: teacher.id,
+    });
+
+    await expect(
+      service.createLink('classroom-id', 'another-teacher', {
+        title: 'Tài liệu',
+        url: 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(materialRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('validates a changed URL before updating a link material', async () => {
+    classroomRepository.findOne.mockResolvedValue({
+      id: 'classroom-id',
+      teacherId: teacher.id,
+    });
+    materialRepository.findOne.mockResolvedValue({
+      id: 'material-link',
+      classroomId: 'classroom-id',
+      type: ClassroomMaterialType.LINK,
+      url: 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view',
+    });
+
+    await expect(
+      service.update('classroom-id', 'material-link', teacher.id, {
+        url: 'https://drive.google.com.evil.example/file/d/1AbCdEfGhIjKlMnOp/view',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(materialRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('updates a Google Drive link after validating its new URL', async () => {
+    classroomRepository.findOne.mockResolvedValue({
+      id: 'classroom-id',
+      teacherId: teacher.id,
+    });
+    const material = {
+      id: 'material-link',
+      classroomId: 'classroom-id',
+      title: 'Tài liệu cũ',
+      description: null,
+      type: ClassroomMaterialType.LINK,
+      url: 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view',
+      originalName: null,
+      mimeType: null,
+      size: null,
+      createdAt: new Date('2026-07-15T01:00:00.000Z'),
+      updatedAt: new Date('2026-07-15T01:00:00.000Z'),
+    };
+    materialRepository.findOne.mockResolvedValue(material);
+    materialRepository.save.mockImplementation((value) =>
+      Promise.resolve(value),
+    );
+
+    await expect(
+      service.update('classroom-id', 'material-link', teacher.id, {
+        title: 'Tài liệu mới',
+        url: 'https://docs.google.com/document/d/1ZyXwVuTsRqPoNmLk/edit#heading=h.1',
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        title: 'Tài liệu mới',
+        url: 'https://docs.google.com/document/d/1ZyXwVuTsRqPoNmLk/edit',
+      }),
+    );
+    expect(materialRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Tài liệu mới',
+        url: 'https://docs.google.com/document/d/1ZyXwVuTsRqPoNmLk/edit',
+      }),
+    );
+  });
+
+  it('deletes only the database row for a Google Drive link', async () => {
+    classroomRepository.findOne.mockResolvedValue({
+      id: 'classroom-id',
+      teacherId: teacher.id,
+    });
+    const material = {
+      id: 'material-link',
+      classroomId: 'classroom-id',
+      type: ClassroomMaterialType.LINK,
+      storageName: null,
+      url: 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view',
+    };
+    materialRepository.findOne.mockResolvedValue(material);
+
+    await service.remove('classroom-id', 'material-link', teacher.id);
+
+    expect(storage.delete).not.toHaveBeenCalled();
+    expect(materialRepository.remove).toHaveBeenCalledWith(material);
   });
 
   it('persists the provider selected by the storage chain', async () => {

@@ -68,7 +68,7 @@ export class AdminUserService {
       countsBase
         .clone()
         .select(
-          `CASE WHEN user.deleted_at IS NOT NULL THEN 'deleted' ELSE user.status::text END`,
+          `CASE WHEN "user"."deleted_at" IS NOT NULL THEN 'deleted' ELSE "user"."status"::text END`,
           'bucket',
         )
         .addSelect('COUNT(*)', 'count')

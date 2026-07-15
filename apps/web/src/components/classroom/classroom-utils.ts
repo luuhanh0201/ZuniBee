@@ -59,3 +59,17 @@ export function getErrorMessage(error: unknown) {
     ? error.message
     : "Có lỗi xảy ra, vui lòng thử lại";
 }
+
+export function isGoogleDriveUrl(value: string | null | undefined) {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      (url.hostname === "drive.google.com" ||
+        url.hostname === "docs.google.com")
+    );
+  } catch {
+    return false;
+  }
+}

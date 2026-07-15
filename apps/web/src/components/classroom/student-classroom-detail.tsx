@@ -6,6 +6,7 @@ import {
   BookOpenCheck,
   CalendarDays,
   Eye,
+  ExternalLink,
   FileText,
   GraduationCap,
   LibraryBig,
@@ -26,7 +27,11 @@ import {
   StudentClassroomFrame,
   StudentClassroomPageHeader,
 } from "./student-classroom-frame";
-import { formatDate, getErrorMessage } from "./classroom-utils";
+import {
+  formatDate,
+  getErrorMessage,
+  isGoogleDriveUrl,
+} from "./classroom-utils";
 import { MaterialPreviewDialog } from "./material-preview-dialog";
 import { MaterialDescription } from "./material-description";
 
@@ -193,26 +198,53 @@ export function StudentClassroomDetail({
                   >
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0">
-                        <h3 className="break-words font-extrabold">
-                          {material.title}
-                        </h3>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="break-words font-extrabold">
+                            {material.title}
+                          </h3>
+                          {material.type === "link" &&
+                          isGoogleDriveUrl(material.url) ? (
+                            <span className="rounded-full border border-foreground bg-secondary-soft px-2 py-0.5 text-xs font-extrabold">
+                              Google Drive
+                            </span>
+                          ) : null}
+                        </div>
                         <p className="mt-1 text-sm font-semibold text-muted-foreground">
                           {material.type === "file"
                             ? material.originalName || "Tệp tài liệu"
-                            : "Liên kết ngoài"}
+                            : isGoogleDriveUrl(material.url)
+                              ? "Bản gốc được lưu trên Google Drive"
+                              : "Liên kết ngoài"}
                         </p>
                         {material.description ? (
                           <MaterialDescription text={material.description} />
                         ) : null}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setPreviewing(material)}
-                        className={`${SECONDARY_ACTION_CLASS} shrink-0`}
-                      >
-                        <Eye className="h-4 w-4" aria-hidden="true" />
-                        Xem tài liệu
-                      </button>
+                      {material.type === "link" && material.url ? (
+                        <a
+                          href={material.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`${SECONDARY_ACTION_CLASS} shrink-0`}
+                        >
+                          <ExternalLink
+                            className="h-4 w-4"
+                            aria-hidden="true"
+                          />
+                          {isGoogleDriveUrl(material.url)
+                            ? "Mở trên Google Drive"
+                            : "Mở liên kết"}
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewing(material)}
+                          className={`${SECONDARY_ACTION_CLASS} shrink-0`}
+                        >
+                          <Eye className="h-4 w-4" aria-hidden="true" />
+                          Xem tài liệu
+                        </button>
+                      )}
                     </div>
                   </article>
                 ))}

@@ -9,7 +9,7 @@ import {
   fetchClassroomMaterialBlob,
 } from "./classroom-api";
 import { SECONDARY_ACTION_CLASS } from "./classroom-ui";
-import { getErrorMessage } from "./classroom-utils";
+import { getErrorMessage, isGoogleDriveUrl } from "./classroom-utils";
 
 type PreviewKind = "pdf" | "image" | "text" | "docx" | "xlsx" | "unsupported";
 
@@ -159,11 +159,15 @@ export function MaterialPreviewDialog({
               <a
                 href={material.url}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className={`${SECONDARY_ACTION_CLASS} min-h-10 px-3 py-2 text-sm`}
               >
                 <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                <span className="hidden sm:inline">Mở liên kết</span>
+                <span className="hidden sm:inline">
+                  {isGoogleDriveUrl(material.url)
+                    ? "Mở trên Drive"
+                    : "Mở liên kết"}
+                </span>
               </a>
             ) : (
               <button

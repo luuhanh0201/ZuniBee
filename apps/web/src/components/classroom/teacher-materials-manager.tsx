@@ -1,10 +1,22 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Eye, FileText, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
+import {
+  ExternalLink,
+  Eye,
+  FileText,
+  Link2,
+  Pencil,
+  Plus,
+  Trash2,
+  Upload,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import type { ClassroomMaterial } from "@zunibee/shared";
 import { useToast } from "@/components/ui/toast-provider";
 import {
+  createClassroomMaterialLink,
   deleteClassroomMaterial,
   updateClassroomMaterial,
   uploadClassroomMaterialFiles,
@@ -16,12 +28,17 @@ import {
   PRIMARY_ACTION_CLASS,
   SECONDARY_ACTION_CLASS,
 } from "./classroom-ui";
-import { formatDate, getErrorMessage } from "./classroom-utils";
+import {
+  formatDate,
+  getErrorMessage,
+  isGoogleDriveUrl,
+} from "./classroom-utils";
 import { MaterialPreviewDialog } from "./material-preview-dialog";
 import { MaterialDescription } from "./material-description";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const MAX_FILES = 10;
+type MaterialSource = "upload" | "drive";
 
 export function TeacherMaterialsManager({
   classroomId,
@@ -35,8 +52,11 @@ export function TeacherMaterialsManager({
   onChanged: () => Promise<void>;
 }) {
   const { showToast } = useToast();
+  const [source, setSource] = useState<MaterialSource>("upload");
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [linkTitle, setLinkTitle] = useState("");
+  const [driveUrl, setDriveUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [editing, setEditing] = useState<ClassroomMaterial | null>(null);
@@ -47,27 +67,55 @@ export function TeacherMaterialsManager({
     event.preventDefault();
     const form = event.currentTarget;
     if (actionLockRef.current) return;
-    if (files.length === 0) return setError("Vui lòng chọn ít nhất một tệp");
-    if (files.length > MAX_FILES)
-      return setError(`Mỗi lần chỉ được tải tối đa ${MAX_FILES} tệp`);
-    const oversized = files.find((file) => file.size > MAX_FILE_SIZE);
-    if (oversized)
-      return setError(`Tệp ${oversized.name} vượt quá giới hạn 50 MB`);
+    if (source === "upload") {
+      if (files.length === 0) return setError("Vui lòng chọn ít nhất một tệp");
+      if (files.length > MAX_FILES)
+        return setError(`Mỗi lần chỉ được tải tối đa ${MAX_FILES} tệp`);
+      const oversized = files.find((file) => file.size > MAX_FILE_SIZE);
+      if (oversized)
+        return setError(`Tệp ${oversized.name} vượt quá giới hạn 50 MB`);
+    } else {
+      if (!linkTitle.trim()) return setError("Vui lòng nhập tên tài liệu");
+      if (!driveUrl.trim())
+        return setError("Vui lòng nhập liên kết Google Drive");
+    }
 
     actionLockRef.current = true;
     setActiveAction("create");
     setError(null);
     try {
-      await uploadClassroomMaterialFiles(
-        classroomId,
-        { description: description.trim() || undefined, files },
-        accessToken,
-      );
+      if (source === "upload") {
+        await uploadClassroomMaterialFiles(
+          classroomId,
+          { description: description.trim() || undefined, files },
+          accessToken,
+        );
+      } else {
+        await createClassroomMaterialLink(
+          classroomId,
+          {
+            title: linkTitle.trim(),
+            description: description.trim() || undefined,
+            url: driveUrl.trim(),
+          },
+          accessToken,
+        );
+      }
       setDescription("");
-      setFiles([]);
-      form.reset();
+      if (source === "upload") {
+        setFiles([]);
+        form.reset();
+      } else {
+        setLinkTitle("");
+        setDriveUrl("");
+      }
       await onChanged();
-      showToast("success", `Đã tải lên ${files.length} tài liệu`);
+      showToast(
+        "success",
+        source === "upload"
+          ? `Đã tải lên ${files.length} tài liệu`
+          : "Đã thêm liên kết Google Drive",
+      );
     } catch (requestError) {
       setError(getErrorMessage(requestError));
     } finally {
@@ -123,6 +171,135 @@ export function TeacherMaterialsManager({
           className="mt-5 space-y-4"
           aria-busy={activeAction === "create"}
         >
+          <div>
+            <p className="mb-1.5 text-sm font-extrabold">Nguồn tài liệu</p>
+            <div
+              className="grid grid-cols-2 gap-2 rounded-xl border-2 border-divider bg-surface-soft p-2"
+              role="group"
+              aria-label="Chọn nguồn tài liệu"
+            >
+              <SourceButton
+                active={source === "upload"}
+                disabled={activeAction !== null}
+                icon={Upload}
+                label="Upload file"
+                onClick={() => {
+                  setSource("upload");
+                  setError(null);
+                }}
+              />
+              <SourceButton
+                active={source === "drive"}
+                disabled={activeAction !== null}
+                icon={Link2}
+                label="Google Drive"
+                onClick={() => {
+                  setSource("drive");
+                  setError(null);
+                }}
+              />
+            </div>
+          </div>
+
+          {source === "upload" ? (
+            <>
+              <Field
+                label="Tệp (tối đa 10 tệp, mỗi tệp 50 MB)"
+                htmlFor="material-files"
+              >
+                <input
+                  id="material-files"
+                  type="file"
+                  multiple
+                  className={`${INPUT_CLASS} cursor-pointer py-2.5 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-foreground file:bg-primary file:px-3 file:py-1.5 file:font-bold`}
+                  onChange={(event) => {
+                    setFiles(Array.from(event.target.files ?? []));
+                    setError(null);
+                  }}
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.webp,.txt,.zip"
+                />
+              </Field>
+              {files.length > 0 ? (
+                <ul className="space-y-2" aria-label="Các tệp đã chọn">
+                  {files.map((file, index) => (
+                    <li
+                      key={`${file.name}-${file.lastModified}`}
+                      className="flex items-center gap-3 rounded-xl border-2 border-divider bg-surface-soft px-3 py-2"
+                    >
+                      <FileText
+                        className="h-4 w-4 shrink-0"
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0 flex-1 truncate text-sm font-bold">
+                        {file.name}
+                      </span>
+                      <span className="text-xs font-semibold text-muted-foreground">
+                        {formatFileSize(file.size)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFiles((current) =>
+                            current.filter(
+                              (_, fileIndex) => fileIndex !== index,
+                            ),
+                          )
+                        }
+                        aria-label={`Bỏ chọn ${file.name}`}
+                        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition-colors hover:bg-destructive-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                      >
+                        <X className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Field label="Tên tài liệu" htmlFor="material-link-title">
+                <input
+                  id="material-link-title"
+                  className={INPUT_CLASS}
+                  value={linkTitle}
+                  onChange={(event) => {
+                    setLinkTitle(event.target.value);
+                    setError(null);
+                  }}
+                  maxLength={160}
+                  required
+                  placeholder="Ví dụ: Giáo trình tiếng Anh"
+                />
+              </Field>
+              <Field label="Liên kết Google Drive" htmlFor="material-drive-url">
+                <input
+                  id="material-drive-url"
+                  type="url"
+                  className={INPUT_CLASS}
+                  value={driveUrl}
+                  onChange={(event) => {
+                    setDriveUrl(event.target.value);
+                    setError(null);
+                  }}
+                  maxLength={2048}
+                  required
+                  placeholder="https://drive.google.com/file/d/..."
+                />
+              </Field>
+              <div className="flex gap-3 rounded-xl border-2 border-divider bg-secondary-soft px-4 py-3 text-sm font-semibold">
+                <ExternalLink
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                  aria-hidden="true"
+                />
+                <p>
+                  Hãy đặt quyền <strong>Anyone with the link</strong> và vai trò{" "}
+                  <strong>Viewer</strong>. ZuniBee chỉ lưu liên kết; quyền xem,
+                  tải và in do Google Drive quản lý.
+                </p>
+              </div>
+            </>
+          )}
+
           <Field label="Mô tả (không bắt buộc)" htmlFor="material-description">
             <textarea
               id="material-description"
@@ -130,55 +307,9 @@ export function TeacherMaterialsManager({
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               maxLength={2000}
-              placeholder="Ghi chú hoặc dán liên kết liên quan tại đây..."
+              placeholder="Ghi chú thêm về tài liệu..."
             />
           </Field>
-          <Field
-            label="Tệp (tối đa 10 tệp, mỗi tệp 50 MB)"
-            htmlFor="material-files"
-          >
-            <input
-              id="material-files"
-              type="file"
-              multiple
-              className={`${INPUT_CLASS} cursor-pointer py-2.5 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-foreground file:bg-primary file:px-3 file:py-1.5 file:font-bold`}
-              onChange={(event) => {
-                setFiles(Array.from(event.target.files ?? []));
-                setError(null);
-              }}
-              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.webp,.txt,.zip"
-            />
-          </Field>
-          {files.length > 0 ? (
-            <ul className="space-y-2" aria-label="Các tệp đã chọn">
-              {files.map((file, index) => (
-                <li
-                  key={`${file.name}-${file.lastModified}`}
-                  className="flex items-center gap-3 rounded-xl border-2 border-divider bg-surface-soft px-3 py-2"
-                >
-                  <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  <span className="min-w-0 flex-1 truncate text-sm font-bold">
-                    {file.name}
-                  </span>
-                  <span className="text-xs font-semibold text-muted-foreground">
-                    {formatFileSize(file.size)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setFiles((current) =>
-                        current.filter((_, fileIndex) => fileIndex !== index),
-                      )
-                    }
-                    aria-label={`Bỏ chọn ${file.name}`}
-                    className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg hover:bg-destructive-soft"
-                  >
-                    <X className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
           {error ? (
             <p
               className="rounded-xl border-2 border-foreground bg-destructive-soft px-4 py-3 font-bold"
@@ -196,8 +327,14 @@ export function TeacherMaterialsManager({
               <InlineSpinner label="Đang thêm" />
             ) : (
               <>
-                <Upload className="h-5 w-5" aria-hidden="true" />
-                Tải {files.length || "các"} tài liệu lên
+                {source === "upload" ? (
+                  <Upload className="h-5 w-5" aria-hidden="true" />
+                ) : (
+                  <Link2 className="h-5 w-5" aria-hidden="true" />
+                )}
+                {source === "upload"
+                  ? `Tải ${files.length || "các"} tài liệu lên`
+                  : "Thêm liên kết Drive"}
               </>
             )}
           </button>
@@ -234,7 +371,7 @@ export function TeacherMaterialsManager({
               Chưa có tài liệu
             </h3>
             <p className="mt-1 font-semibold text-muted-foreground">
-              Tải tệp lên để học sinh xem và tải xuống.
+              Tải tệp hoặc thêm liên kết Drive để chia sẻ với học sinh.
             </p>
           </div>
         ) : (
@@ -297,6 +434,37 @@ function Field({
   );
 }
 
+function SourceButton({
+  active,
+  disabled,
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  disabled: boolean;
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-lg border-2 px-3 py-2 text-sm font-extrabold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-60 ${
+        active
+          ? "border-foreground bg-primary shadow-brutal-sm"
+          : "border-transparent bg-surface hover:border-foreground"
+      }`}
+    >
+      <Icon className="h-4 w-4" aria-hidden="true" />
+      {label}
+    </button>
+  );
+}
+
 function MaterialRow({
   material,
   activeAction,
@@ -310,18 +478,33 @@ function MaterialRow({
   onPreview: () => void;
   onDelete: () => void;
 }) {
+  const isLink = material.type === "link";
+  const isDrive = isLink && isGoogleDriveUrl(material.url);
   return (
     <li className="rounded-xl border-2 border-divider bg-surface-soft p-4">
       <div className="flex items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border-2 border-foreground bg-primary">
-          <FileText className="h-5 w-5" aria-hidden="true" />
+          {isLink ? (
+            <Link2 className="h-5 w-5" aria-hidden="true" />
+          ) : (
+            <FileText className="h-5 w-5" aria-hidden="true" />
+          )}
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="break-words font-extrabold">{material.title}</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="break-words font-extrabold">{material.title}</h3>
+            {isDrive ? (
+              <span className="rounded-full border border-foreground bg-secondary-soft px-2 py-0.5 text-xs font-extrabold">
+                Google Drive
+              </span>
+            ) : null}
+          </div>
           <p className="mt-1 text-sm font-semibold text-muted-foreground">
             {material.type === "file"
               ? `${material.originalName || "Tệp tài liệu"}${material.size ? ` · ${formatFileSize(material.size)}` : ""}`
-              : "Liên kết ngoài"}{" "}
+              : isDrive
+                ? "Bản gốc được lưu trên Google Drive"
+                : "Liên kết ngoài"}{" "}
             · {formatDate(material.createdAt)}
           </p>
           {material.description ? (
@@ -330,15 +513,28 @@ function MaterialRow({
         </div>
       </div>
       <div className="mt-4 grid grid-cols-3 gap-2 border-t-2 border-divider pt-3">
-        <button
-          type="button"
-          onClick={onPreview}
-          disabled={activeAction !== null}
-          className={`${SECONDARY_ACTION_CLASS} min-h-10 px-2 py-2 text-sm`}
-        >
-          <Eye className="h-4 w-4" aria-hidden="true" />
-          Xem
-        </button>
+        {isLink && material.url ? (
+          <a
+            href={material.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Mở ${material.title} trên ${isDrive ? "Google Drive" : "trang nguồn"}`}
+            className={`${SECONDARY_ACTION_CLASS} min-h-10 px-2 py-2 text-sm`}
+          >
+            <ExternalLink className="h-4 w-4" aria-hidden="true" />
+            {isDrive ? "Mở Drive" : "Mở link"}
+          </a>
+        ) : (
+          <button
+            type="button"
+            onClick={onPreview}
+            disabled={activeAction !== null}
+            className={`${SECONDARY_ACTION_CLASS} min-h-10 px-2 py-2 text-sm`}
+          >
+            <Eye className="h-4 w-4" aria-hidden="true" />
+            Xem
+          </button>
+        )}
         <button
           type="button"
           onClick={onEdit}
@@ -446,13 +642,15 @@ function EditMaterialDialog({
             />
           </Field>
           {material.type === "link" ? (
-            <Field label="Đường dẫn" htmlFor="edit-material-url">
+            <Field label="Liên kết Google Drive" htmlFor="edit-material-url">
               <input
                 id="edit-material-url"
                 type="url"
                 className={INPUT_CLASS}
                 value={url}
                 onChange={(event) => setUrl(event.target.value)}
+                maxLength={2048}
+                required
               />
             </Field>
           ) : null}

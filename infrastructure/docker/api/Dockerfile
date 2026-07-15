@@ -5,7 +5,7 @@
 # trong monorepo pnpm — giảm hẳn thời gian cài đặt và cache layer tốt hơn so với copy
 # nguyên repo rồi `pnpm install` toàn bộ workspace.
 
-FROM node:22-alpine AS base
+FROM node:22.23.1-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS base
 RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
 
 # ---------- 1. Prune: chỉ lấy phần liên quan tới "api" ----------
@@ -38,7 +38,7 @@ COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
 RUN pnpm install --prod --frozen-lockfile
 
 # ---------- 4. Runtime image ----------
-FROM node:22-alpine AS runner
+FROM node:22.23.1-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS runner
 ENV NODE_ENV=production
 WORKDIR /app
 RUN apk add --no-cache \

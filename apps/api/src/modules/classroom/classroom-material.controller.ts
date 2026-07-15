@@ -30,6 +30,7 @@ import { Roles } from '@/common/decorators/roles.decorator';
 import type { AuthenticatedUser } from '@/modules/auth/types/authenticated-user.type';
 import { ClassroomMaterialService } from '@/modules/classroom/classroom-material.service';
 import { CreateClassroomMaterialFileDto } from '@/modules/classroom/dto/create-classroom-material-file.dto';
+import { CreateClassroomMaterialLinkDto } from '@/modules/classroom/dto/create-classroom-material-link.dto';
 import { UpdateClassroomMaterialDto } from '@/modules/classroom/dto/update-classroom-material.dto';
 import {
   MAX_CLASSROOM_MATERIAL_FILES,
@@ -92,6 +93,17 @@ export class ClassroomMaterialController {
       dto,
       files,
     );
+  }
+
+  @Roles(UserRole.TEACHER)
+  @Post('links')
+  @ApiOperation({ summary: 'Giáo viên thêm tài liệu từ Google Drive' })
+  createLink(
+    @Param('classroomId', ParseUUIDPipe) classroomId: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() dto: CreateClassroomMaterialLinkDto,
+  ): Promise<ClassroomMaterial> {
+    return this.materialService.createLink(classroomId, currentUser.id, dto);
   }
 
   @Roles(UserRole.TEACHER)

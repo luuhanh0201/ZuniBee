@@ -6,7 +6,7 @@
 # node_modules của workspace. Kết hợp turbo prune để bước cài đặt cũng chỉ tải đúng
 # phần phụ thuộc của app "web".
 
-FROM node:22-alpine AS base
+FROM node:22.23.1-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS base
 RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
 
 # ---------- 1. Prune: chỉ lấy phần liên quan tới "web" ----------
@@ -35,7 +35,7 @@ ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 RUN pnpm turbo build --filter=web...
 
 # ---------- 3. Runtime image: chỉ copy output standalone ----------
-FROM node:22-alpine AS runner
+FROM node:22.23.1-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS runner
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app

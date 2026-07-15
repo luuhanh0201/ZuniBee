@@ -22,7 +22,9 @@ import {
   ClassroomMaterialType,
 } from '@/modules/classroom/entities/classroom-material.entity';
 import { CreateClassroomMaterialFileDto } from '@/modules/classroom/dto/create-classroom-material-file.dto';
+import { CreateClassroomMaterialLinkDto } from '@/modules/classroom/dto/create-classroom-material-link.dto';
 import { UpdateClassroomMaterialDto } from '@/modules/classroom/dto/update-classroom-material.dto';
+import { normalizeGoogleDriveMaterialUrl } from '@/modules/classroom/google-drive-material-url.util';
 import { ClassroomMaterialStorageService } from '@/modules/upload-file/classroom-material-storage.service';
 import { assertDeclaredFileType } from '@/modules/upload-file/upload-file-validation.util';
 
@@ -161,6 +163,26 @@ export class ClassroomMaterialService {
     }
   }
 
+  async createLink(
+    classroomId: string,
+    teacherId: string,
+    dto: CreateClassroomMaterialLinkDto,
+  ): Promise<MaterialResponse> {
+    await this.assertOwner(classroomId, teacherId);
+    const material = this.materialRepository.create({
+      classroomId,
+      title: dto.title,
+      description: dto.description ?? null,
+      type: ClassroomMaterialType.LINK,
+      url: normalizeGoogleDriveMaterialUrl(dto.url),
+      storageName: null,
+      originalName: null,
+      mimeType: null,
+      size: null,
+    });
+    return this.toResponse(await this.materialRepository.save(material));
+  }
+
   async update(
     classroomId: string,
     materialId: string,
@@ -177,7 +199,9 @@ export class ClassroomMaterialService {
     if (dto.title !== undefined) material.title = dto.title;
     if (dto.description !== undefined)
       material.description = dto.description || null;
-    if (dto.url !== undefined) material.url = dto.url;
+    if (dto.url !== undefined) {
+      material.url = normalizeGoogleDriveMaterialUrl(dto.url);
+    }
     return this.toResponse(await this.materialRepository.save(material));
   }
 

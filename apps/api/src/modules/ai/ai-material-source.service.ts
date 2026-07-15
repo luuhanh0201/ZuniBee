@@ -234,7 +234,7 @@ async function renderPdfPage(
       '-singlefile',
       '-png',
       '-r',
-      '160',
+      '250',
       pdfPath,
       outputRoot,
     ],
