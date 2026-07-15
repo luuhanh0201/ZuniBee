@@ -260,6 +260,63 @@ describe('AiModelClientService + usage', () => {
     );
   });
 
+  it('gửi ảnh qua OpenAI-compatible và ghi usage nguồn AI OCR', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          choices: [{ message: { content: 'Nội dung nhìn thấy trên trang.' } }],
+          usage: { prompt_tokens: 240, completion_tokens: 18 },
+        }),
+    });
+    const recordSafely = jest.fn().mockResolvedValue(undefined);
+    const client = buildClient(recordSafely, 'openrouter-secret');
+
+    await expect(
+      client.readImageText(
+        provider(),
+        Buffer.from('fake-png'),
+        'image/png',
+        {
+          source: 'document_vision_ocr',
+          referenceId: '00000000-0000-4000-8000-000000000009',
+          userId: '00000000-0000-4000-8000-000000000010',
+        },
+        3,
+      ),
+    ).resolves.toMatchObject({
+      value: 'Nội dung nhìn thấy trên trang.',
+      inputTokens: 240,
+      outputTokens: 18,
+    });
+    expect(firstRequestBody()).toMatchObject({
+      messages: [
+        { role: 'system' },
+        {
+          role: 'user',
+          content: [
+            { type: 'text' },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/png;base64,${Buffer.from('fake-png').toString('base64')}`,
+                detail: 'high',
+              },
+            },
+          ],
+        },
+      ],
+      provider: { require_parameters: true },
+    });
+    expect(recordSafely).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'document_vision_ocr',
+        inputTokens: 240,
+        outputTokens: 18,
+      }),
+    );
+  });
+
   it.each([
     {
       label: 'OpenAI GPT-5',

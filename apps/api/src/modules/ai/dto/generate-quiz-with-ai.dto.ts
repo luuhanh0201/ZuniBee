@@ -15,6 +15,7 @@ import {
 import { Transform } from 'class-transformer';
 import type {
   AiGenerationSourceType,
+  AiQuizLanguage,
   GenerateQuizWithAiRequest,
 } from '@zunibee/shared';
 import { QuizQuestionType } from '@/modules/quiz/entities/quiz-question.entity';
@@ -23,7 +24,7 @@ export class GenerateQuizWithAiDto implements GenerateQuizWithAiRequest {
   @IsString() @MinLength(2) @MaxLength(200) title!: string;
   @IsOptional() @IsString() @MaxLength(2000) description?: string;
   @IsString() @MinLength(2) @MaxLength(500) topic!: string;
-  @IsOptional() @IsString() @MaxLength(80) language?: string;
+  @IsOptional() @IsIn(['auto', 'vi', 'en']) language?: AiQuizLanguage;
   @IsOptional() @IsIn(['easy', 'medium', 'hard']) difficulty?:
     'easy' | 'medium' | 'hard';
   @IsInt() @Min(1) @Max(50) questionCount!: number;

@@ -1,4 +1,5 @@
 import { AiQuizGenerationService } from './ai-quiz-generation.service';
+import { generationLanguageInstruction } from './prompts/quiz-generation.prompt';
 import { AiGenerationJobStatus } from './entities/ai-generation-job.entity';
 import { AiProviderKind } from './entities/ai-provider.entity';
 
@@ -78,5 +79,19 @@ describe('AiQuizGenerationService credit safety', () => {
       expect.any(Number),
     );
     expect(context.saved.at(-1)?.status).toBe(AiGenerationJobStatus.FAILED);
+  });
+});
+
+describe('generationLanguageInstruction', () => {
+  it('giữ nguyên ngôn ngữ tài liệu khi chọn tự động', () => {
+    expect(generationLanguageInstruction('auto', true)).toContain(
+      'ngôn ngữ chính của tài liệu nguồn',
+    );
+    expect(generationLanguageInstruction('auto', true)).toContain('không dịch');
+  });
+
+  it('ánh xạ mã ngôn ngữ thành chỉ dẫn rõ ràng', () => {
+    expect(generationLanguageInstruction('vi', true)).toBe('tiếng Việt (vi)');
+    expect(generationLanguageInstruction('en', true)).toBe('English (en)');
   });
 });

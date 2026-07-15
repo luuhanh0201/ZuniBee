@@ -19,6 +19,11 @@ import { AiModelClientService } from './ai-model-client.service';
 import { AiGenerationJobStatus } from './entities/ai-generation-job.entity';
 import { QuizWeaknessInsightEntity } from './entities/quiz-weakness-insight.entity';
 import { calculateCharge } from './ai-quiz-generation.service';
+import {
+  insightOutputSchema,
+  insightSystemPrompt,
+  insightUserPrompt,
+} from '@/modules/ai/prompts/quiz-insight.prompt';
 
 @Injectable()
 export class QuizWeaknessInsightService {
@@ -78,7 +83,20 @@ export class QuizWeaknessInsightService {
       .addGroupBy('question.content')
       .addGroupBy('question.display_order')
       .orderBy('question.display_order', 'ASC')
-      .getRawMany();
+      .getRawMany<{
+        questionId: string;
+        content: string;
+        answered: string;
+        correct: string;
+      }>()
+      .then((rows) =>
+        rows.map((row) => ({
+          ...row,
+          // Cắt nội dung câu hỏi: đủ để AI hiểu chủ đề câu, tránh phình
+          // token vượt mức reserve (~100 token/câu).
+          content: row.content.slice(0, 300),
+        })),
+      );
     const reserve = Math.max(
       1,
       provider.baseCreditCost +
@@ -123,8 +141,8 @@ export class QuizWeaknessInsightService {
     try {
       const completion = await this.client.completeJson(
         provider,
-        'Bạn là chuyên gia phân tích đánh giá giáo dục. Chỉ trả JSON gồm summary (string), strengths, weaknesses, recommendations (mỗi field là string[]). Không nêu tên cá nhân, không suy đoán ngoài dữ liệu.',
-        `Quiz: ${quiz.title}. Có ${submitted} lượt nộp. Thống kê theo câu (answered/correct):\n${JSON.stringify(stats)}`,
+        insightSystemPrompt(),
+        insightUserPrompt(quiz.title, submitted, stats),
         { source: 'quiz_insight', referenceId: insight.id, userId: teacherId },
         insightOutputSchema(),
       );
@@ -190,24 +208,6 @@ export class QuizWeaknessInsightService {
       createdAt: row.createdAt.toISOString(),
     };
   }
-}
-
-function insightOutputSchema(): Record<string, unknown> {
-  const stringList = {
-    type: 'array',
-    items: { type: 'string' },
-  };
-  return {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      summary: { type: 'string' },
-      strengths: stringList,
-      weaknesses: stringList,
-      recommendations: stringList,
-    },
-    required: ['summary', 'strengths', 'weaknesses', 'recommendations'],
-  };
 }
 
 export function validateInsight(

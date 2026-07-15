@@ -13,7 +13,7 @@ export const CLASSROOM_MATERIAL_UPLOAD_DIR = join(
   PROTECTED_UPLOAD_ROOT,
   'classroom-materials',
 );
-export const MAX_CLASSROOM_MATERIAL_SIZE = 10 * 1024 * 1024;
+export const MAX_CLASSROOM_MATERIAL_SIZE = 50 * 1024 * 1024;
 export const MAX_CLASSROOM_MATERIAL_FILES = 10;
 export const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
 

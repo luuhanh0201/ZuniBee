@@ -3,7 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrainCircuit, Coins, FileText, Sparkles } from "lucide-react";
-import type { AiCreditAccount, QuizQuestionType } from "@zunibee/shared";
+import type {
+  AiCreditAccount,
+  AiQuizLanguage,
+  QuizQuestionType,
+} from "@zunibee/shared";
 import { useAuth } from "@/lib/auth-context";
 import { teacherQuizRoute } from "@/config/routes";
 import { getErrorMessage } from "@/components/classroom/classroom-utils";
@@ -32,6 +36,7 @@ export function AiQuizGenerator() {
   const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">(
     "medium",
   );
+  const [language, setLanguage] = useState<AiQuizLanguage>("auto");
   const [questionTypes, setQuestionTypes] = useState<QuizQuestionType[]>(
     TYPES.map((item) => item.value),
   );
@@ -59,7 +64,7 @@ export function AiQuizGenerator() {
           title,
           description,
           topic,
-          language: "vi",
+          language,
           difficulty,
           questionCount,
           questionTypes,
@@ -141,6 +146,19 @@ export function AiQuizGenerator() {
               <option value="hard">Khó</option>
             </select>
           </Field>
+          <Field label="Ngôn ngữ câu hỏi">
+            <select
+              value={language}
+              onChange={(event) =>
+                setLanguage(event.target.value as AiQuizLanguage)
+              }
+              className={INPUT_CLASS}
+            >
+              <option value="auto">Tự động theo tài liệu/chủ đề</option>
+              <option value="vi">Tiếng Việt</option>
+              <option value="en">English</option>
+            </select>
+          </Field>
           <Field label="Số câu hỏi">
             <input
               type="number"
@@ -202,7 +220,7 @@ export function AiQuizGenerator() {
                 className={INPUT_CLASS}
               />
               <span className="mt-2 block text-sm font-semibold text-muted-foreground">
-                Hỗ trợ TXT, DOCX, PDF; tối đa 10 MB. Tệp chỉ được đọc trong yêu
+                Hỗ trợ TXT, DOCX, PDF; tối đa 50 MB. Tệp chỉ được đọc trong yêu
                 cầu này.
               </span>
             </Field>

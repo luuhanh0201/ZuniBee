@@ -41,7 +41,13 @@ RUN pnpm install --prod --frozen-lockfile
 FROM node:22-alpine AS runner
 ENV NODE_ENV=production
 WORKDIR /app
-RUN addgroup -S nodejs && adduser -S nestjs -G nodejs
+RUN apk add --no-cache \
+      poppler-utils \
+      tesseract-ocr \
+      tesseract-ocr-data-eng \
+      tesseract-ocr-data-vie \
+  && addgroup -S nodejs \
+  && adduser -S nestjs -G nodejs
 
 # node_modules production (giữ nguyên cấu trúc symlink workspace của pnpm)
 COPY --from=prod-deps /app .

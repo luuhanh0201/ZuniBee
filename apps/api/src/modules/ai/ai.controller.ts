@@ -46,7 +46,7 @@ export class AiController {
         title: { type: 'string' },
         description: { type: 'string' },
         topic: { type: 'string' },
-        language: { type: 'string' },
+        language: { enum: ['auto', 'vi', 'en'], default: 'auto' },
         difficulty: { enum: ['easy', 'medium', 'hard'] },
         questionCount: { type: 'integer' },
         questionTypes: { type: 'string', description: 'JSON array' },

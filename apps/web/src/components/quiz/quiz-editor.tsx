@@ -1,13 +1,16 @@
 "use client";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
   BookOpen,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   FileQuestion,
   ListChecks,
+  Plus,
   Send,
   Settings2,
   Trash2,
@@ -60,14 +63,21 @@ export function QuizEditor({ quizId }: { quizId: string }) {
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>("questions");
   const [busy, setBusy] = useState(false);
-  const [editing, setEditing] = useState<QuizQuestion | null>(null);
+  const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(
+    null,
+  );
+  const [addingQuestion, setAddingQuestion] = useState(false);
   const [results, setResults] = useState<QuizResultRow[]>([]);
   const [assignmentTargets, setAssignmentTargets] = useState<
     Array<{ id: string; name: string }>
   >([]);
   const load = useCallback(async () => {
     try {
-      setQuiz(await getQuiz(quizId, accessToken ?? undefined));
+      const data = await getQuiz(quizId, accessToken ?? undefined);
+      const firstQuestionId = data.questions[0]?.id ?? null;
+      setQuiz(data);
+      setSelectedQuestionId(firstQuestionId);
+      setAddingQuestion(!firstQuestionId);
       setError("");
     } catch (cause) {
       setError(getErrorMessage(cause));
@@ -77,7 +87,11 @@ export function QuizEditor({ quizId }: { quizId: string }) {
     let active = true;
     getQuiz(quizId, accessToken ?? undefined)
       .then((data) => {
-        if (active) setQuiz(data);
+        if (!active) return;
+        const firstQuestionId = data.questions[0]?.id ?? null;
+        setQuiz(data);
+        setSelectedQuestionId(firstQuestionId);
+        setAddingQuestion(!firstQuestionId);
       })
       .catch((cause) => {
         if (active) setError(getErrorMessage(cause));
@@ -86,12 +100,16 @@ export function QuizEditor({ quizId }: { quizId: string }) {
       active = false;
     };
   }, [accessToken, quizId]);
-  async function action(run: () => Promise<QuizDetail>) {
+  async function action(
+    run: () => Promise<QuizDetail>,
+    onSuccess?: (next: QuizDetail) => void,
+  ) {
     setBusy(true);
     setError("");
     try {
-      setQuiz(await run());
-      setEditing(null);
+      const next = await run();
+      setQuiz(next);
+      onSuccess?.(next);
     } catch (cause) {
       setError(getErrorMessage(cause));
     } finally {
@@ -157,6 +175,10 @@ export function QuizEditor({ quizId }: { quizId: string }) {
     ["distribution", "Phân phối", Users],
     ["results", "Kết quả", ListChecks],
   ];
+  const editing = addingQuestion
+    ? null
+    : (quiz.questions.find((question) => question.id === selectedQuestionId) ??
+      null);
   return (
     <TeacherClassroomFrame>
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
@@ -221,112 +243,127 @@ export function QuizEditor({ quizId }: { quizId: string }) {
         ))}
       </nav>
       {tab === "questions" ? (
-        <section className="grid items-start gap-6 lg:grid-cols-[1fr_24rem]">
-          <div className="space-y-3">
-            {quiz.questions.map((question, index) => (
-              <article
-                key={question.id}
-                className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-sm"
-              >
-                <div className="flex gap-3">
-                  <span className="font-display text-xl font-extrabold">
-                    {index + 1}.
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <h2 className="font-extrabold">{question.content}</h2>
-                    <p className="mt-1 text-sm font-bold text-muted-foreground">
-                      {question.score} điểm · {question.options.length} lựa chọn
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    onClick={() => setEditing(question)}
-                    className={SECONDARY_ACTION_CLASS}
-                  >
-                    Sửa
-                  </button>
-                  <button
-                    disabled={index === 0 || busy}
-                    onClick={() => {
-                      const ids = quiz.questions.map((q) => q.id);
-                      [ids[index - 1], ids[index]] = [
-                        ids[index],
-                        ids[index - 1],
-                      ];
-                      void action(() =>
-                        reorderQuizQuestions(
-                          quiz.id,
-                          ids,
-                          accessToken ?? undefined,
-                        ),
-                      );
-                    }}
-                    className={SECONDARY_ACTION_CLASS}
-                  >
-                    <ArrowUp className="h-4 w-4" />
-                  </button>
-                  <button
-                    disabled={index === quiz.questions.length - 1 || busy}
-                    onClick={() => {
-                      const ids = quiz.questions.map((q) => q.id);
-                      [ids[index + 1], ids[index]] = [
-                        ids[index],
-                        ids[index + 1],
-                      ];
-                      void action(() =>
-                        reorderQuizQuestions(
-                          quiz.id,
-                          ids,
-                          accessToken ?? undefined,
-                        ),
-                      );
-                    }}
-                    className={SECONDARY_ACTION_CLASS}
-                  >
-                    <ArrowDown className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() =>
-                      void action(() =>
-                        deleteQuizQuestion(
-                          quiz.id,
-                          question.id,
-                          accessToken ?? undefined,
-                        ),
-                      )
-                    }
-                    className={DANGER_ACTION_CLASS}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Xóa
-                  </button>
-                </div>
-              </article>
-            ))}
-            {quiz.questions.length === 0 ? (
-              <div className="rounded-2xl border-2 border-dashed border-foreground p-8 text-center font-bold">
-                Chưa có câu hỏi.
-              </div>
-            ) : null}
-          </div>
-          <QuizQuestionForm
-            key={editing?.id ?? "new-question"}
-            initial={editing}
-            busy={busy}
-            onCancel={editing ? () => setEditing(null) : undefined}
-            onSave={(input) =>
-              void action(() =>
+        <section className="min-w-0 max-w-full space-y-4">
+          <div className="grid items-start gap-5 xl:grid-cols-[minmax(18rem,0.85fr)_minmax(30rem,1.15fr)]">
+            <QuestionPreview
+              question={editing}
+              questionNumber={
                 editing
-                  ? updateQuizQuestion(
+                  ? quiz.questions.findIndex(
+                      (question) => question.id === editing.id,
+                    ) + 1
+                  : null
+              }
+              adding={addingQuestion}
+              busy={busy}
+              total={quiz.questions.length}
+              onMoveUp={() => {
+                if (!editing) return;
+                const index = quiz.questions.findIndex(
+                  (question) => question.id === editing.id,
+                );
+                if (index <= 0) return;
+                const ids = quiz.questions.map((question) => question.id);
+                [ids[index - 1], ids[index]] = [ids[index], ids[index - 1]];
+                void action(() =>
+                  reorderQuizQuestions(quiz.id, ids, accessToken ?? undefined),
+                );
+              }}
+              onMoveDown={() => {
+                if (!editing) return;
+                const index = quiz.questions.findIndex(
+                  (question) => question.id === editing.id,
+                );
+                if (index < 0 || index >= quiz.questions.length - 1) return;
+                const ids = quiz.questions.map((question) => question.id);
+                [ids[index + 1], ids[index]] = [ids[index], ids[index + 1]];
+                void action(() =>
+                  reorderQuizQuestions(quiz.id, ids, accessToken ?? undefined),
+                );
+              }}
+              onDelete={() => {
+                if (!editing) return;
+                const index = quiz.questions.findIndex(
+                  (question) => question.id === editing.id,
+                );
+                const fallbackId =
+                  quiz.questions[index + 1]?.id ??
+                  quiz.questions[index - 1]?.id ??
+                  null;
+                void action(
+                  () =>
+                    deleteQuizQuestion(
                       quiz.id,
                       editing.id,
-                      input,
                       accessToken ?? undefined,
-                    )
-                  : addQuizQuestion(quiz.id, input, accessToken ?? undefined),
-              )
-            }
+                    ),
+                  (next) => {
+                    const nextId =
+                      next.questions.find(
+                        (question) => question.id === fallbackId,
+                      )?.id ??
+                      next.questions[0]?.id ??
+                      null;
+                    setSelectedQuestionId(nextId);
+                    setAddingQuestion(!nextId);
+                  },
+                );
+              }}
+            />
+            <div className="xl:sticky xl:top-24 xl:max-h-[calc(100dvh-7rem)] xl:overflow-y-auto xl:pr-1">
+              <QuizQuestionForm
+                key={editing?.id ?? "new-question"}
+                initial={editing}
+                busy={busy}
+                onCancel={
+                  quiz.questions.length
+                    ? () => {
+                        setAddingQuestion(false);
+                        setSelectedQuestionId(
+                          selectedQuestionId ?? quiz.questions[0].id,
+                        );
+                      }
+                    : undefined
+                }
+                onSave={(input) =>
+                  void action(
+                    () =>
+                      editing
+                        ? updateQuizQuestion(
+                            quiz.id,
+                            editing.id,
+                            input,
+                            accessToken ?? undefined,
+                          )
+                        : addQuizQuestion(
+                            quiz.id,
+                            input,
+                            accessToken ?? undefined,
+                          ),
+                    (next) => {
+                      const nextId = editing
+                        ? editing.id
+                        : (next.questions.at(-1)?.id ?? null);
+                      setSelectedQuestionId(nextId);
+                      setAddingQuestion(false);
+                    },
+                  )
+                }
+              />
+            </div>
+          </div>
+          <QuestionNavigator
+            questions={quiz.questions}
+            selectedQuestionId={selectedQuestionId}
+            adding={addingQuestion}
+            onSelect={(questionId) => {
+              setSelectedQuestionId(questionId);
+              setAddingQuestion(false);
+            }}
+            onAdd={() => {
+              setSelectedQuestionId(null);
+              setAddingQuestion(true);
+            }}
           />
         </section>
       ) : null}
@@ -403,6 +440,202 @@ export function QuizEditor({ quizId }: { quizId: string }) {
         />
       ) : null}
     </TeacherClassroomFrame>
+  );
+}
+
+function QuestionPreview({
+  question,
+  questionNumber,
+  adding,
+  busy,
+  total,
+  onMoveUp,
+  onMoveDown,
+  onDelete,
+}: {
+  question: QuizQuestion | null;
+  questionNumber: number | null;
+  adding: boolean;
+  busy: boolean;
+  total: number;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <article className="min-h-[30rem] rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-md xl:sticky xl:top-24">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-divider pb-4">
+        <div>
+          <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
+            Xem trước câu hỏi
+          </p>
+          <h2 className="font-display text-2xl font-extrabold">
+            {adding ? "Câu hỏi mới" : `Câu ${questionNumber ?? "--"}`}
+          </h2>
+        </div>
+        {question ? (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={busy || questionNumber === 1}
+              onClick={onMoveUp}
+              aria-label="Đưa câu hỏi lên trước"
+              className={SECONDARY_ACTION_CLASS}
+            >
+              <ArrowUp className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              disabled={busy || questionNumber === total}
+              onClick={onMoveDown}
+              aria-label="Đưa câu hỏi xuống sau"
+              className={SECONDARY_ACTION_CLASS}
+            >
+              <ArrowDown className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onDelete}
+              aria-label="Xóa câu hỏi"
+              className={DANGER_ACTION_CLASS}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null}
+      </div>
+      {question ? (
+        <div className="mt-5">
+          <p className="text-lg font-extrabold leading-relaxed">
+            {question.content}
+          </p>
+          <p className="mt-1 text-sm font-bold text-muted-foreground">
+            {question.score} điểm · {question.options.length} lựa chọn
+          </p>
+          <div className="mt-5 space-y-3">
+            {question.options.map((option, index) => (
+              <div
+                key={option.id}
+                className={`flex min-h-12 items-center gap-3 rounded-xl border-2 border-foreground px-3 font-bold ${option.isCorrect ? "bg-success-soft" : "bg-background"}`}
+              >
+                <span
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 border-foreground text-xs font-extrabold ${option.isCorrect ? "bg-success" : "bg-surface-soft"}`}
+                >
+                  {String.fromCharCode(65 + index)}
+                </span>
+                <span>{option.content}</span>
+              </div>
+            ))}
+          </div>
+          {question.explanation ? (
+            <div className="mt-5 rounded-xl border-2 border-foreground bg-warning-soft p-4">
+              <p className="text-xs font-extrabold uppercase tracking-wide">
+                Giải thích
+              </p>
+              <p className="mt-1 font-semibold">{question.explanation}</p>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="flex min-h-[22rem] flex-col items-center justify-center rounded-xl border-2 border-dashed border-divider bg-background p-8 text-center">
+          <FileQuestion className="h-10 w-10 text-muted-foreground" />
+          <h3 className="mt-4 font-display text-xl font-extrabold">
+            {adding ? "Đang soạn câu hỏi mới" : "Chưa có câu hỏi"}
+          </h3>
+          <p className="mt-2 max-w-sm font-semibold text-muted-foreground">
+            Nội dung đang nhập ở khung bên cạnh. Sau khi lưu, câu hỏi sẽ xuất
+            hiện trong thanh điều hướng phía dưới.
+          </p>
+        </div>
+      )}
+    </article>
+  );
+}
+
+function QuestionNavigator({
+  questions,
+  selectedQuestionId,
+  adding,
+  onSelect,
+  onAdd,
+}: {
+  questions: QuizQuestion[];
+  selectedQuestionId: string | null;
+  adding: boolean;
+  onSelect: (questionId: string) => void;
+  onAdd: () => void;
+}) {
+  const railRef = useRef<HTMLElement>(null);
+
+  function scrollQuestions(direction: -1 | 1) {
+    const rail = railRef.current;
+    if (!rail) return;
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    rail.scrollBy({
+      left: direction * Math.max(rail.clientWidth * 0.75, 176),
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
+  }
+
+  return (
+    <div className="sticky bottom-3 z-10 flex w-full min-w-0 max-w-[calc(100vw-2rem)] items-stretch gap-2 overflow-hidden rounded-2xl border-2 border-foreground bg-surface/95 p-2 shadow-brutal-lg backdrop-blur sm:max-w-[calc(100vw-3rem)] lg:max-w-[calc(100vw-4rem)]">
+      <button
+        type="button"
+        onClick={() => scrollQuestions(-1)}
+        aria-label="Cuộn sang các câu hỏi trước"
+        className="flex min-h-14 min-w-12 shrink-0 cursor-pointer items-center justify-center rounded-xl border-2 border-foreground bg-surface shadow-brutal-sm transition-colors hover:bg-primary focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        <ChevronLeft className="h-6 w-6" aria-hidden="true" />
+      </button>
+      <nav
+        ref={railRef}
+        aria-label="Điều hướng câu hỏi"
+        className="flex min-w-0 flex-1 gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {questions.map((question, index) => {
+          const selected = !adding && selectedQuestionId === question.id;
+          return (
+            <button
+              key={question.id}
+              type="button"
+              aria-current={selected ? "step" : undefined}
+              onClick={() => onSelect(question.id)}
+              className={`min-h-14 w-44 shrink-0 cursor-pointer rounded-xl border-2 border-foreground px-3 text-left transition-colors ${selected ? "bg-primary shadow-brutal-sm" : "bg-background hover:bg-surface-soft"}`}
+            >
+              <span className="block text-xs font-extrabold uppercase text-muted-foreground">
+                Câu {index + 1}
+              </span>
+              <span
+                className="block truncate font-bold"
+                title={question.content}
+              >
+                {question.content}
+              </span>
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          onClick={onAdd}
+          aria-current={adding ? "step" : undefined}
+          className={`flex min-h-14 min-w-14 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground px-4 font-extrabold transition-colors ${adding ? "bg-primary shadow-brutal-sm" : "bg-success-soft hover:bg-primary"}`}
+        >
+          <Plus className="h-5 w-5" />
+          <span className="hidden sm:inline">Thêm câu</span>
+        </button>
+      </nav>
+      <button
+        type="button"
+        onClick={() => scrollQuestions(1)}
+        aria-label="Cuộn sang các câu hỏi sau"
+        className="flex min-h-14 min-w-12 shrink-0 cursor-pointer items-center justify-center rounded-xl border-2 border-foreground bg-surface shadow-brutal-sm transition-colors hover:bg-primary focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        <ChevronRight className="h-6 w-6" aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 

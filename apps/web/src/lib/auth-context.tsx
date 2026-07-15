@@ -43,6 +43,21 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+// Refresh token xoay vòng sau mỗi lần dùng nên hai request refresh song song
+// (StrictMode chạy effect đôi, trang /oauth/callback, nhiều component cùng
+// khôi phục phiên) sẽ làm request thứ hai thất bại và đá người dùng về trang
+// đăng nhập. Single-flight: mọi caller trong cùng thời điểm dùng chung một
+// request duy nhất.
+let refreshInFlight: Promise<AuthResponse> | null = null;
+function refreshSession(): Promise<AuthResponse> {
+  refreshInFlight ??= apiFetch<AuthResponse>("/auth/refresh", {
+    method: "POST",
+  }).finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -53,9 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        const res = await apiFetch<AuthResponse>("/auth/refresh", {
-          method: "POST",
-        });
+        const res = await refreshSession();
         if (cancelled) return;
         setAccessToken(res.accessToken);
         setUser(res.user);
@@ -105,9 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const completeOAuth = useCallback(async () => {
     try {
-      const res = await apiFetch<AuthResponse>("/auth/refresh", {
-        method: "POST",
-      });
+      const res = await refreshSession();
       setAccessToken(res.accessToken);
       setUser(res.user);
       return res.user;

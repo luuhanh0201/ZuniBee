@@ -5,10 +5,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  Repository,
+  SelectQueryBuilder,
+} from 'typeorm';
 import type {
   AiCreditAccount,
-  AiCreditAdminUser,
+  AiCreditAdminUserPage,
   AiCreditLedgerEntry,
 } from '@zunibee/shared';
 import { User } from '@/modules/user/entities/user.entity';
@@ -49,38 +54,82 @@ export class AiCreditService {
       })
     ).map((row) => this.toLedger(row));
   }
-  async searchUsers(query = ''): Promise<AiCreditAdminUser[]> {
-    const builder = this.users
-      .createQueryBuilder('user')
+  async searchUsers(
+    query = '',
+    requestedPage = 1,
+    requestedPageSize = 20,
+  ): Promise<AiCreditAdminUserPage> {
+    const pageSize = Math.min(100, Math.max(5, requestedPageSize));
+    const base = this.users.createQueryBuilder('user');
+    applyUserSearch(base, query);
+    const [total, roleRows, totalsRaw] = await Promise.all([
+      base.clone().getCount(),
+      base
+        .clone()
+        .select('user.role', 'role')
+        .addSelect('COUNT(*)', 'count')
+        .groupBy('user.role')
+        .getRawMany<{ role: string; count: string }>(),
+      (() => {
+        const totals = this.users
+          .createQueryBuilder('user')
+          .leftJoin(
+            AiCreditAccountEntity,
+            'account',
+            'account.user_id = user.id',
+          )
+          .select('COALESCE(SUM(account.balance), 0)', 'balance')
+          .addSelect('COALESCE(SUM(account.reserved), 0)', 'reserved');
+        applyUserSearch(totals, query);
+        return totals.getRawOne<{ balance: string; reserved: string }>();
+      })(),
+    ]);
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(totalPages, Math.max(1, requestedPage));
+    const userRows = await base
+      .clone()
       .orderBy('user.createdAt', 'DESC')
-      .take(30);
-    if (query.trim())
-      builder.where(
-        'LOWER(user.email) LIKE :query OR LOWER(user.fullName) LIKE :query',
-        { query: `%${query.trim().toLowerCase()}%` },
-      );
-    const users = await builder.getMany();
-    const accounts = await this.accounts.findBy(
-      users.map((user) => ({ userId: user.id })),
-    );
+      .addOrderBy('user.id', 'DESC')
+      .skip((page - 1) * pageSize)
+      .take(pageSize)
+      .getMany();
+    const accounts = userRows.length
+      ? await this.accounts.findBy(
+          userRows.map((user) => ({ userId: user.id })),
+        )
+      : [];
     const byUser = new Map(
       accounts.map((account) => [account.userId, account]),
     );
-    return users.map((user) => ({
-      id: user.id,
-      email: user.email,
-      fullName: user.fullName,
-      role: user.role,
-      credit: this.toAccount(
-        byUser.get(user.id) ??
-          this.accounts.create({
-            userId: user.id,
-            balance: 0,
-            reserved: 0,
-            updatedAt: new Date(),
-          }),
-      ),
-    }));
+    const balance = Number(totalsRaw?.balance ?? 0);
+    const reserved = Number(totalsRaw?.reserved ?? 0);
+    const roleCounts = Object.fromEntries(
+      roleRows.map((row) => [row.role, Number(row.count)]),
+    );
+    return {
+      items: userRows.map((user) => ({
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+        credit: this.toAccount(
+          byUser.get(user.id) ??
+            this.accounts.create({
+              userId: user.id,
+              balance: 0,
+              reserved: 0,
+              updatedAt: new Date(),
+            }),
+        ),
+      })),
+      pagination: { page, pageSize, total, totalPages },
+      totals: { balance, reserved, available: balance - reserved },
+      roleCounts: {
+        student: roleCounts.student ?? 0,
+        teacher: roleCounts.teacher ?? 0,
+        admin: roleCounts.admin ?? 0,
+      },
+    };
   }
   async grant(
     userId: string,
@@ -278,6 +327,21 @@ export class AiCreditService {
       createdAt: row.createdAt.toISOString(),
     };
   }
+}
+
+function applyUserSearch(
+  builder: SelectQueryBuilder<User>,
+  query: string,
+): SelectQueryBuilder<User> {
+  // Trang AI Credit không thao tác trên user đã xóa mềm.
+  builder.andWhere('user.deleted_at IS NULL');
+  const normalized = query.trim().toLowerCase();
+  if (normalized)
+    builder.andWhere(
+      '(LOWER(user.email) LIKE :userQuery OR LOWER(user.fullName) LIKE :userQuery)',
+      { userQuery: `%${normalized}%` },
+    );
+  return builder;
 }
 
 export function resolveCreditSettlement(

@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   UnauthorizedException,
@@ -10,7 +11,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID, randomInt, createHash } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
-import { UserRole, type AuthUser } from '@zunibee/shared';
+import { UserRole, UserStatus, type AuthUser } from '@zunibee/shared';
 import { UserService } from '@/modules/user/user.service';
 import { User } from '@/modules/user/entities/user.entity';
 import { UserSession } from '@/modules/auth/entities/user-session.entity';
@@ -74,6 +75,22 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
+/**
+ * Grace window cho refresh đồng thời: token vừa bị xoay vòng trong khoảng này
+ * vẫn dùng lại được (2 tab cùng refresh, StrictMode gọi đôi...). Ngắn để
+ * token bị lộ sau khi xoay vòng chỉ có giá trị trong vài chục giây.
+ */
+const REFRESH_ROTATION_GRACE_MS = 30_000;
+
+function isRecentlyRotated(session: UserSession): boolean {
+  return (
+    !session.isActive &&
+    session.revokeReason === 'rotated' &&
+    session.revokedAt instanceof Date &&
+    session.revokedAt.getTime() > Date.now() - REFRESH_ROTATION_GRACE_MS
+  );
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -115,9 +132,26 @@ export class AuthService {
     if (!passwordMatches) {
       throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
     }
+    this.assertCanAuthenticate(user);
 
     await this.userService.updateLastLogin(user.id);
     return this.issueSession(user, ctx);
+  }
+
+  /**
+   * Chặn phát session cho tài khoản đã xóa mềm hoặc bị khóa. JWT strategy
+   * không query DB nên access token đang lưu hành vẫn sống tối đa TTL
+   * (15 phút) — khóa/xóa luôn đi kèm thu hồi session để refresh chết ngay.
+   */
+  private assertCanAuthenticate(user: User): void {
+    if (user.deletedAt) {
+      throw new UnauthorizedException('Tài khoản không còn khả dụng');
+    }
+    if (user.status === UserStatus.BANNED) {
+      throw new ForbiddenException(
+        'Tài khoản đã bị khóa, vui lòng liên hệ quản trị viên',
+      );
+    }
   }
 
   async loginWithGoogle(profile: GoogleOAuthProfile, ctx: RequestContext = {}) {
@@ -128,6 +162,7 @@ export class AuthService {
     if (!user) {
       user = await this.userService.findByEmail(profile.email);
     }
+    if (user) this.assertCanAuthenticate(user);
     if (!user) {
       user = await this.userService.create({
         email: profile.email,
@@ -149,6 +184,7 @@ export class AuthService {
     ctx: RequestContext = {},
   ) {
     let user = await this.userService.findByFacebookId(profile.facebookId);
+    if (user) this.assertCanAuthenticate(user);
     if (!user) {
       user = await this.userService.create({
         email: null,
@@ -180,13 +216,16 @@ export class AuthService {
       where: { sessionToken: payload.sid, userId: payload.sub },
     });
 
-    if (
-      !session ||
-      !session.isActive ||
-      session.revokedAt ||
-      session.expiresAt < new Date() ||
-      session.refreshToken !== hashToken(refreshToken)
-    ) {
+    // Refresh token xoay vòng sau mỗi lần dùng, nhưng nhiều tab/request có thể
+    // cùng gửi token cũ gần như đồng thời. Cho phép token VỪA bị xoay vòng
+    // (trong grace window) dùng lại một lần thay vì đá người dùng ra login.
+    const isUsable =
+      session &&
+      session.refreshToken === hashToken(refreshToken) &&
+      session.expiresAt >= new Date() &&
+      ((session.isActive && !session.revokedAt) || isRecentlyRotated(session));
+
+    if (!session || !isUsable) {
       throw new UnauthorizedException('Phiên đăng nhập đã hết hạn');
     }
 
@@ -194,12 +233,15 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('Người dùng không tồn tại');
     }
+    this.assertCanAuthenticate(user);
 
     // Xoay vòng refresh token: phát hành cặp token mới, vô hiệu hoá session cũ.
-    session.isActive = false;
-    session.revokedAt = new Date();
-    session.revokeReason = 'rotated';
-    await this.sessionRepository.save(session);
+    if (session.isActive) {
+      session.isActive = false;
+      session.revokedAt = new Date();
+      session.revokeReason = 'rotated';
+      await this.sessionRepository.save(session);
+    }
 
     return this.issueSession(user, ctx);
   }
@@ -221,6 +263,10 @@ export class AuthService {
     const user = await this.userService.findByEmail(dto.email);
     if (!user?.email) {
       // Không tiết lộ email có tồn tại hay không.
+      return;
+    }
+    if (user.deletedAt || user.status === UserStatus.BANNED) {
+      // Tài khoản đã xóa/bị khóa: im lặng như email không tồn tại.
       return;
     }
 
@@ -264,6 +310,8 @@ export class AuthService {
         'Mật khẩu tạm đã hết hạn, vui lòng yêu cầu lại',
       );
     }
+
+    this.assertCanAuthenticate(user);
 
     const matches = await bcrypt.compare(dto.tempPassword, user.passwordHash);
     if (!matches) {

@@ -1,11 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import {
   Activity,
   Asterisk,
-  BarChart3,
   BatteryFull,
   BatteryLow,
   BatteryMedium,
@@ -14,15 +12,10 @@ import {
   Check,
   ChevronDown,
   CircleDollarSign,
-  CloudCog,
-  Cpu,
   Gauge,
   HardDrive,
   KeyRound,
-  LayoutDashboard,
   Loader2,
-  LogOut,
-  Menu,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -30,11 +23,9 @@ import {
   Route,
   Search,
   ServerCog,
-  Settings2,
   ShieldCheck,
   Sparkles,
   Trash2,
-  Users,
   Wrench,
   X,
   Zap,
@@ -43,10 +34,8 @@ import type {
   AiProvider,
   AiProviderKind,
   AiProviderMetrics,
-  AuthUser,
   CreateAiProviderRequest,
 } from "@zunibee/shared";
-import { ROUTES } from "@/config/routes";
 import { useAuth } from "@/lib/auth-context";
 import {
   adminCreateAiProvider,
@@ -72,7 +61,7 @@ import {
 } from "./ai-provider-catalog";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { MetricCard, formatNumber } from "./metric-card";
-import { AdminAiUsageSection } from "./admin-ai-usage-section";
+import { Pagination, paginateItems } from "@/components/admin/pagination";
 
 function strengthIcon(strength: AiModelStrength | null): React.ReactNode {
   if (strength === "strong")
@@ -179,16 +168,17 @@ const fetchProviderData = (accessToken: string) =>
   ]);
 
 export function AdminAiConsole() {
-  const { accessToken, logout, user } = useAuth();
+  const { accessToken } = useAuth();
   const [providers, setProviders] = useState<AiProvider[]>([]);
   const [metrics, setMetrics] = useState<AiProviderMetrics | null>(null);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"all" | "active" | "inactive">("all");
+  const [providerPage, setProviderPage] = useState(1);
+  const [providerPageSize, setProviderPageSize] = useState(6);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ProviderDraft>(EMPTY_DRAFT);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
@@ -200,9 +190,6 @@ export function AdminAiConsole() {
   const [isDiscoveringModels, setIsDiscoveringModels] = useState(false);
   const [isDiscoveringPricing, setIsDiscoveringPricing] = useState(false);
   const [isTestingDraft, setIsTestingDraft] = useState(false);
-  const [activeSection, setActiveSection] = useState<"providers" | "usage">(
-    "providers",
-  );
   const [draftConnectionTest, setDraftConnectionTest] =
     useState<DraftConnectionTest | null>(null);
 
@@ -257,10 +244,13 @@ export function AdminAiConsole() {
       return matchesQuery && matchesStatus;
     });
   }, [providers, query, status]);
+  const paginatedProviders = useMemo(
+    () => paginateItems(filteredProviders, providerPage, providerPageSize),
+    [filteredProviders, providerPage, providerPageSize],
+  );
 
   const activeCount = metrics?.activeProviders ?? 0;
   const onlineCount = metrics?.onlineProviders ?? 0;
-  const systemStatus = getSystemStatus(metrics, isLoading);
 
   function openCreate() {
     setEditingId(null);
@@ -613,254 +603,209 @@ export function AdminAiConsole() {
   }
 
   return (
-    <div className="min-h-dvh bg-background text-foreground lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
-      <AdminSidebar
-        mobileOpen={mobileNavOpen}
-        onClose={() => setMobileNavOpen(false)}
-        user={user!}
-        onLogout={() => void logout()}
-        activeSection={activeSection}
-        onSelectSection={(section) => {
-          setActiveSection(section);
-          setMobileNavOpen(false);
-        }}
-      />
-
-      <div className="min-w-0">
-        <header className="sticky top-0 z-20 flex min-h-20 items-center justify-between gap-4 border-b-2 border-foreground bg-surface/95 px-4 backdrop-blur sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setMobileNavOpen(true)}
-              aria-label="Mở menu quản trị"
-              className={`flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl border-2 border-foreground bg-surface shadow-brutal-sm lg:hidden ${buttonFocus}`}
-            >
-              <Menu className="h-5 w-5" aria-hidden="true" />
-            </button>
-            <div>
-              <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
-                Quản trị hệ thống
-              </p>
-              <h1 className="font-display text-xl font-extrabold sm:text-2xl">
-                {activeSection === "usage" ? "Thống kê AI" : "AI Providers"}
-              </h1>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <span
-              className={`hidden rounded-full border-2 border-foreground px-3 py-1.5 text-sm font-extrabold sm:inline-flex sm:items-center sm:gap-2 ${systemStatus.containerClass}`}
-            >
-              <span
-                className={`h-2.5 w-2.5 rounded-full ${systemStatus.dotClass}`}
-              />
-              {systemStatus.label}
+    <>
+      <section className="relative overflow-hidden rounded-3xl border-[3px] border-foreground bg-purple px-5 py-7 text-white shadow-brutal-xl sm:px-8">
+        <div
+          aria-hidden="true"
+          className="absolute -right-9 -top-14 h-44 w-44 rotate-12 rounded-[2.5rem] border-[3px] border-foreground bg-primary"
+        />
+        <div className="relative flex flex-col justify-between gap-6 md:flex-row md:items-end">
+          <div>
+            <span className="inline-flex items-center gap-2 rounded-full border-2 border-foreground bg-surface px-3 py-1.5 text-sm font-extrabold text-foreground shadow-brutal-sm">
+              <Sparkles className="h-4 w-4" aria-hidden="true" />
+              AI Control Center
             </span>
-            <span className="flex h-11 w-11 items-center justify-center rounded-xl border-2 border-foreground bg-primary font-display font-extrabold shadow-brutal-sm">
-              {initials(user?.fullName ?? "Admin")}
-            </span>
+            <h2 className="mt-5 max-w-2xl font-display text-3xl font-extrabold sm:text-4xl">
+              Điều phối mô hình AI từ một nơi duy nhất.
+            </h2>
+            <p className="mt-3 max-w-2xl font-semibold leading-relaxed text-on-purple-muted">
+              Quản lý endpoint, model, chi phí và provider mặc định cho toàn bộ
+              tính năng AI của ZuniBee.
+            </p>
           </div>
-        </header>
-
-        <main className="mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-8 lg:py-9">
-          {activeSection === "usage" ? (
-            <AdminAiUsageSection accessToken={accessToken} />
-          ) : null}
-          {activeSection === "providers" ? (
-          <>
-          <section className="relative overflow-hidden rounded-3xl border-[3px] border-foreground bg-purple px-5 py-7 text-white shadow-brutal-xl sm:px-8">
-            <div
-              aria-hidden="true"
-              className="absolute -right-9 -top-14 h-44 w-44 rotate-12 rounded-[2.5rem] border-[3px] border-foreground bg-primary"
-            />
-            <div className="relative flex flex-col justify-between gap-6 md:flex-row md:items-end">
-              <div>
-                <span className="inline-flex items-center gap-2 rounded-full border-2 border-foreground bg-surface px-3 py-1.5 text-sm font-extrabold text-foreground shadow-brutal-sm">
-                  <Sparkles className="h-4 w-4" aria-hidden="true" />
-                  AI Control Center
-                </span>
-                <h2 className="mt-5 max-w-2xl font-display text-3xl font-extrabold sm:text-4xl">
-                  Điều phối mô hình AI từ một nơi duy nhất.
-                </h2>
-                <p className="mt-3 max-w-2xl font-semibold leading-relaxed text-on-purple-muted">
-                  Quản lý endpoint, model, chi phí và provider mặc định cho toàn
-                  bộ tính năng AI của ZuniBee.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={openCreate}
-                className={`inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 self-start rounded-xl border-2 border-foreground bg-primary px-5 font-extrabold text-foreground shadow-brutal-md transition-[transform,box-shadow] duration-200 hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-lg motion-reduce:transform-none md:self-auto ${buttonFocus}`}
-              >
-                <Plus className="h-5 w-5" aria-hidden="true" />
-                Thêm provider
-              </button>
-            </div>
-          </section>
-
-          <section
-            aria-label="Tổng quan provider"
-            className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+          <button
+            type="button"
+            onClick={openCreate}
+            className={`inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 self-start rounded-xl border-2 border-foreground bg-primary px-5 font-extrabold text-foreground shadow-brutal-md transition-[transform,box-shadow] duration-200 hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-lg motion-reduce:transform-none md:self-auto ${buttonFocus}`}
           >
-            <MetricCard
-              icon={ServerCog}
-              label="Tổng provider"
-              value={String(metrics?.totalProviders ?? 0).padStart(2, "0")}
-              helper={`${activeCount} đang hoạt động`}
-              color="bg-secondary-soft"
-            />
-            <MetricCard
-              icon={Activity}
-              label="Kết nối ổn định"
-              value={`${onlineCount}/${activeCount}`}
-              helper="Theo lần kiểm tra gần nhất"
-              color="bg-success-soft"
-            />
-            <MetricCard
-              icon={Zap}
-              label="Tác vụ AI tháng này"
-              value={formatNumber(metrics?.requestsThisMonth ?? 0)}
-              helper="Sinh quiz và phân tích kết quả"
-              color="bg-warning-soft"
-            />
-            <MetricCard
-              icon={Gauge}
-              label="Độ trễ trung bình"
-              value={
-                metrics?.averageLatencyMs == null
-                  ? "--"
-                  : `${metrics.averageLatencyMs}ms`
-              }
-              helper="Từ các provider online đã kiểm tra"
-              color="bg-primary"
-            />
-          </section>
+            <Plus className="h-5 w-5" aria-hidden="true" />
+            Thêm provider
+          </button>
+        </div>
+      </section>
 
-          {notice ? (
-            <div
-              role="status"
-              className={`mt-6 flex items-center justify-between gap-3 rounded-xl border-2 border-foreground px-4 py-3 font-bold shadow-brutal-sm ${notice.tone === "success" ? "bg-success-soft" : "bg-destructive-soft"}`}
-            >
-              <span className="flex items-center gap-2">
-                <Check className="h-5 w-5" aria-hidden="true" />
-                {notice.message}
-              </span>
+      <section
+        aria-label="Tổng quan provider"
+        className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+      >
+        <MetricCard
+          icon={ServerCog}
+          label="Tổng provider"
+          value={String(metrics?.totalProviders ?? 0).padStart(2, "0")}
+          helper={`${activeCount} đang hoạt động`}
+          color="bg-secondary-soft"
+        />
+        <MetricCard
+          icon={Activity}
+          label="Kết nối ổn định"
+          value={`${onlineCount}/${activeCount}`}
+          helper="Theo lần kiểm tra gần nhất"
+          color="bg-success-soft"
+        />
+        <MetricCard
+          icon={Zap}
+          label="Tác vụ AI tháng này"
+          value={formatNumber(metrics?.requestsThisMonth ?? 0)}
+          helper="Sinh quiz và phân tích kết quả"
+          color="bg-warning-soft"
+        />
+        <MetricCard
+          icon={Gauge}
+          label="Độ trễ trung bình"
+          value={
+            metrics?.averageLatencyMs == null
+              ? "--"
+              : `${metrics.averageLatencyMs}ms`
+          }
+          helper="Từ các provider online đã kiểm tra"
+          color="bg-primary"
+        />
+      </section>
+
+      {notice ? (
+        <div
+          role="status"
+          className={`mt-6 flex items-center justify-between gap-3 rounded-xl border-2 border-foreground px-4 py-3 font-bold shadow-brutal-sm ${notice.tone === "success" ? "bg-success-soft" : "bg-destructive-soft"}`}
+        >
+          <span className="flex items-center gap-2">
+            <Check className="h-5 w-5" aria-hidden="true" />
+            {notice.message}
+          </span>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            aria-label="Đóng thông báo"
+            className={`cursor-pointer rounded-md p-1 hover:bg-surface/60 ${buttonFocus}`}
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
+
+      <section className="mt-6 rounded-2xl border-2 border-foreground bg-surface shadow-brutal-md">
+        <div className="flex flex-col gap-4 border-b-2 border-foreground p-4 sm:p-5 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <h2 className="font-display text-2xl font-extrabold">
+              Danh sách provider
+            </h2>
+            <p className="mt-1 font-semibold text-muted-foreground">
+              Cấu hình provider dùng để tạo quiz và phân tích kết quả.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <label className="relative block min-w-0 sm:w-72">
+              <span className="sr-only">Tìm provider</span>
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <input
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setProviderPage(1);
+                }}
+                placeholder="Tìm tên, model, endpoint..."
+                className={`min-h-11 w-full rounded-xl border-2 border-foreground bg-background py-2 pl-10 pr-3 font-semibold outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring`}
+              />
+            </label>
+            <label className="relative block">
+              <span className="sr-only">Lọc trạng thái</span>
+              <select
+                value={status}
+                onChange={(event) => {
+                  setStatus(
+                    event.target.value as "all" | "active" | "inactive",
+                  );
+                  setProviderPage(1);
+                }}
+                className="min-h-11 w-full cursor-pointer appearance-none rounded-xl border-2 border-foreground bg-background py-2 pl-3 pr-10 font-bold outline-none focus:ring-2 focus:ring-ring sm:w-auto"
+              >
+                <option value="all">Tất cả trạng thái</option>
+                <option value="active">Đang bật</option>
+                <option value="inactive">Đang tắt</option>
+              </select>
+              <ChevronDown
+                className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2"
+                aria-hidden="true"
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="grid gap-4 p-4 sm:p-5 xl:grid-cols-2">
+          {isLoading ? (
+            <div className="flex min-h-52 items-center justify-center gap-3 font-bold text-muted-foreground xl:col-span-2">
+              <Loader2 className="h-6 w-6 animate-spin" aria-hidden="true" />
+              Đang tải cấu hình provider thật...
+            </div>
+          ) : loadError ? (
+            <div className="rounded-2xl border-2 border-destructive bg-destructive-soft p-8 text-center xl:col-span-2">
+              <p className="font-extrabold">{loadError}</p>
               <button
                 type="button"
-                onClick={() => setNotice(null)}
-                aria-label="Đóng thông báo"
-                className={`cursor-pointer rounded-md p-1 hover:bg-surface/60 ${buttonFocus}`}
+                onClick={() => {
+                  setIsLoading(true);
+                  void loadData();
+                }}
+                className={`mt-4 min-h-10 cursor-pointer rounded-xl border-2 border-foreground bg-surface px-4 font-bold ${buttonFocus}`}
               >
-                <X className="h-4 w-4" aria-hidden="true" />
+                Thử tải lại
               </button>
             </div>
           ) : null}
-
-          <section className="mt-6 rounded-2xl border-2 border-foreground bg-surface shadow-brutal-md">
-            <div className="flex flex-col gap-4 border-b-2 border-foreground p-4 sm:p-5 xl:flex-row xl:items-center xl:justify-between">
-              <div>
-                <h2 className="font-display text-2xl font-extrabold">
-                  Danh sách provider
-                </h2>
-                <p className="mt-1 font-semibold text-muted-foreground">
-                  Cấu hình provider dùng để tạo quiz và phân tích kết quả.
-                </p>
-              </div>
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <label className="relative block min-w-0 sm:w-72">
-                  <span className="sr-only">Tìm provider</span>
-                  <Search
-                    className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <input
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Tìm tên, model, endpoint..."
-                    className={`min-h-11 w-full rounded-xl border-2 border-foreground bg-background py-2 pl-10 pr-3 font-semibold outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring`}
-                  />
-                </label>
-                <label className="relative block">
-                  <span className="sr-only">Lọc trạng thái</span>
-                  <select
-                    value={status}
-                    onChange={(event) =>
-                      setStatus(
-                        event.target.value as "all" | "active" | "inactive",
-                      )
-                    }
-                    className="min-h-11 w-full cursor-pointer appearance-none rounded-xl border-2 border-foreground bg-background py-2 pl-3 pr-10 font-bold outline-none focus:ring-2 focus:ring-ring sm:w-auto"
-                  >
-                    <option value="all">Tất cả trạng thái</option>
-                    <option value="active">Đang bật</option>
-                    <option value="inactive">Đang tắt</option>
-                  </select>
-                  <ChevronDown
-                    className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2"
-                    aria-hidden="true"
-                  />
-                </label>
-              </div>
+          {!isLoading && !loadError
+            ? paginatedProviders.items.map((provider) => (
+                <ProviderCard
+                  key={provider.id}
+                  provider={provider}
+                  onEdit={() => openEdit(provider)}
+                  onToggle={() => void toggleProvider(provider)}
+                  onDefault={() => void setDefaultProvider(provider.id)}
+                  onDelete={() => void deleteProvider(provider)}
+                  onTest={() => void testConnection(provider.id)}
+                  checking={checkingIds.has(provider.id)}
+                  busy={actionId === provider.id}
+                />
+              ))
+            : null}
+          {!isLoading && !loadError && !filteredProviders.length ? (
+            <div className="rounded-2xl border-2 border-dashed border-foreground bg-surface-soft p-10 text-center xl:col-span-2">
+              <Search className="mx-auto h-8 w-8 text-muted-foreground" />
+              <h3 className="mt-3 font-display text-xl font-extrabold">
+                Không tìm thấy provider
+              </h3>
+              <p className="mt-1 font-semibold text-muted-foreground">
+                {providers.length
+                  ? "Thử từ khóa hoặc bộ lọc trạng thái khác."
+                  : "Chưa có provider nào trong database. Hãy thêm provider đầu tiên."}
+              </p>
             </div>
-
-            <div className="grid gap-4 p-4 sm:p-5 xl:grid-cols-2">
-              {isLoading ? (
-                <div className="flex min-h-52 items-center justify-center gap-3 font-bold text-muted-foreground xl:col-span-2">
-                  <Loader2
-                    className="h-6 w-6 animate-spin"
-                    aria-hidden="true"
-                  />
-                  Đang tải cấu hình provider thật...
-                </div>
-              ) : loadError ? (
-                <div className="rounded-2xl border-2 border-destructive bg-destructive-soft p-8 text-center xl:col-span-2">
-                  <p className="font-extrabold">{loadError}</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsLoading(true);
-                      void loadData();
-                    }}
-                    className={`mt-4 min-h-10 cursor-pointer rounded-xl border-2 border-foreground bg-surface px-4 font-bold ${buttonFocus}`}
-                  >
-                    Thử tải lại
-                  </button>
-                </div>
-              ) : null}
-              {!isLoading && !loadError
-                ? filteredProviders.map((provider) => (
-                    <ProviderCard
-                      key={provider.id}
-                      provider={provider}
-                      onEdit={() => openEdit(provider)}
-                      onToggle={() => void toggleProvider(provider)}
-                      onDefault={() => void setDefaultProvider(provider.id)}
-                      onDelete={() => void deleteProvider(provider)}
-                      onTest={() => void testConnection(provider.id)}
-                      checking={checkingIds.has(provider.id)}
-                      busy={actionId === provider.id}
-                    />
-                  ))
-                : null}
-              {!isLoading && !loadError && !filteredProviders.length ? (
-                <div className="rounded-2xl border-2 border-dashed border-foreground bg-surface-soft p-10 text-center xl:col-span-2">
-                  <Search className="mx-auto h-8 w-8 text-muted-foreground" />
-                  <h3 className="mt-3 font-display text-xl font-extrabold">
-                    Không tìm thấy provider
-                  </h3>
-                  <p className="mt-1 font-semibold text-muted-foreground">
-                    {providers.length
-                      ? "Thử từ khóa hoặc bộ lọc trạng thái khác."
-                      : "Chưa có provider nào trong database. Hãy thêm provider đầu tiên."}
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          </section>
-          </>
           ) : null}
-        </main>
-      </div>
-
+        </div>
+        {!isLoading && !loadError ? (
+          <Pagination
+            {...paginatedProviders.pagination}
+            itemLabel="provider"
+            pageSizeOptions={[6, 12, 24]}
+            onPageChange={setProviderPage}
+            onPageSizeChange={(pageSize) => {
+              setProviderPageSize(pageSize);
+              setProviderPage(1);
+            }}
+          />
+        ) : null}
+      </section>
       {editorOpen ? (
         <ProviderEditor
           draft={draft}
@@ -891,120 +836,6 @@ export function AdminAiConsole() {
           )}
         />
       ) : null}
-    </div>
-  );
-}
-
-function AdminSidebar({
-  mobileOpen,
-  onClose,
-  user,
-  onLogout,
-  activeSection,
-  onSelectSection,
-}: {
-  mobileOpen: boolean;
-  onClose: () => void;
-  user: AuthUser;
-  onLogout: () => void;
-  activeSection: "providers" | "usage";
-  onSelectSection: (section: "providers" | "usage") => void;
-}) {
-  const items: {
-    icon: typeof Cpu;
-    label: string;
-    section?: "providers" | "usage";
-  }[] = [
-    { icon: LayoutDashboard, label: "Tổng quan" },
-    { icon: CloudCog, label: "AI Providers", section: "providers" },
-    { icon: BarChart3, label: "Thống kê AI", section: "usage" },
-    { icon: CircleDollarSign, label: "AI Credit" },
-    { icon: Users, label: "Người dùng" },
-    { icon: ShieldCheck, label: "Phân quyền" },
-    { icon: Settings2, label: "Cài đặt" },
-  ];
-  return (
-    <>
-      {mobileOpen ? (
-        <button
-          type="button"
-          aria-label="Đóng menu quản trị"
-          onClick={onClose}
-          className="fixed inset-0 z-30 cursor-default bg-foreground/40 lg:hidden"
-        />
-      ) : null}
-      <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col border-r-2 border-foreground bg-surface transition-transform duration-200 motion-reduce:transition-none lg:sticky lg:top-0 lg:h-dvh lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
-      >
-        <div className="flex min-h-20 items-center justify-between border-b-2 border-foreground px-5">
-          <Link
-            href={ROUTES.home}
-            className={`flex cursor-pointer items-center gap-3 rounded-lg ${buttonFocus}`}
-          >
-            <span className="flex h-11 w-11 items-center justify-center rounded-xl border-2 border-foreground bg-primary shadow-brutal-sm">
-              <Sparkles className="h-5 w-5" aria-hidden="true" />
-            </span>
-            <span>
-              <strong className="block font-display text-xl">ZuniBee</strong>
-              <small className="font-extrabold uppercase tracking-wider text-muted-foreground">
-                Admin
-              </small>
-            </span>
-          </Link>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Đóng menu"
-            className={`cursor-pointer rounded-lg p-2 hover:bg-surface-soft lg:hidden ${buttonFocus}`}
-          >
-            <X className="h-5 w-5" aria-hidden="true" />
-          </button>
-        </div>
-        <nav aria-label="Điều hướng quản trị" className="flex-1 space-y-1 p-4">
-          <p className="px-3 pb-2 pt-3 text-xs font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
-            Workspace
-          </p>
-          {items.map(({ icon: Icon, label, section }) => {
-            const active = section === activeSection;
-            return (
-              <button
-                key={label}
-                type="button"
-                aria-current={active ? "page" : undefined}
-                disabled={!section}
-                onClick={section ? () => onSelectSection(section) : undefined}
-                className={`flex min-h-11 w-full items-center gap-3 rounded-xl border-2 px-3 text-left font-bold transition-colors duration-200 ${active ? "cursor-pointer border-foreground bg-primary shadow-brutal-sm" : section ? "cursor-pointer border-transparent hover:bg-surface-soft" : "cursor-not-allowed border-transparent text-muted-foreground"} ${buttonFocus}`}
-              >
-                <Icon className="h-5 w-5" aria-hidden="true" />
-                {label}
-              </button>
-            );
-          })}
-        </nav>
-        <div className="border-t-2 border-foreground p-4">
-          <div className="rounded-2xl border-2 border-foreground bg-secondary-soft p-4 shadow-brutal-sm">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-foreground bg-surface font-extrabold">
-                {initials(user.fullName)}
-              </span>
-              <div className="min-w-0">
-                <p className="truncate font-extrabold">{user.fullName}</p>
-                <p className="truncate text-xs font-bold text-muted-foreground">
-                  {user.email ?? "Quản trị viên"}
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={onLogout}
-              className={`mt-3 flex min-h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-surface px-3 font-bold transition-colors hover:bg-warning-soft ${buttonFocus}`}
-            >
-              <LogOut className="h-4 w-4" aria-hidden="true" />
-              Đăng xuất
-            </button>
-          </div>
-        </div>
-      </aside>
     </>
   );
 }
@@ -1584,54 +1415,11 @@ function getErrorMessage(cause: unknown): string {
     : "Không thể kết nối tới API quản trị AI";
 }
 
-function getSystemStatus(
-  metrics: AiProviderMetrics | null,
-  loading: boolean,
-): { label: string; containerClass: string; dotClass: string } {
-  if (loading)
-    return {
-      label: "Đang đồng bộ",
-      containerClass: "bg-surface-soft",
-      dotClass: "animate-pulse bg-primary",
-    };
-  if (!metrics?.totalProviders)
-    return {
-      label: "Chưa cấu hình provider",
-      containerClass: "bg-warning-soft",
-      dotClass: "bg-warning",
-    };
-  if (
-    metrics.activeProviders > 0 &&
-    metrics.onlineProviders === metrics.activeProviders
-  )
-    return {
-      label: "Hệ thống ổn định",
-      containerClass: "bg-success-soft",
-      dotClass: "bg-success",
-    };
-  return {
-    label: "Cần kiểm tra kết nối",
-    containerClass: "bg-warning-soft",
-    dotClass: "bg-warning",
-  };
-}
-
 function formatDateTime(value: string): string {
   return new Intl.DateTimeFormat("vi-VN", {
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date(value));
-}
-
-function initials(name: string): string {
-  return (
-    name
-      .trim()
-      .split(/\s+/)
-      .slice(-2)
-      .map((part) => part[0]?.toUpperCase())
-      .join("") || "AD"
-  );
 }
 
 function providerConnectionFingerprint(draft: ProviderDraft): string {

@@ -20,7 +20,7 @@ import { formatDate, getErrorMessage } from "./classroom-utils";
 import { MaterialPreviewDialog } from "./material-preview-dialog";
 import { MaterialDescription } from "./material-description";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const MAX_FILES = 10;
 
 export function TeacherMaterialsManager({
@@ -52,7 +52,7 @@ export function TeacherMaterialsManager({
       return setError(`Mỗi lần chỉ được tải tối đa ${MAX_FILES} tệp`);
     const oversized = files.find((file) => file.size > MAX_FILE_SIZE);
     if (oversized)
-      return setError(`Tệp ${oversized.name} vượt quá giới hạn 10 MB`);
+      return setError(`Tệp ${oversized.name} vượt quá giới hạn 50 MB`);
 
     actionLockRef.current = true;
     setActiveAction("create");
@@ -134,7 +134,7 @@ export function TeacherMaterialsManager({
             />
           </Field>
           <Field
-            label="Tệp (tối đa 10 tệp, mỗi tệp 10 MB)"
+            label="Tệp (tối đa 10 tệp, mỗi tệp 50 MB)"
             htmlFor="material-files"
           >
             <input

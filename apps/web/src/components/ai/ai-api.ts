@@ -1,12 +1,16 @@
 import type {
   AiCreditAccount,
-  AiCreditAdminUser,
+  AiCreditAdminUserPage,
   AiCreditLedgerEntry,
   AiProvider,
   AiProviderMetrics,
   AiProviderPricingSuggestion,
   AiProviderTestResult,
   AiUsageStats,
+  AiUsageAnalytics,
+  AiUsageAnalyticsFilters,
+  AiUsageBudget,
+  UpsertAiUsageBudgetRequest,
   CreateAiProviderRequest,
   DiscoverAiProviderModelsRequest,
   DiscoverAiProviderModelsResponse,
@@ -20,7 +24,7 @@ import type {
   QuizWeaknessInsight,
   UpdateAiProviderRequest,
 } from "@zunibee/shared";
-import { apiFetch } from "@/lib/api-client";
+import { API_URL, apiFetch, ApiError } from "@/lib/api-client";
 
 export const getMyAiCredit = (token?: string) =>
   apiFetch<AiCreditAccount>("/ai/credits/me", { accessToken: token });
@@ -153,6 +157,80 @@ export const adminGetAiUsageStats = (
     accessToken: token,
   });
 };
+function analyticsQuery(params: Partial<AiUsageAnalyticsFilters>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  }
+  return query.size ? `?${query.toString()}` : "";
+}
+export const adminGetAiUsageAnalytics = (
+  params: AiUsageAnalyticsFilters,
+  token?: string,
+) =>
+  apiFetch<AiUsageAnalytics>(
+    `/admin/ai/usage-analytics${analyticsQuery(params)}`,
+    { accessToken: token },
+  );
+export const adminListAiUsageBudgets = (token?: string) =>
+  apiFetch<AiUsageBudget[]>("/admin/ai/usage-budgets", {
+    accessToken: token,
+  });
+export const adminCreateAiUsageBudget = (
+  body: UpsertAiUsageBudgetRequest,
+  token?: string,
+) =>
+  apiFetch<AiUsageBudget>("/admin/ai/usage-budgets", {
+    method: "POST",
+    body,
+    accessToken: token,
+  });
+export const adminUpdateAiUsageBudget = (
+  id: string,
+  body: Partial<UpsertAiUsageBudgetRequest>,
+  token?: string,
+) =>
+  apiFetch<AiUsageBudget>(`/admin/ai/usage-budgets/${id}`, {
+    method: "PATCH",
+    body,
+    accessToken: token,
+  });
+export const adminDeleteAiUsageBudget = (id: string, token?: string) =>
+  apiFetch<void>(`/admin/ai/usage-budgets/${id}`, {
+    method: "DELETE",
+    accessToken: token,
+  });
+export async function adminExportAiUsage(
+  params: AiUsageAnalyticsFilters,
+  token?: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_URL}/admin/ai/usage-export${analyticsQuery(params)}`,
+    {
+      credentials: "include",
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    },
+  );
+  if (!response.ok) {
+    const data = (await response.json().catch(() => null)) as {
+      message?: string | string[];
+    } | null;
+    const message = Array.isArray(data?.message)
+      ? data.message[0]
+      : data?.message;
+    throw new ApiError(message ?? "Không thể xuất file Excel", response.status);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `zunibee-ai-usage-${new Date().toISOString().slice(0, 10)}.xlsx`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
 export const adminDiscoverAiProviderPricing = (
   body: TestAiProviderConnectionRequest,
   token?: string,
@@ -169,11 +247,19 @@ export const adminDiscoverSavedAiProviderPricing = (
     `/admin/ai/providers/${id}/pricing/discover`,
     { method: "POST", accessToken: token },
   );
-export const adminSearchCreditUsers = (query: string, token?: string) =>
-  apiFetch<AiCreditAdminUser[]>(
-    `/admin/ai/credit-users?query=${encodeURIComponent(query)}`,
+export const adminSearchCreditUsers = (
+  query: string,
+  pagination: { page?: number; pageSize?: number } = {},
+  token?: string,
+) => {
+  const params = new URLSearchParams({ query });
+  if (pagination.page) params.set("page", String(pagination.page));
+  if (pagination.pageSize) params.set("pageSize", String(pagination.pageSize));
+  return apiFetch<AiCreditAdminUserPage>(
+    `/admin/ai/credit-users?${params.toString()}`,
     { accessToken: token },
   );
+};
 export const adminGrantAiCredit = (
   body: GrantAiCreditRequest,
   token?: string,

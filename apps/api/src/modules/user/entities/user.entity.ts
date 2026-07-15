@@ -76,6 +76,16 @@ export class User {
   @Column({ name: 'provider', type: 'varchar', nullable: true })
   provider?: string;
 
+  /**
+   * Soft delete — NULL = đang hoạt động. Cố ý KHÔNG dùng @DeleteDateColumn:
+   * cơ chế đó tự ẩn user khỏi mọi relation join (classroom.teacher,
+   * quiz.user...) làm học sinh mất dữ liệu lớp/quiz của giáo viên đã xóa.
+   * Việc chặn user đã xóa được xử lý tại các điểm phát session trong
+   * AuthService.assertCanAuthenticate.
+   */
+  @Column({ name: 'deleted_at', type: 'timestamptz', nullable: true })
+  deletedAt!: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

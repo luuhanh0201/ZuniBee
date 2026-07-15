@@ -10,6 +10,7 @@ import { AiCreditAccountEntity } from './entities/ai-credit-account.entity';
 import { AiCreditLedgerEntity } from './entities/ai-credit-ledger.entity';
 import { AiGenerationJobEntity } from './entities/ai-generation-job.entity';
 import { AiUsageEventEntity } from './entities/ai-usage-event.entity';
+import { AiUsageBudgetEntity } from './entities/ai-usage-budget.entity';
 import { QuizWeaknessInsightEntity } from './entities/quiz-weakness-insight.entity';
 import { AiSecretService } from './ai-secret.service';
 import { AiProviderService } from './ai-provider.service';
@@ -32,6 +33,7 @@ import { AiProviderUrlPolicyService } from './ai-provider-url-policy.service';
       AiCreditLedgerEntity,
       AiGenerationJobEntity,
       AiUsageEventEntity,
+      AiUsageBudgetEntity,
       QuizWeaknessInsightEntity,
       User,
       Quiz,
