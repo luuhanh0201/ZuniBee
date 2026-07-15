@@ -5,6 +5,7 @@ import { Quiz } from '@/modules/quiz/entities/quiz.entity';
 import { QuizAttempt } from '@/modules/quiz/entities/quiz-attempt.entity';
 import { QuizAttemptAnswer } from '@/modules/quiz/entities/quiz-attempt-answer.entity';
 import { User } from '@/modules/user/entities/user.entity';
+import { NotificationModule } from '@/modules/notification/notification.module';
 import { AiProviderEntity } from './entities/ai-provider.entity';
 import { AiCreditAccountEntity } from './entities/ai-credit-account.entity';
 import { AiCreditLedgerEntity } from './entities/ai-credit-ledger.entity';
@@ -41,6 +42,7 @@ import { AiProviderUrlPolicyService } from './ai-provider-url-policy.service';
       QuizAttemptAnswer,
     ]),
     QuizModule,
+    NotificationModule,
   ],
   controllers: [AiController, AdminAiController, QuizInsightController],
   providers: [

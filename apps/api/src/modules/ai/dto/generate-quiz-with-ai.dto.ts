@@ -7,6 +7,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -21,6 +22,7 @@ import type {
 import { QuizQuestionType } from '@/modules/quiz/entities/quiz-question.entity';
 
 export class GenerateQuizWithAiDto implements GenerateQuizWithAiRequest {
+  @IsOptional() @IsUUID('4') jobId?: string;
   @IsString() @MinLength(2) @MaxLength(200) title!: string;
   @IsOptional() @IsString() @MaxLength(2000) description?: string;
   @IsString() @MinLength(2) @MaxLength(500) topic!: string;

@@ -38,6 +38,19 @@ export type QuizReminderMail = {
   subject: string;
 };
 
+export type AiBudgetAlertMail = {
+  email: string;
+  adminName: string;
+  budgetName: string;
+  periodLabel: string;
+  scopeLabel: string;
+  spentUsd: number;
+  limitUsd: number;
+  usagePercent: number;
+  warningPercent: number;
+  usageUrl: string;
+};
+
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
@@ -204,6 +217,37 @@ export class MailService {
     });
   }
 
+  async sendAiBudgetAlert(input: AiBudgetAlertMail): Promise<void> {
+    const spentLabel = formatUsd(input.spentUsd);
+    const limitLabel = formatUsd(input.limitUsd);
+    const usageLabel = formatPercent(input.usagePercent);
+    const warningLabel = formatPercent(input.warningPercent);
+    const templateContext = {
+      title: `Cảnh báo ngân sách AI: ${input.budgetName} — ZuniBee`,
+      preheader: `${input.budgetName} đã sử dụng ${usageLabel}, vượt ngưỡng cảnh báo ${warningLabel}.`,
+      adminName: input.adminName,
+      budgetName: input.budgetName,
+      periodLabel: input.periodLabel,
+      scopeLabel: input.scopeLabel,
+      spentLabel,
+      limitLabel,
+      usageLabel,
+      warningLabel,
+      usageUrl: input.usageUrl,
+    };
+    const [html, text] = await Promise.all([
+      this.templateRenderer.renderHtml('ai-budget-alert', templateContext),
+      this.templateRenderer.renderText('ai-budget-alert', templateContext),
+    ]);
+    await this.sendMail({
+      to: input.email,
+      subject: `Cảnh báo ngân sách AI: ${input.budgetName} đạt ${usageLabel}`,
+      html,
+      text,
+      errorLabel: 'cảnh báo ngân sách AI',
+    });
+  }
+
   private async sendMail(input: {
     to: string;
     subject: string;
@@ -247,4 +291,19 @@ function formatDateTimeVi(value: Date): string {
     timeStyle: 'short',
     timeZone: 'Asia/Ho_Chi_Minh',
   }).format(value);
+}
+
+function formatUsd(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  }).format(value);
+}
+
+function formatPercent(value: number): string {
+  return `${new Intl.NumberFormat('vi-VN', {
+    maximumFractionDigits: 1,
+  }).format(value)}%`;
 }

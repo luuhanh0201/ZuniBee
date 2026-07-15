@@ -1,3 +1,5 @@
+import { getUserErrorMessage } from "@/lib/api-client";
+
 export type ParsedEmailBatch = {
   emails: string[];
   invalidEmails: string[];
@@ -55,9 +57,7 @@ export function formatDateTime(value: string) {
 }
 
 export function getErrorMessage(error: unknown) {
-  return error instanceof Error
-    ? error.message
-    : "Có lỗi xảy ra, vui lòng thử lại";
+  return getUserErrorMessage(error, "Có lỗi xảy ra, vui lòng thử lại");
 }
 
 export function isGoogleDriveUrl(value: string | null | undefined) {

@@ -35,6 +35,7 @@ import {
 } from "./ai-api";
 import { MetricCard, formatNumber } from "./metric-card";
 import { Pagination, paginateItems } from "@/components/admin/pagination";
+import { getUserErrorMessage } from "@/lib/api-client";
 
 const controlClass =
   "min-h-11 rounded-xl border-2 border-foreground bg-background px-3 font-bold outline-none focus:ring-2 focus:ring-ring";
@@ -42,13 +43,13 @@ const buttonFocus =
   "focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring";
 
 const sourceLabels: Record<AiUsageSource, string> = {
-  quiz_generation: "Sinh quiz",
+  quiz_generation: "Tạo quiz",
   quiz_insight: "Phân tích quiz",
   document_vision_ocr: "AI đọc ảnh / OCR",
 };
 const statusLabels: Record<AiUsageStatus, string> = {
   success: "Thành công",
-  failed: "Lỗi gọi provider",
+  failed: "Thất bại",
   refused: "Bị từ chối",
   timeout: "Quá thời gian",
   invalid_output: "Output không hợp lệ",
@@ -135,11 +136,7 @@ export function AdminAiUsageSection({
       setProviders(providerRows);
       setError("");
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Không thể tải dữ liệu thống kê AI",
-      );
+      setError(getUserErrorMessage(cause, "Không thể tải dữ liệu thống kê AI"));
     } finally {
       setLoading(false);
     }
@@ -164,9 +161,7 @@ export function AdminAiUsageSection({
       .catch((cause: unknown) => {
         if (active)
           setError(
-            cause instanceof Error
-              ? cause.message
-              : "Không thể tải dữ liệu thống kê AI",
+            getUserErrorMessage(cause, "Không thể tải dữ liệu thống kê AI"),
           );
       })
       .finally(() => {
@@ -215,9 +210,7 @@ export function AdminAiUsageSection({
             try {
               await adminExportAiUsage(toApiFilters(applied), accessToken);
             } catch (cause) {
-              setError(
-                cause instanceof Error ? cause.message : "Không thể xuất Excel",
-              );
+              setError(getUserErrorMessage(cause, "Không thể xuất Excel"));
             } finally {
               setExporting(false);
             }
@@ -712,11 +705,13 @@ function EventLog({
             <thead>
               <tr className="border-b-2 border-foreground text-xs font-extrabold uppercase tracking-wide text-muted-foreground">
                 <th className="px-3 py-2">Thời gian</th>
-                <th className="px-3 py-2">Trạng thái</th>
+                <th className="whitespace-nowrap px-3 py-2">Trạng thái</th>
                 <th className="px-3 py-2">Provider / model</th>
-                <th className="px-3 py-2">Nguồn</th>
+                <th className="whitespace-nowrap px-3 py-2">Nguồn</th>
                 <th className="px-3 py-2 text-right">Requests</th>
-                <th className="px-3 py-2 text-right">Token</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right">
+                  Token
+                </th>
                 <th className="px-3 py-2 text-right">Chi phí</th>
                 <th className="px-3 py-2 text-right">Latency</th>
                 <th className="px-3 py-2">Chi tiết lỗi</th>
@@ -738,7 +733,7 @@ function EventLog({
                       </small>
                     ) : null}
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="whitespace-nowrap px-3 py-3">
                     <StatusBadge status={event.status} />
                   </td>
                   <td className="max-w-[260px] px-3 py-3">
@@ -749,16 +744,18 @@ function EventLog({
                       {event.model}
                     </span>
                   </td>
-                  <td className="px-3 py-3">{sourceLabels[event.source]}</td>
+                  <td className="whitespace-nowrap px-3 py-3">
+                    {sourceLabels[event.source]}
+                  </td>
                   <td className="px-3 py-3 text-right font-extrabold tabular-nums">
                     {formatNumber(event.requestCount)}
                   </td>
-                  <td className="px-3 py-3 text-right tabular-nums">
+                  <td className="whitespace-nowrap px-3 py-3 text-right text-xs font-medium tabular-nums">
                     {formatNumber(event.inputTokens)} /{" "}
                     {formatNumber(event.outputTokens)}
                     {event.cacheInputTokens ? (
-                      <small className="block text-muted-foreground">
-                        cache {formatNumber(event.cacheInputTokens)}
+                      <small className="ml-1 text-muted-foreground">
+                        (cache {formatNumber(event.cacheInputTokens)})
                       </small>
                     ) : null}
                   </td>
@@ -1096,7 +1093,7 @@ function StatusBadge({ status }: { status: AiUsageStatus }) {
         : "bg-destructive-soft";
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border-2 border-foreground px-2 py-0.5 text-xs font-extrabold ${classes}`}
+      className={`inline-flex whitespace-nowrap items-center gap-1 rounded-full border-2 border-foreground px-2 py-0.5 text-xs font-extrabold ${classes}`}
     >
       {status === "success" ? (
         <CheckCircle2 className="h-3.5 w-3.5" />

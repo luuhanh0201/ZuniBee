@@ -2,6 +2,7 @@ import type {
   AiCreditAccount,
   AiCreditAdminUserPage,
   AiCreditLedgerEntry,
+  AiGenerationJob,
   AiProvider,
   AiProviderMetrics,
   AiProviderPricingSuggestion,
@@ -24,7 +25,12 @@ import type {
   QuizWeaknessInsight,
   UpdateAiProviderRequest,
 } from "@zunibee/shared";
-import { API_URL, apiFetch, ApiError } from "@/lib/api-client";
+import {
+  API_URL,
+  apiErrorFromResponse,
+  apiFetch,
+  createNetworkApiError,
+} from "@/lib/api-client";
 
 export const getMyAiCredit = (token?: string) =>
   apiFetch<AiCreditAccount>("/ai/credits/me", { accessToken: token });
@@ -38,6 +44,7 @@ export const generateQuizWithAi = (
   token?: string,
 ) => {
   const form = new FormData();
+  if (body.jobId) form.append("jobId", body.jobId);
   form.append("title", body.title);
   form.append("topic", body.topic);
   form.append("questionCount", String(body.questionCount));
@@ -54,6 +61,11 @@ export const generateQuizWithAi = (
     accessToken: token,
   });
 };
+export const getAiQuizGenerationJob = (jobId: string, token?: string) =>
+  apiFetch<AiGenerationJob>(`/ai/quiz-generations/${jobId}`, {
+    accessToken: token,
+    suppressGlobalError: true,
+  });
 export const getQuizInsight = (quizId: string, token?: string) =>
   apiFetch<QuizWeaknessInsight | null>(`/quizzes/${quizId}/ai-insight`, {
     accessToken: token,
@@ -213,15 +225,11 @@ export async function adminExportAiUsage(
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     },
-  );
+  ).catch(() => {
+    throw createNetworkApiError();
+  });
   if (!response.ok) {
-    const data = (await response.json().catch(() => null)) as {
-      message?: string | string[];
-    } | null;
-    const message = Array.isArray(data?.message)
-      ? data.message[0]
-      : data?.message;
-    throw new ApiError(message ?? "Không thể xuất file Excel", response.status);
+    throw await apiErrorFromResponse(response, "Không thể xuất file Excel");
   }
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);

@@ -18,6 +18,7 @@ function provider(overrides: Partial<AiProviderEntity> = {}): AiProviderEntity {
     encryptedApiKey: null,
     isActive: true,
     isDefault: true,
+    isVisionDefault: true,
     baseCreditCost: 1,
     creditCostPer1kTokens: 0,
     inputUsdPer1m: null,
@@ -108,6 +109,77 @@ describe('AiProviderService', () => {
       expect.anything(),
     );
     expect(manager.save).toHaveBeenCalledWith(saved);
+  });
+
+  it('resolves the active provider assigned to vision OCR', async () => {
+    const row = provider({
+      isDefault: false,
+      isVisionDefault: true,
+      name: 'Vision AI',
+    });
+    const repository = { findOne: jest.fn().mockResolvedValue(row) };
+    const service = new AiProviderService(
+      repository as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(service.resolveVision()).resolves.toBe(row);
+    expect(repository.findOne).toHaveBeenCalledWith({
+      where: { isVisionDefault: true, isActive: true },
+    });
+  });
+
+  it('assigns the vision role exclusively and keeps that provider active', async () => {
+    const saved = provider({
+      isDefault: false,
+      isVisionDefault: true,
+      name: 'Vision AI',
+    });
+    const manager = {
+      update: jest.fn().mockResolvedValue(undefined),
+      create: jest.fn().mockReturnValue(saved),
+      save: jest.fn().mockResolvedValue(saved),
+    };
+    const dataSource = {
+      transaction: jest.fn(
+        async (callback: (transactionManager: typeof manager) => unknown) =>
+          await callback(manager),
+      ),
+    };
+    const service = new AiProviderService(
+      {} as never,
+      {} as never,
+      {} as never,
+      dataSource as never,
+      { encrypt: jest.fn().mockReturnValue('encrypted') } as never,
+      {} as never,
+    );
+
+    await service.create({
+      name: saved.name,
+      kind: saved.kind,
+      baseUrl: saved.baseUrl,
+      model: saved.model,
+      isActive: false,
+      isVisionDefault: true,
+    });
+
+    expect(manager.update).toHaveBeenCalledWith(
+      AiProviderEntity,
+      { isVisionDefault: true },
+      { isVisionDefault: false },
+    );
+    expect(manager.create).toHaveBeenCalledWith(
+      AiProviderEntity,
+      expect.objectContaining({
+        isActive: true,
+        isVisionDefault: true,
+      }),
+    );
   });
 
   it('runs a real Ollama model probe and persists the measured health', async () => {

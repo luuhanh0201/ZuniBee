@@ -37,6 +37,7 @@ import type {
   CreateAiProviderRequest,
 } from "@zunibee/shared";
 import { useAuth } from "@/lib/auth-context";
+import { getUserErrorMessage } from "@/lib/api-client";
 import {
   adminCreateAiProvider,
   adminDeleteAiProvider,
@@ -490,6 +491,7 @@ export function AdminAiConsole() {
             ...body,
             isActive: true,
             isDefault: providers.length === 0,
+            isVisionDefault: providers.length === 0,
           },
           accessToken,
         );
@@ -508,10 +510,10 @@ export function AdminAiConsole() {
   }
 
   async function toggleProvider(provider: AiProvider) {
-    if (provider.isDefault && provider.isActive) {
+    if ((provider.isDefault || provider.isVisionDefault) && provider.isActive) {
       setNotice({
         tone: "error",
-        message: "Provider mặc định phải luôn được bật.",
+        message: "Provider đang được giao nhiệm vụ AI phải luôn được bật.",
       });
       return;
     }
@@ -535,7 +537,7 @@ export function AdminAiConsole() {
     }
   }
 
-  async function setDefaultProvider(providerId: string) {
+  async function setQuizProvider(providerId: string) {
     if (!accessToken || actionId) return;
     setActionId(providerId);
     try {
@@ -544,7 +546,31 @@ export function AdminAiConsole() {
         { isDefault: true, isActive: true },
         accessToken,
       );
-      setNotice({ tone: "success", message: "Đã đổi provider mặc định." });
+      setNotice({
+        tone: "success",
+        message: "Đã chọn provider tổng hợp tài liệu và sinh quiz.",
+      });
+      await loadData();
+    } catch (cause) {
+      setNotice({ tone: "error", message: getErrorMessage(cause) });
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  async function setVisionProvider(providerId: string) {
+    if (!accessToken || actionId) return;
+    setActionId(providerId);
+    try {
+      await adminUpdateAiProvider(
+        providerId,
+        { isVisionDefault: true, isActive: true },
+        accessToken,
+      );
+      setNotice({
+        tone: "success",
+        message: "Đã chọn provider đọc ảnh khi OCR local không đạt.",
+      });
       await loadData();
     } catch (cause) {
       setNotice({ tone: "error", message: getErrorMessage(cause) });
@@ -554,10 +580,10 @@ export function AdminAiConsole() {
   }
 
   async function deleteProvider(provider: AiProvider) {
-    if (provider.isDefault) {
+    if (provider.isDefault || provider.isVisionDefault) {
       setNotice({
         tone: "error",
-        message: "Hãy chọn provider mặc định khác trước khi xóa.",
+        message: "Hãy chuyển các nhiệm vụ AI sang provider khác trước khi xóa.",
       });
       return;
     }
@@ -604,29 +630,25 @@ export function AdminAiConsole() {
 
   return (
     <>
-      <section className="relative overflow-hidden rounded-3xl border-[3px] border-foreground bg-purple px-5 py-7 text-white shadow-brutal-xl sm:px-8">
-        <div
-          aria-hidden="true"
-          className="absolute -right-9 -top-14 h-44 w-44 rotate-12 rounded-[2.5rem] border-[3px] border-foreground bg-primary"
-        />
-        <div className="relative flex flex-col justify-between gap-6 md:flex-row md:items-end">
+      <section className="rounded-2xl border border-divider bg-surface px-5 py-6 shadow-sm sm:px-7">
+        <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
           <div>
-            <span className="inline-flex items-center gap-2 rounded-full border-2 border-foreground bg-surface px-3 py-1.5 text-sm font-extrabold text-foreground shadow-brutal-sm">
+            <span className="inline-flex items-center gap-2 rounded-full bg-secondary-soft px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-secondary-strong">
               <Sparkles className="h-4 w-4" aria-hidden="true" />
               AI Control Center
             </span>
-            <h2 className="mt-5 max-w-2xl font-display text-3xl font-extrabold sm:text-4xl">
+            <h2 className="mt-4 max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">
               Điều phối mô hình AI từ một nơi duy nhất.
             </h2>
-            <p className="mt-3 max-w-2xl font-semibold leading-relaxed text-on-purple-muted">
-              Quản lý endpoint, model, chi phí và provider mặc định cho toàn bộ
-              tính năng AI của ZuniBee.
+            <p className="mt-3 max-w-2xl font-medium leading-relaxed text-muted-foreground">
+              Quản lý endpoint, model, chi phí và phân công riêng provider đọc
+              ảnh với provider tổng hợp tài liệu để sinh quiz.
             </p>
           </div>
           <button
             type="button"
             onClick={openCreate}
-            className={`inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 self-start rounded-xl border-2 border-foreground bg-primary px-5 font-extrabold text-foreground shadow-brutal-md transition-[transform,box-shadow] duration-200 hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-lg motion-reduce:transform-none md:self-auto ${buttonFocus}`}
+            className={`inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 self-start rounded-xl bg-primary px-5 text-sm font-semibold text-white shadow-sm transition-colors duration-200 hover:bg-primary-hover md:self-auto ${buttonFocus}`}
           >
             <Plus className="h-5 w-5" aria-hidden="true" />
             Thêm provider
@@ -675,7 +697,7 @@ export function AdminAiConsole() {
       {notice ? (
         <div
           role="status"
-          className={`mt-6 flex items-center justify-between gap-3 rounded-xl border-2 border-foreground px-4 py-3 font-bold shadow-brutal-sm ${notice.tone === "success" ? "bg-success-soft" : "bg-destructive-soft"}`}
+          className={`mt-6 flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm font-semibold shadow-sm ${notice.tone === "success" ? "border-success/20 bg-success-soft" : "border-destructive/20 bg-destructive-soft"}`}
         >
           <span className="flex items-center gap-2">
             <Check className="h-5 w-5" aria-hidden="true" />
@@ -692,14 +714,15 @@ export function AdminAiConsole() {
         </div>
       ) : null}
 
-      <section className="mt-6 rounded-2xl border-2 border-foreground bg-surface shadow-brutal-md">
+      <section className="mt-6 rounded-2xl border border-divider bg-surface shadow-sm">
         <div className="flex flex-col gap-4 border-b-2 border-foreground p-4 sm:p-5 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <h2 className="font-display text-2xl font-extrabold">
               Danh sách provider
             </h2>
             <p className="mt-1 font-semibold text-muted-foreground">
-              Cấu hình provider dùng để tạo quiz và phân tích kết quả.
+              Mỗi nhiệm vụ AI có provider mặc định độc lập và được backend sử
+              dụng đúng theo vai trò đã gán.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
@@ -771,7 +794,8 @@ export function AdminAiConsole() {
                   provider={provider}
                   onEdit={() => openEdit(provider)}
                   onToggle={() => void toggleProvider(provider)}
-                  onDefault={() => void setDefaultProvider(provider.id)}
+                  onQuizDefault={() => void setQuizProvider(provider.id)}
+                  onVisionDefault={() => void setVisionProvider(provider.id)}
                   onDelete={() => void deleteProvider(provider)}
                   onTest={() => void testConnection(provider.id)}
                   checking={checkingIds.has(provider.id)}
@@ -844,7 +868,8 @@ function ProviderCard({
   provider,
   onEdit,
   onToggle,
-  onDefault,
+  onQuizDefault,
+  onVisionDefault,
   onDelete,
   onTest,
   checking,
@@ -853,7 +878,8 @@ function ProviderCard({
   provider: AiProvider;
   onEdit: () => void;
   onToggle: () => void;
-  onDefault: () => void;
+  onQuizDefault: () => void;
+  onVisionDefault: () => void;
   onDelete: () => void;
   onTest: () => void;
   checking: boolean;
@@ -871,17 +897,27 @@ function ProviderCard({
         : "Chưa kiểm tra";
   return (
     <article
-      className={`relative rounded-2xl border-2 border-foreground p-5 transition-colors duration-200 ${provider.isActive ? "bg-background" : "bg-surface-soft"}`}
+      className={`relative rounded-2xl border border-divider p-5 shadow-sm transition-[border-color,box-shadow] duration-200 hover:border-primary/20 hover:shadow-md ${provider.isActive ? "bg-surface" : "bg-surface-soft"}`}
     >
-      {provider.isDefault ? (
-        <span className="absolute -right-2 -top-3 inline-flex items-center gap-1 rounded-full border-2 border-foreground bg-warning-soft px-3 py-1 text-xs font-extrabold shadow-brutal-sm">
-          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-          Mặc định
-        </span>
+      {provider.isDefault || provider.isVisionDefault ? (
+        <div className="absolute -right-2 -top-3 flex flex-wrap justify-end gap-1.5 pl-4">
+          {provider.isDefault ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-divider bg-warning-soft px-3 py-1 text-xs font-semibold text-foreground shadow-sm">
+              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              Sinh quiz
+            </span>
+          ) : null}
+          {provider.isVisionDefault ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-divider bg-secondary-soft px-3 py-1 text-xs font-semibold text-foreground shadow-sm">
+              <Brain className="h-3.5 w-3.5" aria-hidden="true" />
+              Đọc ảnh/OCR
+            </span>
+          ) : null}
+        </div>
       ) : null}
       <div className="flex items-start gap-3">
         <span
-          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border-2 border-foreground shadow-brutal-sm ${provider.kind === "ollama" ? "bg-secondary-soft" : "bg-primary"}`}
+          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${provider.kind === "ollama" ? "bg-secondary-soft text-secondary-strong" : "bg-primary text-white"}`}
         >
           {provider.kind === "ollama" ? (
             <ServerCog className="h-6 w-6" aria-hidden="true" />
@@ -992,11 +1028,22 @@ function ProviderCard({
           <button
             type="button"
             disabled={busy || checking}
-            onClick={onDefault}
+            onClick={onQuizDefault}
             className={`inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-warning-soft px-3 text-sm font-extrabold transition-colors hover:bg-primary ${buttonFocus}`}
           >
             <Sparkles className="h-4 w-4" aria-hidden="true" />
-            Mặc định
+            Tạo quiz
+          </button>
+        ) : null}
+        {!provider.isVisionDefault ? (
+          <button
+            type="button"
+            disabled={busy || checking}
+            onClick={onVisionDefault}
+            className={`inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-secondary-soft px-3 text-sm font-extrabold transition-colors hover:bg-primary ${buttonFocus}`}
+          >
+            <Brain className="h-4 w-4" aria-hidden="true" />
+            Dùng đọc ảnh
           </button>
         ) : null}
         <button
@@ -1072,8 +1119,8 @@ function ProviderEditor({
       aria-labelledby="provider-editor-title"
       className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/45 p-0 sm:items-center sm:p-4"
     >
-      <div className="max-h-[95dvh] w-full overflow-y-auto rounded-t-3xl border-[3px] border-foreground bg-background shadow-brutal-xl sm:max-w-2xl sm:rounded-3xl">
-        <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b-2 border-foreground bg-primary p-5 sm:p-6">
+      <div className="max-h-[95dvh] w-full overflow-y-auto rounded-t-2xl border border-divider bg-background shadow-xl sm:max-w-2xl sm:rounded-2xl">
+        <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-divider bg-surface p-5 sm:p-6">
           <div>
             <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
               Provider configuration
@@ -1410,9 +1457,7 @@ function EditorField({
 }
 
 function getErrorMessage(cause: unknown): string {
-  return cause instanceof Error
-    ? cause.message
-    : "Không thể kết nối tới API quản trị AI";
+  return getUserErrorMessage(cause, "Không thể kết nối tới API quản trị AI");
 }
 
 function formatDateTime(value: string): string {

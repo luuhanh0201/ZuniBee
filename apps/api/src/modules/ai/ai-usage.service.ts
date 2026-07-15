@@ -23,6 +23,7 @@ import type {
 import { AiUsageEventEntity } from '@/modules/ai/entities/ai-usage-event.entity';
 import { AiUsageBudgetEntity } from '@/modules/ai/entities/ai-usage-budget.entity';
 import type { AiProviderEntity } from '@/modules/ai/entities/ai-provider.entity';
+import { AiBudgetNotificationService } from '@/modules/notification/ai-budget-notification.service';
 
 export type RecordAiUsageInput = {
   provider: AiProviderEntity;
@@ -110,12 +111,20 @@ export class AiUsageService {
     @Optional()
     @InjectRepository(AiUsageBudgetEntity)
     private readonly budgets?: Repository<AiUsageBudgetEntity>,
+    @Optional()
+    private readonly budgetNotifications?: AiBudgetNotificationService,
   ) {}
 
   /** Snapshot provider, model, giá và kết quả tại thời điểm gọi. */
   async record(input: RecordAiUsageInput): Promise<void> {
     const inputTokens = safeInteger(input.inputTokens);
     const outputTokens = safeInteger(input.outputTokens);
+    const costUsd = calculateUsageCostUsd(
+      inputTokens,
+      outputTokens,
+      input.provider.inputUsdPer1m,
+      input.provider.outputUsdPer1m,
+    );
     await this.events.save(
       this.events.create({
         providerId: input.provider.id,
@@ -130,12 +139,7 @@ export class AiUsageService {
         cacheInputTokens: safeInteger(input.cacheInputTokens ?? 0),
         inputUsdPer1m: input.provider.inputUsdPer1m,
         outputUsdPer1m: input.provider.outputUsdPer1m,
-        costUsd: calculateUsageCostUsd(
-          inputTokens,
-          outputTokens,
-          input.provider.inputUsdPer1m,
-          input.provider.outputUsdPer1m,
-        ),
+        costUsd,
         latencyMs:
           input.latencyMs == null ? null : safeInteger(input.latencyMs),
         httpStatus: input.httpStatus ?? null,
@@ -144,6 +148,8 @@ export class AiUsageService {
         errorMessage: truncate(input.errorMessage, 500),
       }),
     );
+    if (costUsd !== null && costUsd > 0)
+      await this.checkBudgetThresholdsSafely();
   }
 
   /** Thống kê lỗi không được làm fail request AI. */
@@ -623,8 +629,10 @@ export class AiUsageService {
     return this.budgets;
   }
 
-  private async toBudget(entity: AiUsageBudgetEntity): Promise<AiUsageBudget> {
-    const now = new Date();
+  private async toBudget(
+    entity: AiUsageBudgetEntity,
+    now = new Date(),
+  ): Promise<AiUsageBudget> {
     const from = budgetPeriodStart(entity.period, now);
     const query = this.events
       .createQueryBuilder('event')
@@ -665,6 +673,56 @@ export class AiUsageService {
       createdAt: entity.createdAt.toISOString(),
       updatedAt: entity.updatedAt.toISOString(),
     };
+  }
+
+  private async checkBudgetThresholdsSafely(): Promise<void> {
+    if (!this.budgets || !this.budgetNotifications) return;
+    try {
+      const now = new Date();
+      const activeBudgets = await this.budgets.find({
+        where: { isActive: true },
+        order: { createdAt: 'ASC' },
+      });
+      for (const entity of activeBudgets) {
+        const budget = await this.toBudget(entity, now);
+        if (budget.usagePercent < budget.warningPercent) continue;
+        const periodStart = budgetPeriodStart(entity.period, now);
+        const queued = await this.budgetNotifications.enqueue({
+          budgetId: entity.id,
+          budgetName: entity.name,
+          createdBy: entity.createdBy,
+          periodStart,
+          periodLabel: budgetPeriodLabel(entity.period, periodStart),
+          scopeLabel: await this.budgetScopeLabel(entity),
+          spentUsd: budget.spentUsd,
+          limitUsd: budget.limitUsd,
+          usagePercent: budget.usagePercent,
+          warningPercent: budget.warningPercent,
+        });
+        if (queued > 0)
+          this.logger.log(
+            `Đã xếp hàng ${queued} email cảnh báo ngân sách ${entity.name} (${budget.usagePercent.toFixed(1)}%)`,
+          );
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Không kiểm tra được cảnh báo ngân sách AI: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  private async budgetScopeLabel(entity: AiUsageBudgetEntity): Promise<string> {
+    if (entity.scope === 'global') return 'Toàn hệ thống';
+    if (entity.scope === 'model') return `Model: ${entity.scopeValue ?? '--'}`;
+    if (entity.scope === 'source')
+      return `Nguồn: ${usageSourceLabel(entity.scopeValue)}`;
+    const latest = entity.scopeValue
+      ? await this.events.findOne({
+          where: { providerId: entity.scopeValue },
+          order: { createdAt: 'DESC' },
+        })
+      : null;
+    return `Provider: ${latest?.providerName ?? entity.scopeValue ?? '--'}`;
   }
 }
 
@@ -741,6 +799,31 @@ function budgetPeriodStart(period: 'daily' | 'monthly', now: Date): Date {
         Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
       )
     : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+function budgetPeriodLabel(
+  period: 'daily' | 'monthly',
+  periodStart: Date,
+): string {
+  return period === 'daily'
+    ? `Ngày ${new Intl.DateTimeFormat('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        timeZone: 'UTC',
+      }).format(periodStart)}`
+    : `Tháng ${new Intl.DateTimeFormat('vi-VN', {
+        month: '2-digit',
+        year: 'numeric',
+        timeZone: 'UTC',
+      }).format(periodStart)}`;
+}
+
+function usageSourceLabel(value: string | null): string {
+  if (value === 'quiz_generation') return 'Tạo quiz';
+  if (value === 'quiz_insight') return 'Phân tích quiz';
+  if (value === 'document_vision_ocr') return 'AI đọc ảnh / OCR';
+  return value ?? '--';
 }
 
 function addBreakdownSheet(

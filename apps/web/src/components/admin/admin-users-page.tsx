@@ -22,6 +22,7 @@ import {
   type AdminUserStatusFilter,
 } from "@zunibee/shared";
 import { useAuth } from "@/lib/auth-context";
+import { getUserErrorMessage } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast-provider";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -41,12 +42,7 @@ import {
 type RoleFilter = UserRole | "all";
 type StatusFilter = AdminUserStatusFilter | "all";
 type ConfirmKind =
-  | "ban"
-  | "unban"
-  | "role"
-  | "soft-delete"
-  | "restore"
-  | "hard-delete";
+  "ban" | "unban" | "role" | "soft-delete" | "restore" | "hard-delete";
 
 const ROLE_LABELS: Record<UserRole, string> = {
   [UserRole.STUDENT]: "Học sinh",
@@ -84,7 +80,8 @@ export function AdminUsersPage() {
             {
               query: overrides.query ?? appliedQuery,
               role:
-                (overrides.role ?? (roleFilter === "all" ? undefined : roleFilter)) ||
+                (overrides.role ??
+                  (roleFilter === "all" ? undefined : roleFilter)) ||
                 undefined,
               status:
                 (overrides.status ??
@@ -98,9 +95,7 @@ export function AdminUsersPage() {
         );
         setError("");
       } catch (cause) {
-        setError(
-          cause instanceof Error ? cause.message : "Không tải được người dùng",
-        );
+        setError(getUserErrorMessage(cause, "Không tải được người dùng"));
       } finally {
         setLoading(false);
       }
@@ -119,11 +114,7 @@ export function AdminUsersPage() {
       })
       .catch((cause: unknown) => {
         if (active)
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "Không tải được người dùng",
-          );
+          setError(getUserErrorMessage(cause, "Không tải được người dùng"));
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -141,10 +132,7 @@ export function AdminUsersPage() {
       setDetail(data);
       setPendingRole(data.role);
     } catch (cause) {
-      showToast(
-        "error",
-        cause instanceof Error ? cause.message : "Không tải được chi tiết",
-      );
+      showToast("error", getUserErrorMessage(cause, "Không tải được chi tiết"));
     } finally {
       setDetailLoading(false);
     }
@@ -167,10 +155,15 @@ export function AdminUsersPage() {
           accessToken,
         );
       else if (kind === "role")
-        await adminUpdateUserRole(detail.id, { role: pendingRole }, accessToken);
+        await adminUpdateUserRole(
+          detail.id,
+          { role: pendingRole },
+          accessToken,
+        );
       else if (kind === "soft-delete")
         await adminSoftDeleteUser(detail.id, accessToken);
-      else if (kind === "restore") await adminRestoreUser(detail.id, accessToken);
+      else if (kind === "restore")
+        await adminRestoreUser(detail.id, accessToken);
       else await adminHardDeleteUser(detail.id, accessToken);
 
       showToast("success", ACTION_SUCCESS[kind]);
@@ -179,10 +172,7 @@ export function AdminUsersPage() {
       else await openDetail(detail.id);
       await load({ silent: true });
     } catch (cause) {
-      showToast(
-        "error",
-        cause instanceof Error ? cause.message : "Thao tác thất bại",
-      );
+      showToast("error", getUserErrorMessage(cause, "Thao tác thất bại"));
     } finally {
       setActionLoading(false);
     }
@@ -425,7 +415,10 @@ export function AdminUsersPage() {
               </div>
 
               <dl className="grid gap-3 rounded-2xl border-2 border-foreground bg-surface p-4 font-semibold sm:grid-cols-2">
-                <InfoRow label="Ngày tạo" value={formatDateTime(detail.createdAt)} />
+                <InfoRow
+                  label="Ngày tạo"
+                  value={formatDateTime(detail.createdAt)}
+                />
                 <InfoRow
                   label="Đăng nhập gần nhất"
                   value={
@@ -629,9 +622,7 @@ export function AdminUsersPage() {
               } catch (cause) {
                 showToast(
                   "error",
-                  cause instanceof Error
-                    ? cause.message
-                    : "Không thể cấp credit",
+                  getUserErrorMessage(cause, "Không thể cấp credit"),
                 );
               } finally {
                 setActionLoading(false);
@@ -672,7 +663,10 @@ export function AdminUsersPage() {
                 className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-primary px-4 font-extrabold shadow-brutal-sm disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {actionLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  <Loader2
+                    className="h-4 w-4 animate-spin"
+                    aria-hidden="true"
+                  />
                 ) : null}
                 Cấp credit
               </button>

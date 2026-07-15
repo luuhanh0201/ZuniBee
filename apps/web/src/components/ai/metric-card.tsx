@@ -14,23 +14,21 @@ export function MetricCard({
   color: string;
 }) {
   return (
-    <article className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-md">
+    <article className="rounded-2xl border border-divider bg-surface p-5 shadow-sm transition-[border-color,box-shadow] duration-200 hover:border-primary/20 hover:shadow-md">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="font-bold text-muted-foreground">{label}</p>
-          <p className="mt-2 font-display text-3xl font-extrabold tabular-nums">
+          <p className="text-sm font-medium text-muted-foreground">{label}</p>
+          <p className="mt-2 text-3xl font-bold tracking-tight tabular-nums">
             {value}
           </p>
         </div>
         <span
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 border-foreground shadow-brutal-sm ${color}`}
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${color}`}
         >
           <Icon className="h-5 w-5" aria-hidden="true" />
         </span>
       </div>
-      <p className="mt-2 text-sm font-semibold text-muted-foreground">
-        {helper}
-      </p>
+      <p className="mt-2 text-sm font-medium text-muted-foreground">{helper}</p>
     </article>
   );
 }

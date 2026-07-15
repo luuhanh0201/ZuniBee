@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CircleDollarSign, Loader2, Search, WalletCards } from "lucide-react";
 import type { AiCreditAdminUser, AiCreditAdminUserPage } from "@zunibee/shared";
 import { useAuth } from "@/lib/auth-context";
+import { getUserErrorMessage } from "@/lib/api-client";
 import {
   adminGrantAiCredit,
   adminSearchCreditUsers,
@@ -36,9 +37,7 @@ export function AdminCreditPage() {
         );
         setMessage("");
       } catch (cause) {
-        setMessage(
-          cause instanceof Error ? cause.message : "Không tải được AI Credit",
-        );
+        setMessage(getUserErrorMessage(cause, "Không tải được AI Credit"));
       } finally {
         setLoading(false);
       }
@@ -57,9 +56,7 @@ export function AdminCreditPage() {
       })
       .catch((cause: unknown) => {
         if (active)
-          setMessage(
-            cause instanceof Error ? cause.message : "Không tải được AI Credit",
-          );
+          setMessage(getUserErrorMessage(cause, "Không tải được AI Credit"));
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -227,11 +224,7 @@ export function AdminCreditPage() {
                   result.pagination.pageSize,
                 );
               } catch (cause) {
-                setMessage(
-                  cause instanceof Error
-                    ? cause.message
-                    : "Không thể cấp credit",
-                );
+                setMessage(getUserErrorMessage(cause, "Không thể cấp credit"));
               } finally {
                 setSaving(false);
               }

@@ -9,6 +9,8 @@ import {
   type AiProviderEntity,
 } from './entities/ai-provider.entity';
 import type { AiUsageEventEntity } from './entities/ai-usage-event.entity';
+import type { AiUsageBudgetEntity } from './entities/ai-usage-budget.entity';
+import type { AiBudgetNotificationService } from '@/modules/notification/ai-budget-notification.service';
 
 const OUTPUT_SCHEMA = {
   type: 'object',
@@ -35,6 +37,7 @@ function provider(overrides: Partial<AiProviderEntity> = {}): AiProviderEntity {
     encryptedApiKey: null,
     isActive: true,
     isDefault: true,
+    isVisionDefault: true,
     baseCreditCost: 1,
     creditCostPer1kTokens: 0,
     inputUsdPer1m: 0.3,
@@ -125,6 +128,59 @@ describe('AiUsageService.record', () => {
       outputUsdPer1m: 2.5,
     });
     expect(saved[0].costUsd).toBeCloseTo(0.00545, 10);
+  });
+
+  it('queues a budget alert after paid usage reaches the warning threshold', async () => {
+    const usageQuery = {
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({ spent: '0.80' }),
+    };
+    const repository = {
+      create: (value: Partial<AiUsageEventEntity>) => value,
+      save: jest.fn().mockResolvedValue(undefined),
+      createQueryBuilder: jest.fn(() => usageQuery),
+    } as unknown as Repository<AiUsageEventEntity>;
+    const budget = {
+      id: '00000000-0000-4000-8000-000000000011',
+      name: 'Ngân sách AI tháng',
+      scope: 'global',
+      scopeValue: null,
+      period: 'monthly',
+      limitUsd: 1,
+      warningPercent: 80,
+      isActive: true,
+      createdBy: '00000000-0000-4000-8000-000000000012',
+      createdAt: new Date('2026-07-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-07-01T00:00:00.000Z'),
+    } as AiUsageBudgetEntity;
+    const budgets = {
+      find: jest.fn().mockResolvedValue([budget]),
+    } as unknown as Repository<AiUsageBudgetEntity>;
+    const enqueueBudgetAlert = jest.fn().mockResolvedValue(1);
+    const notifications = {
+      enqueue: enqueueBudgetAlert,
+    } as unknown as AiBudgetNotificationService;
+    const service = new AiUsageService(repository, budgets, notifications);
+
+    await service.record({
+      provider: provider({ inputUsdPer1m: 1, outputUsdPer1m: 1 }),
+      source: 'quiz_generation',
+      referenceId: null,
+      userId: null,
+      inputTokens: 1,
+      outputTokens: 1,
+    });
+
+    expect(enqueueBudgetAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        budgetId: budget.id,
+        budgetName: budget.name,
+        spentUsd: 0.8,
+        limitUsd: 1,
+        warningPercent: 80,
+      }),
+    );
   });
 });
 

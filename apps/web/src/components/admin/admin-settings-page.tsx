@@ -58,7 +58,7 @@ export function AdminSettingsPage() {
             icon={CloudCog}
             title="AI Providers"
             value={`${providers.filter((provider) => provider.isActive).length}/${providers.length} đang bật`}
-            detail={`${providers.filter((provider) => provider.isDefault).length} provider mặc định · ${providers.filter((provider) => provider.inputUsdPer1m == null || provider.outputUsdPer1m == null).length} thiếu giá`}
+            detail={`${providers.filter((provider) => provider.isDefault).length} sinh quiz · ${providers.filter((provider) => provider.isVisionDefault).length} đọc ảnh · ${providers.filter((provider) => provider.inputUsdPer1m == null || provider.outputUsdPer1m == null).length} thiếu giá`}
             href={ROUTES.adminAiProviders}
           />
           <SettingCard
@@ -84,9 +84,9 @@ export function AdminSettingsPage() {
           />
         </section>
       )}
-      <div className="rounded-2xl border-2 border-foreground bg-warning-soft p-5 shadow-brutal-md">
-        <h3 className="font-display text-xl font-extrabold">Phạm vi cài đặt</h3>
-        <p className="mt-2 font-semibold">
+      <div className="rounded-2xl border border-amber-200/70 bg-warning-soft p-5 shadow-sm">
+        <h3 className="text-lg font-bold">Phạm vi cài đặt</h3>
+        <p className="mt-2 text-sm font-medium leading-relaxed">
           Các giá trị nhạy cảm như API key chỉ được ghi ở trang Provider và
           backend chỉ trả cờ <code>hasApiKey</code>, không trả secret về trình
           duyệt. Trang này không dựng dữ liệu mẫu.
@@ -112,17 +112,17 @@ function SettingCard({
   return (
     <Link
       href={href}
-      className="group rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-md transition-transform hover:-translate-y-1"
+      className="group rounded-2xl border border-divider bg-surface p-5 shadow-sm transition-[border-color,box-shadow] duration-200 hover:border-primary/30 hover:shadow-md"
     >
       <div className="flex items-start justify-between gap-4">
-        <span className="flex h-12 w-12 items-center justify-center rounded-xl border-2 border-foreground bg-primary shadow-brutal-sm">
+        <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary-soft text-secondary-strong">
           <Icon className="h-6 w-6" />
         </span>
         <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
       </div>
-      <h3 className="mt-4 font-display text-2xl font-extrabold">{title}</h3>
-      <p className="mt-2 text-xl font-extrabold">{value}</p>
-      <p className="mt-1 font-semibold text-muted-foreground">{detail}</p>
+      <h3 className="mt-4 text-lg font-bold">{title}</h3>
+      <p className="mt-2 text-xl font-bold tracking-tight">{value}</p>
+      <p className="mt-1 text-sm font-medium text-muted-foreground">{detail}</p>
     </Link>
   );
 }

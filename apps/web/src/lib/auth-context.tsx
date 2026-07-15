@@ -52,6 +52,7 @@ let refreshInFlight: Promise<AuthResponse> | null = null;
 function refreshSession(): Promise<AuthResponse> {
   refreshInFlight ??= apiFetch<AuthResponse>("/auth/refresh", {
     method: "POST",
+    suppressGlobalError: true,
   }).finally(() => {
     refreshInFlight = null;
   });
@@ -108,6 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await apiFetch("/auth/logout", {
         method: "POST",
         accessToken: accessToken ?? undefined,
+        suppressGlobalError: true,
       });
     } catch {
       // Kể cả khi API lỗi vẫn xoá phiên phía client.

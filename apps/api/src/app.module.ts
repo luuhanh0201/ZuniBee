@@ -1,6 +1,6 @@
 import { join } from 'path';
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from '@/app.controller';
@@ -18,6 +18,7 @@ import {
   ThrottlerStorage,
 } from '@nestjs/throttler';
 import { RedisThrottlerStorage } from '@/common/security/redis-throttler.storage';
+import { ApiExceptionFilter } from '@/common/filters/api-exception.filter';
 
 // File đứng trước có độ ưu tiên cao hơn (không bị file sau override)
 const envFiles =
@@ -74,6 +75,7 @@ const appDir = join(__dirname, '..');
     RedisThrottlerStorage,
     { provide: ThrottlerStorage, useExisting: RedisThrottlerStorage },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_FILTER, useClass: ApiExceptionFilter },
   ],
 })
 export class AppModule {}

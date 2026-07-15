@@ -2,9 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BrainCircuit, Coins, FileText, Sparkles } from "lucide-react";
+import {
+  BrainCircuit,
+  Coins,
+  FileText,
+  LoaderCircle,
+  Sparkles,
+} from "lucide-react";
 import type {
   AiCreditAccount,
+  AiGenerationJob,
   AiQuizLanguage,
   QuizQuestionType,
 } from "@zunibee/shared";
@@ -16,7 +23,11 @@ import {
   PRIMARY_ACTION_CLASS,
   TeacherClassroomFrame,
 } from "@/components/classroom/classroom-ui";
-import { generateQuizWithAi, getMyAiCredit } from "./ai-api";
+import {
+  generateQuizWithAi,
+  getAiQuizGenerationJob,
+  getMyAiCredit,
+} from "./ai-api";
 
 const TYPES: Array<{ value: QuizQuestionType; label: string }> = [
   { value: "single_choice", label: "Một đáp án" },
@@ -43,6 +54,8 @@ export function AiQuizGenerator() {
   const [sourceType, setSourceType] = useState<"prompt" | "upload">("prompt");
   const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [jobProgress, setJobProgress] = useState<AiGenerationJob | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -52,15 +65,45 @@ export function AiQuizGenerator() {
       .catch((cause) => setError(getErrorMessage(cause)));
   }, [accessToken]);
 
+  useEffect(() => {
+    if (!accessToken || !activeJobId) return;
+    const token = accessToken;
+    const jobId = activeJobId;
+    let cancelled = false;
+    let timer: number | undefined;
+
+    async function poll() {
+      try {
+        const job = await getAiQuizGenerationJob(jobId, token);
+        if (cancelled) return;
+        setJobProgress(job);
+        if (job.status === "succeeded" || job.status === "failed") return;
+      } catch {
+        // Job có thể chưa được tạo trong vài mili giây đầu của request upload.
+      }
+      if (!cancelled) timer = window.setTimeout(() => void poll(), 1_000);
+    }
+
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [accessToken, activeJobId]);
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (lock.current || !accessToken) return;
     lock.current = true;
     setBusy(true);
     setError("");
+    const jobId = crypto.randomUUID();
+    setActiveJobId(jobId);
+    setJobProgress(null);
     try {
       const result = await generateQuizWithAi(
         {
+          jobId,
           title,
           description,
           topic,
@@ -73,12 +116,14 @@ export function AiQuizGenerator() {
         sourceType === "upload" ? (sourceFile ?? undefined) : undefined,
         accessToken,
       );
+      setJobProgress(result.job);
       router.push(teacherQuizRoute(result.quiz.id));
     } catch (cause) {
       setError(getErrorMessage(cause));
     } finally {
       lock.current = false;
       setBusy(false);
+      setActiveJobId(null);
     }
   }
 
@@ -252,23 +297,139 @@ export function AiQuizGenerator() {
             }
             className={`${PRIMARY_ACTION_CLASS} mt-5 w-full`}
           >
-            <Sparkles className="h-5 w-5" />
+            {busy ? (
+              <LoaderCircle
+                className="h-5 w-5 motion-safe:animate-spin"
+                aria-hidden="true"
+              />
+            ) : (
+              <Sparkles className="h-5 w-5" aria-hidden="true" />
+            )}
             {busy ? "AI đang soạn quiz..." : "Sinh quiz bằng AI"}
           </button>
           {busy ? (
-            <p
-              role="status"
-              aria-live="polite"
-              className="mt-3 text-sm font-bold"
-            >
-              Quá trình có thể mất tới 2 phút. Vui lòng giữ trang này mở.
-            </p>
+            <GenerationProgressPanel
+              sourceType={sourceType}
+              progress={jobProgress}
+            />
           ) : null}
         </aside>
       </form>
     </TeacherClassroomFrame>
   );
 }
+
+function GenerationProgressPanel({
+  sourceType,
+  progress,
+}: {
+  sourceType: "prompt" | "upload";
+  progress: AiGenerationJob | null;
+}) {
+  const total = progress?.documentTotalPages ?? null;
+  const processed = Math.min(progress?.documentProcessedPages ?? 0, total ?? 0);
+  const percent = total ? Math.round((processed / total) * 100) : null;
+  const copy = generationProgressCopy(sourceType, progress, processed, total);
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      className="mt-4 rounded-xl border-2 border-foreground bg-surface p-4 shadow-brutal-sm"
+    >
+      <div className="flex items-start gap-3">
+        <span className="relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary">
+          <LoaderCircle
+            className="h-5 w-5 motion-safe:animate-spin"
+            aria-hidden="true"
+          />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-extrabold tabular-nums">{copy.title}</p>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-xs font-extrabold">
+              <span
+                className="h-2 w-2 rounded-full bg-success motion-safe:animate-pulse"
+                aria-hidden="true"
+              />
+              Đang xử lý
+            </span>
+          </div>
+          <p className="mt-1 text-sm font-semibold text-muted-foreground">
+            {copy.detail}
+          </p>
+        </div>
+      </div>
+
+      <div
+        className="mt-3 h-2.5 overflow-hidden rounded-full border border-foreground/20 bg-background"
+        role={percent === null ? undefined : "progressbar"}
+        aria-label={percent === null ? undefined : "Tiến độ đọc tài liệu"}
+        aria-valuemin={percent === null ? undefined : 0}
+        aria-valuemax={percent === null ? undefined : 100}
+        aria-valuenow={percent ?? undefined}
+      >
+        <span
+          className={`block h-full rounded-full bg-primary transition-[width] duration-300 ease-out ${percent === null ? "w-1/3 motion-safe:animate-pulse" : ""}`}
+          style={percent === null ? undefined : { width: `${percent}%` }}
+        />
+      </div>
+      <p className="mt-3 text-xs font-bold text-muted-foreground">
+        Quá trình có thể mất tới 2 phút. Vui lòng giữ trang này mở.
+      </p>
+    </div>
+  );
+}
+
+function generationProgressCopy(
+  sourceType: "prompt" | "upload",
+  progress: AiGenerationJob | null,
+  processed: number,
+  total: number | null,
+): { title: string; detail: string } {
+  if (sourceType === "prompt") {
+    return progress?.stage === "saving_quiz"
+      ? {
+          title: "Đang lưu quiz bản nháp...",
+          detail: "Các câu hỏi đã tạo đang được lưu vào quiz.",
+        }
+      : {
+          title: "AI đang soạn câu hỏi...",
+          detail: "AI đang phân tích chủ đề và tạo nội dung quiz.",
+        };
+  }
+
+  if (!progress || progress.stage === "queued") {
+    return {
+      title: "Đang tải và kiểm tra tài liệu...",
+      detail: "Hệ thống đang nhận tệp và xác định số trang.",
+    };
+  }
+
+  const pageLabel = total
+    ? `Đã đọc ${processed}/${total} trang`
+    : "Đang đọc tài liệu...";
+  if (progress.stage === "generating_quiz") {
+    return {
+      title: pageLabel,
+      detail: "Đã trích xuất nội dung và đang soạn câu hỏi bằng AI.",
+    };
+  }
+  if (progress.stage === "saving_quiz") {
+    return {
+      title: pageLabel,
+      detail: "Các câu hỏi đã tạo đang được lưu vào quiz bản nháp.",
+    };
+  }
+  return {
+    title: pageLabel,
+    detail: total
+      ? "Hệ thống đang xử lý lần lượt từng trang của tài liệu."
+      : "Hệ thống đang trích xuất nội dung tài liệu.",
+  };
+}
+
 function Field({
   label,
   wide,

@@ -14,6 +14,15 @@ export enum AiGenerationJobStatus {
   FAILED = 'failed',
 }
 
+export enum AiGenerationJobStage {
+  QUEUED = 'queued',
+  READING_DOCUMENT = 'reading_document',
+  GENERATING_QUIZ = 'generating_quiz',
+  SAVING_QUIZ = 'saving_quiz',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+}
+
 @Entity('ai_generation_jobs')
 export class AiGenerationJobEntity {
   @PrimaryGeneratedColumn('uuid', {
@@ -32,6 +41,16 @@ export class AiGenerationJobEntity {
     default: AiGenerationJobStatus.PENDING,
   })
   status!: AiGenerationJobStatus;
+  @Column({
+    type: 'varchar',
+    length: 30,
+    default: AiGenerationJobStage.QUEUED,
+  })
+  stage!: AiGenerationJobStage;
+  @Column({ name: 'document_total_pages', type: 'integer', nullable: true })
+  documentTotalPages!: number | null;
+  @Column({ name: 'document_processed_pages', type: 'integer', default: 0 })
+  documentProcessedPages!: number;
   @Column({ name: 'request_payload', type: 'jsonb' }) requestPayload!: Record<
     string,
     unknown

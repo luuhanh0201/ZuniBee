@@ -105,6 +105,22 @@ export class NotificationQueueService implements OnModuleInit, OnModuleDestroy {
           email: row.recipientEmail,
           ...payload,
         });
+      } else if (row.type === 'ai_budget_alert') {
+        const payload = row.payload as {
+          adminName: string;
+          budgetName: string;
+          periodLabel: string;
+          scopeLabel: string;
+          spentUsd: number;
+          limitUsd: number;
+          usagePercent: number;
+          warningPercent: number;
+          usageUrl: string;
+        };
+        await this.mail.sendAiBudgetAlert({
+          email: row.recipientEmail,
+          ...payload,
+        });
       } else {
         throw new Error(`Loại thông báo chưa hỗ trợ: ${row.type}`);
       }

@@ -43,6 +43,11 @@ export class AiController {
       type: 'object',
       required: ['title', 'topic', 'questionCount'],
       properties: {
+        jobId: {
+          type: 'string',
+          format: 'uuid',
+          description: 'ID do client tạo để theo dõi tiến độ trong khi xử lý',
+        },
         title: { type: 'string' },
         description: { type: 'string' },
         topic: { type: 'string' },

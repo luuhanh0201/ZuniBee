@@ -8,7 +8,8 @@ export type MailTemplateName =
   | 'classroom-invitation'
   | 'classroom-member-added'
   | 'quiz-result'
-  | 'quiz-reminder';
+  | 'quiz-reminder'
+  | 'ai-budget-alert';
 export type MailTemplateContext = Record<string, unknown>;
 
 @Injectable()

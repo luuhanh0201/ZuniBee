@@ -10,8 +10,12 @@ import type {
   JoinClassroomResult,
   RegenerateClassroomAccessResponse,
 } from "@zunibee/shared";
-import { apiFetch } from "@/lib/api-client";
-import { API_URL, ApiError } from "@/lib/api-client";
+import {
+  API_URL,
+  apiErrorFromResponse,
+  apiFetch,
+  createNetworkApiError,
+} from "@/lib/api-client";
 
 export type ClassroomJoinKind = "link" | "invitation";
 
@@ -181,15 +185,11 @@ export async function fetchClassroomMaterialBlob(
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
       credentials: "include",
     },
-  );
+  ).catch(() => {
+    throw createNetworkApiError();
+  });
   if (!response.ok) {
-    const data = (await response.json().catch(() => null)) as {
-      message?: string | string[];
-    } | null;
-    const message = Array.isArray(data?.message)
-      ? data.message[0]
-      : data?.message || "Không thể tải tài liệu";
-    throw new ApiError(message, response.status);
+    throw await apiErrorFromResponse(response, "Không thể tải tài liệu");
   }
   return response.blob();
 }

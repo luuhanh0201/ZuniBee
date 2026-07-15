@@ -50,7 +50,11 @@ export class AiProviderService {
   async list(activeOnly = false): Promise<AiProvider[]> {
     const rows = await this.repository.find({
       where: activeOnly ? { isActive: true } : {},
-      order: { isDefault: 'DESC', name: 'ASC' },
+      order: {
+        isDefault: 'DESC',
+        isVisionDefault: 'DESC',
+        name: 'ASC',
+      },
     });
     const counts = await this.requestCounts(rows.map((row) => row.id));
     return rows.map((row) => this.toResponse(row, counts.get(row.id) ?? 0));
@@ -91,16 +95,33 @@ export class AiProviderService {
   }
 
   async resolve(id?: string): Promise<AiProviderEntity> {
-    const row = id
-      ? await this.repository.findOne({ where: { id, isActive: true } })
-      : await this.repository.findOne({
-          where: { isDefault: true, isActive: true },
-        });
+    if (!id) return this.resolveQuiz();
+    const row = await this.repository.findOne({
+      where: { id, isActive: true },
+    });
+    if (!row)
+      throw new NotFoundException('Provider AI không tồn tại hoặc đang tắt');
+    return row;
+  }
+
+  async resolveQuiz(): Promise<AiProviderEntity> {
+    const row = await this.repository.findOne({
+      where: { isDefault: true, isActive: true },
+    });
     if (!row)
       throw new NotFoundException(
-        id
-          ? 'Provider AI không tồn tại hoặc đang tắt'
-          : 'Chưa cấu hình provider AI mặc định',
+        'Chưa cấu hình provider AI dùng để tổng hợp và sinh quiz',
+      );
+    return row;
+  }
+
+  async resolveVision(): Promise<AiProviderEntity> {
+    const row = await this.repository.findOne({
+      where: { isVisionDefault: true, isActive: true },
+    });
+    if (!row)
+      throw new NotFoundException(
+        'Chưa cấu hình provider AI dùng để đọc ảnh/OCR',
       );
     return row;
   }
@@ -113,11 +134,19 @@ export class AiProviderService {
           { isDefault: true },
           { isDefault: false },
         );
+      if (dto.isVisionDefault)
+        await manager.update(
+          AiProviderEntity,
+          { isVisionDefault: true },
+          { isVisionDefault: false },
+        );
       const entity = manager.create(AiProviderEntity, {
         ...dto,
         baseUrl: normalizeBaseUrl(dto.baseUrl),
         encryptedApiKey: dto.apiKey ? this.secrets.encrypt(dto.apiKey) : null,
-        isActive: dto.isDefault ? true : (dto.isActive ?? true),
+        isActive:
+          dto.isDefault || dto.isVisionDefault ? true : (dto.isActive ?? true),
+        isVisionDefault: dto.isVisionDefault ?? false,
         baseCreditCost: dto.baseCreditCost ?? 1,
         creditCostPer1kTokens: dto.creditCostPer1kTokens ?? 1,
         inputUsdPer1m: dto.inputUsdPer1m ?? null,
@@ -140,17 +169,26 @@ export class AiProviderService {
       });
       if (!current) throw new NotFoundException('Provider AI không tồn tại');
       if (
-        current.isDefault &&
+        (current.isDefault || current.isVisionDefault) &&
         dto.isActive === false &&
-        dto.isDefault !== false
+        (current.isDefault ? dto.isDefault !== false : true) &&
+        (current.isVisionDefault ? dto.isVisionDefault !== false : true)
       ) {
-        throw new BadRequestException('Provider mặc định phải luôn được bật');
+        throw new BadRequestException(
+          'Provider đang được giao nhiệm vụ AI phải luôn được bật',
+        );
       }
       if (dto.isDefault)
         await manager.update(
           AiProviderEntity,
           { isDefault: true },
           { isDefault: false },
+        );
+      if (dto.isVisionDefault)
+        await manager.update(
+          AiProviderEntity,
+          { isVisionDefault: true },
+          { isVisionDefault: false },
         );
       const connectionChanged =
         dto.kind !== undefined ||
@@ -168,7 +206,9 @@ export class AiProviderService {
           : null;
       if (dto.isActive !== undefined) current.isActive = dto.isActive;
       if (dto.isDefault !== undefined) current.isDefault = dto.isDefault;
-      if (dto.isDefault) current.isActive = true;
+      if (dto.isVisionDefault !== undefined)
+        current.isVisionDefault = dto.isVisionDefault;
+      if (dto.isDefault || dto.isVisionDefault) current.isActive = true;
       if (dto.baseCreditCost !== undefined)
         current.baseCreditCost = dto.baseCreditCost;
       if (dto.creditCostPer1kTokens !== undefined)
@@ -186,9 +226,9 @@ export class AiProviderService {
   async remove(id: string): Promise<void> {
     const row = await this.repository.findOne({ where: { id } });
     if (!row) throw new NotFoundException('Provider AI không tồn tại');
-    if (row.isDefault)
+    if (row.isDefault || row.isVisionDefault)
       throw new BadRequestException(
-        'Hãy chọn provider mặc định khác trước khi xóa',
+        'Hãy chuyển các nhiệm vụ AI sang provider khác trước khi xóa',
       );
     try {
       await this.repository.remove(row);
@@ -420,6 +460,7 @@ export class AiProviderService {
       model: row.model,
       isActive: row.isActive,
       isDefault: row.isDefault,
+      isVisionDefault: row.isVisionDefault,
       hasApiKey: Boolean(row.encryptedApiKey),
       baseCreditCost: row.baseCreditCost,
       creditCostPer1kTokens: row.creditCostPer1kTokens,

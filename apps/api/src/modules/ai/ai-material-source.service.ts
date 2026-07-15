@@ -15,10 +15,10 @@ const SUPPORTED_MIME_TYPES = new Set([
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ]);
-const MIN_DOCUMENT_TEXT = 50;
-const MIN_PAGE_TEXT = 40;
+const MIN_DOCUMENT_TEXT = 500;
+const MIN_PAGE_TEXT = 400;
 const MIN_OCR_CONFIDENCE = 55;
-const MAX_PDF_PAGES = 50;
+const MAX_PDF_PAGES = 5000;
 const MAX_AI_VISION_PAGES = 10;
 const MAX_EXTRACTED_TEXT = 60_000;
 export const MAX_AI_SOURCE_SIZE = 50 * 1024 * 1024;
@@ -36,6 +36,12 @@ export type AiMaterialVisionContext = {
   provider: AiProviderEntity;
   referenceId: string;
   userId: string;
+  onProgress?: (progress: AiMaterialExtractionProgress) => Promise<void>;
+};
+
+export type AiMaterialExtractionProgress = {
+  totalPages: number;
+  processedPages: number;
 };
 
 type OcrResult = { text: string; confidence: number };
@@ -88,6 +94,7 @@ export class AiMaterialSourceService {
         throw new BadRequestException(
           `Tài liệu PDF không được vượt quá ${MAX_PDF_PAGES} trang`,
         );
+      await vision?.onProgress?.({ totalPages: pages, processedPages: 0 });
 
       const pageTexts: string[] = [];
       for (let page = 1; page <= pages; page += 1) {
@@ -97,6 +104,10 @@ export class AiMaterialSourceService {
         if (textLayer.length >= MIN_PAGE_TEXT) {
           pageTexts.push(`[Trang ${page}] ${textLayer}`);
           result.textLayerPages += 1;
+          await vision?.onProgress?.({
+            totalPages: pages,
+            processedPages: page,
+          });
           if (pageTexts.join(' ').length >= MAX_EXTRACTED_TEXT) break;
           continue;
         }
@@ -145,6 +156,10 @@ export class AiMaterialSourceService {
           result.visionOutputTokens += completion.outputTokens;
         }
         await unlink(imagePath).catch(() => undefined);
+        await vision?.onProgress?.({
+          totalPages: pages,
+          processedPages: page,
+        });
         if (pageTexts.join(' ').length >= MAX_EXTRACTED_TEXT) break;
       }
 

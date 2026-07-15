@@ -10,6 +10,7 @@ export type AiProvider = {
   model: string;
   isActive: boolean;
   isDefault: boolean;
+  isVisionDefault: boolean;
   hasApiKey: boolean;
   baseCreditCost: number;
   creditCostPer1kTokens: number;
@@ -31,6 +32,7 @@ export type CreateAiProviderRequest = {
   apiKey?: string;
   isActive?: boolean;
   isDefault?: boolean;
+  isVisionDefault?: boolean;
   baseCreditCost?: number;
   creditCostPer1kTokens?: number;
   inputUsdPer1m?: number | null;
@@ -262,7 +264,15 @@ export type AiCreditAdminUserPage = {
 export type AiGenerationSourceType = "prompt" | "upload";
 export type AiQuizLanguage = "auto" | "vi" | "en";
 export type AiGenerationStatus = "pending" | "running" | "succeeded" | "failed";
+export type AiGenerationStage =
+  | "queued"
+  | "reading_document"
+  | "generating_quiz"
+  | "saving_quiz"
+  | "completed"
+  | "failed";
 export type GenerateQuizWithAiRequest = {
+  jobId?: string;
   title: string;
   description?: string;
   topic: string;
@@ -275,6 +285,9 @@ export type GenerateQuizWithAiRequest = {
 export type AiGenerationJob = {
   id: string;
   status: AiGenerationStatus;
+  stage: AiGenerationStage;
+  documentTotalPages: number | null;
+  documentProcessedPages: number;
   providerId: string;
   providerName: string;
   quizId: string | null;

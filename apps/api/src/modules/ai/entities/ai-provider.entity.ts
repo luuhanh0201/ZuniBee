@@ -34,6 +34,8 @@ export class AiProviderEntity {
   isActive!: boolean;
   @Column({ name: 'is_default', type: 'boolean', default: false })
   isDefault!: boolean;
+  @Column({ name: 'is_vision_default', type: 'boolean', default: false })
+  isVisionDefault!: boolean;
   @Column({ name: 'base_credit_cost', type: 'integer', default: 1 })
   baseCreditCost!: number;
   @Column({ name: 'credit_cost_per_1k_tokens', type: 'integer', default: 1 })

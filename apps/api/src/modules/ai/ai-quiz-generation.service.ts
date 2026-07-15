@@ -23,6 +23,7 @@ import { AiModelClientService } from './ai-model-client.service';
 import { AiMaterialSourceService } from './ai-material-source.service';
 import {
   AiGenerationJobEntity,
+  AiGenerationJobStage,
   AiGenerationJobStatus,
 } from './entities/ai-generation-job.entity';
 import { GenerateQuizWithAiDto } from './dto/generate-quiz-with-ai.dto';
@@ -50,7 +51,11 @@ export class AiQuizGenerationService {
     dto: GenerateQuizWithAiDto,
     sourceFile?: Express.Multer.File,
   ): Promise<GenerateQuizWithAiResponse> {
-    const provider = await this.providers.resolve();
+    const provider = await this.providers.resolveQuiz();
+    const visionProvider =
+      dto.sourceType === 'upload'
+        ? await this.providers.resolveVision()
+        : undefined;
     const reserved = estimateReservedCredits(
       provider.baseCreditCost,
       provider.creditCostPer1kTokens,
@@ -58,10 +63,14 @@ export class AiQuizGenerationService {
     );
     let job = await this.jobs.save(
       this.jobs.create({
+        ...(dto.jobId ? { id: dto.jobId } : {}),
         teacherId,
         providerId: provider.id,
         quizId: null,
         status: AiGenerationJobStatus.PENDING,
+        stage: AiGenerationJobStage.QUEUED,
+        documentTotalPages: null,
+        documentProcessedPages: 0,
         requestPayload: sanitizeRequest(dto, sourceFile),
         reservedCredits: reserved,
         chargedCredits: 0,
@@ -80,23 +89,38 @@ export class AiQuizGenerationService {
       );
     } catch (error) {
       job.status = AiGenerationJobStatus.FAILED;
+      job.stage = AiGenerationJobStage.FAILED;
       job.errorMessage = safeError(error);
       job.completedAt = new Date();
       await this.jobs.save(job);
       throw error;
     }
     job.status = AiGenerationJobStatus.RUNNING;
+    job.stage =
+      dto.sourceType === 'upload'
+        ? AiGenerationJobStage.READING_DOCUMENT
+        : AiGenerationJobStage.GENERATING_QUIZ;
     await this.jobs.save(job);
     let quizId: string | null = null;
     try {
       const source =
         dto.sourceType === 'upload'
           ? await this.materialSource.extract(sourceFile, {
-              provider,
+              provider: visionProvider!,
               referenceId: job.id,
               userId: teacherId,
+              onProgress: async ({ totalPages, processedPages }) => {
+                await this.updateProgress(job, {
+                  stage: AiGenerationJobStage.READING_DOCUMENT,
+                  documentTotalPages: totalPages,
+                  documentProcessedPages: processedPages,
+                });
+              },
             })
           : null;
+      await this.updateProgress(job, {
+        stage: AiGenerationJobStage.GENERATING_QUIZ,
+      });
       const completion = await this.client.completeJson(
         provider,
         generationSystemPrompt(),
@@ -109,6 +133,9 @@ export class AiQuizGenerationService {
         dto.questionCount,
         dto.questionTypes,
       );
+      await this.updateProgress(job, {
+        stage: AiGenerationJobStage.SAVING_QUIZ,
+      });
       let quiz = await this.quizzes.create(teacherId, {
         title: dto.title,
         description: dto.description,
@@ -144,6 +171,7 @@ export class AiQuizGenerationService {
         ...job,
         quizId,
         status: AiGenerationJobStatus.SUCCEEDED,
+        stage: AiGenerationJobStage.COMPLETED,
         chargedCredits: charged,
         inputTokens: totalInputTokens,
         outputTokens: totalOutputTokens,
@@ -165,6 +193,7 @@ export class AiQuizGenerationService {
         reserved,
       );
       job.status = AiGenerationJobStatus.FAILED;
+      job.stage = AiGenerationJobStage.FAILED;
       job.errorMessage = safeError(error);
       job.completedAt = new Date();
       await this.jobs.save(job);
@@ -186,6 +215,9 @@ export class AiQuizGenerationService {
     return {
       id: job.id,
       status: job.status,
+      stage: job.stage ?? stageFromStatus(job.status),
+      documentTotalPages: job.documentTotalPages ?? null,
+      documentProcessedPages: job.documentProcessedPages ?? 0,
       providerId: job.providerId,
       providerName,
       quizId: job.quizId,
@@ -197,6 +229,18 @@ export class AiQuizGenerationService {
       createdAt: job.createdAt.toISOString(),
       completedAt: job.completedAt?.toISOString() ?? null,
     };
+  }
+
+  private async updateProgress(
+    job: AiGenerationJobEntity,
+    updates: {
+      stage?: AiGenerationJobStage;
+      documentTotalPages?: number | null;
+      documentProcessedPages?: number;
+    },
+  ): Promise<void> {
+    Object.assign(job, updates);
+    await this.jobs.update(job.id, updates);
   }
 }
 
@@ -225,8 +269,10 @@ function sanitizeRequest(
   dto: GenerateQuizWithAiDto,
   sourceFile?: Express.Multer.File,
 ): Record<string, unknown> {
+  const request: Record<string, unknown> = { ...dto };
+  delete request.jobId;
   return {
-    ...dto,
+    ...request,
     sourceFile: sourceFile
       ? {
           name: sourceFile.originalname.slice(0, 255),
@@ -235,6 +281,16 @@ function sanitizeRequest(
         }
       : null,
   };
+}
+
+function stageFromStatus(status: AiGenerationJobStatus): AiGenerationJobStage {
+  if (status === AiGenerationJobStatus.SUCCEEDED)
+    return AiGenerationJobStage.COMPLETED;
+  if (status === AiGenerationJobStatus.FAILED)
+    return AiGenerationJobStage.FAILED;
+  if (status === AiGenerationJobStatus.RUNNING)
+    return AiGenerationJobStage.GENERATING_QUIZ;
+  return AiGenerationJobStage.QUEUED;
 }
 export function validateGeneratedQuestions(
   value: unknown,

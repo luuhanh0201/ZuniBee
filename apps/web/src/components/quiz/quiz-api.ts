@@ -19,7 +19,12 @@ import type {
   UpdateQuizQuestionRequest,
   UpdateQuizRequest,
 } from "@zunibee/shared";
-import { API_URL, apiFetch } from "@/lib/api-client";
+import {
+  API_URL,
+  apiErrorFromResponse,
+  apiFetch,
+  createNetworkApiError,
+} from "@/lib/api-client";
 
 export const listQuizzes = (token?: string) =>
   apiFetch<QuizSummary[]>("/quizzes", { accessToken: token });
@@ -150,8 +155,14 @@ export const listQuizResultNotifications = (id: string, token?: string) =>
 export async function downloadQuizResultsExcel(id: string, token?: string) {
   const response = await fetch(`${API_URL}/quizzes/${id}/results.xlsx`, {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  }).catch(() => {
+    throw createNetworkApiError();
   });
-  if (!response.ok) throw new Error("Không thể xuất file Excel kết quả");
+  if (!response.ok)
+    throw await apiErrorFromResponse(
+      response,
+      "Không thể xuất file Excel kết quả",
+    );
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");

@@ -48,4 +48,30 @@ describe('MailTemplateRenderer', () => {
     expect(text).toContain('Toán <10A1>');
     expect(text).toContain('?type=invitation');
   });
+
+  it('renders the AI budget alert in HTML and plain text', async () => {
+    const budgetContext = {
+      title: 'Cảnh báo ngân sách AI',
+      preheader: 'Ngân sách AI đã đạt ngưỡng',
+      adminName: '<Admin Bee>',
+      budgetName: 'Ngân sách AI tháng',
+      usageLabel: '80,5%',
+      warningLabel: '80%',
+      scopeLabel: 'Toàn hệ thống',
+      periodLabel: 'Tháng 07/2026',
+      spentLabel: '$8.05',
+      limitLabel: '$10.00',
+      usageUrl: 'https://zunibee.online/admin/ai/usage',
+    };
+
+    const [html, text] = await Promise.all([
+      renderer.renderHtml('ai-budget-alert', budgetContext),
+      renderer.renderText('ai-budget-alert', budgetContext),
+    ]);
+
+    expect(html).toContain('&lt;Admin Bee&gt;');
+    expect(html).toContain('80,5%');
+    expect(text).toContain('$8.05 / $10.00');
+    expect(text).toContain('https://zunibee.online/admin/ai/usage');
+  });
 });
