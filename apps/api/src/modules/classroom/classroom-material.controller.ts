@@ -22,6 +22,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
+import { pipeline } from 'node:stream/promises';
 import type { ClassroomMaterial } from '@zunibee/shared';
 import { UserRole } from '@zunibee/shared';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
@@ -136,7 +137,8 @@ export class ClassroomMaterialController {
       materialId,
       currentUser,
     );
+    response.attachment(file.filename);
     response.type(file.mimeType);
-    response.download(file.path, file.filename);
+    await pipeline(file.stream, response);
   }
 }

@@ -15,6 +15,11 @@ export enum ClassroomMaterialType {
   FILE = 'file',
 }
 
+export enum ClassroomMaterialStorageProvider {
+  LOCAL = 'local',
+  CLOUDINARY = 'cloudinary',
+}
+
 @Entity('classroom_materials')
 export class ClassroomMaterial {
   @PrimaryGeneratedColumn('uuid', {
@@ -55,6 +60,14 @@ export class ClassroomMaterial {
     nullable: true,
   })
   storageName!: string | null;
+
+  @Column({
+    name: 'storage_provider',
+    type: 'varchar',
+    length: 16,
+    default: ClassroomMaterialStorageProvider.LOCAL,
+  })
+  storageProvider!: ClassroomMaterialStorageProvider;
 
   @Column({
     name: 'original_name',

@@ -12,6 +12,7 @@ import { MailModule } from '@/modules/mail/mail.module';
 import { User } from '@/modules/user/entities/user.entity';
 import { Quiz } from '@/modules/quiz/entities/quiz.entity';
 import { QuizAssignment } from '@/modules/quiz/entities/quiz-assignment.entity';
+import { UploadFileModule } from '@/modules/upload-file/upload-file.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { QuizAssignment } from '@/modules/quiz/entities/quiz-assignment.entity';
       QuizAssignment,
     ]),
     MailModule,
+    UploadFileModule,
   ],
   controllers: [ClassroomController, ClassroomMaterialController],
   providers: [ClassroomService, ClassroomMaterialService],

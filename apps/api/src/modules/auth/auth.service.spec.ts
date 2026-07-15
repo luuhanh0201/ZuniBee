@@ -2,6 +2,7 @@ import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { JwtService } from '@nestjs/jwt';
 import type { Repository } from 'typeorm';
+import { createHash } from 'node:crypto';
 import * as bcrypt from 'bcrypt';
 import { UserRole, UserStatus } from '@zunibee/shared';
 import { AuthService } from './auth.service';
@@ -69,10 +70,7 @@ function session(overrides: Partial<UserSession> = {}): UserSession {
     id: 'session-1',
     userId: '00000000-0000-4000-8000-000000000001',
     sessionToken: 'sid-1',
-    refreshToken: require('crypto')
-      .createHash('sha256')
-      .update(REFRESH_TOKEN)
-      .digest('hex'),
+    refreshToken: createHash('sha256').update(REFRESH_TOKEN).digest('hex'),
     isActive: true,
     revokedAt: undefined,
     revokeReason: undefined,

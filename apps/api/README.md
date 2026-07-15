@@ -57,6 +57,45 @@ $ pnpm run test:e2e
 $ pnpm run test:cov
 ```
 
+## Lưu tài liệu: Cloudinary ưu tiên, local dự phòng
+
+Tài liệu lớp học luôn được tải qua backend và giữ private. Production có thể
+ưu tiên Cloudinary; khi mức sử dụng storage dự kiến đạt ngưỡng cấu hình hoặc
+Cloudinary trả lỗi quota/dung lượng, file mới được lưu về local. Lỗi xác thực
+Cloudinary không fallback để tránh che giấu cấu hình sai.
+
+```dotenv
+FILE_STORAGE_DRIVER=cloudinary
+FILE_STORAGE_FALLBACK_DRIVER=local
+CLOUDINARY_URL=cloudinary://API_KEY:API_SECRET@CLOUD_NAME
+CLOUDINARY_STORAGE_PREFIX=zunibee
+CLOUDINARY_STORAGE_FALLBACK_PERCENT=95
+CLOUDINARY_USAGE_CACHE_SECONDS=60
+```
+
+`CLOUDINARY_URL` nằm trong Cloudinary Console ở **Settings → API Keys**. Có thể
+dùng riêng `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` và
+`CLOUDINARY_API_SECRET` thay cho URL. Không commit API Secret vào Git.
+
+Asset được upload dưới dạng `raw` với delivery type `authenticated`. Database
+ghi `storage_provider` cho từng tài liệu, vì vậy download và delete luôn dùng
+đúng nơi file thực sự được lưu. Bucket/local folder không được public; endpoint
+download của ZuniBee vẫn kiểm tra quyền thành viên lớp trước khi stream file.
+
+Cloudinary áp dụng quota mềm nên hệ thống chủ động dùng Admin Usage API để
+fallback từ ngưỡng 95% thay vì chờ tài khoản bị vô hiệu hóa. Kết quả usage được
+cache 60 giây để không tiêu tốn rate limit. Có thể chỉnh hai giá trị này qua env.
+
+Chạy migration trước khi bật cấu hình:
+
+```bash
+pnpm --filter api migration:run
+```
+
+File local nằm tại `protected-uploads/classroom-materials`. Khi chạy Docker,
+thư mục này nằm trong volume `api-protected-uploads`, nên vẫn tồn tại sau khi
+container khởi động lại.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

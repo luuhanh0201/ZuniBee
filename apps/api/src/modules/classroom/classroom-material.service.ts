@@ -6,8 +6,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
-import { mkdir, unlink, writeFile } from 'node:fs/promises';
-import { basename, extname, join } from 'node:path';
+import { basename, extname } from 'node:path';
+import type { Readable } from 'node:stream';
 import { Repository } from 'typeorm';
 import {
   UserRole,
@@ -18,11 +18,12 @@ import { Classroom } from '@/modules/classroom/entities/classroom.entity';
 import { ClassroomMember } from '@/modules/classroom/entities/classroom-member.entity';
 import {
   ClassroomMaterial,
+  ClassroomMaterialStorageProvider,
   ClassroomMaterialType,
 } from '@/modules/classroom/entities/classroom-material.entity';
 import { CreateClassroomMaterialFileDto } from '@/modules/classroom/dto/create-classroom-material-file.dto';
 import { UpdateClassroomMaterialDto } from '@/modules/classroom/dto/update-classroom-material.dto';
-import { CLASSROOM_MATERIAL_UPLOAD_DIR } from '@/modules/upload-file/upload-file.constants';
+import { ClassroomMaterialStorageService } from '@/modules/upload-file/classroom-material-storage.service';
 import { assertDeclaredFileType } from '@/modules/upload-file/upload-file-validation.util';
 
 const ALLOWED_MATERIAL_MIME_TYPES = new Set([
@@ -40,6 +41,23 @@ const ALLOWED_MATERIAL_MIME_TYPES = new Set([
   'application/zip',
 ]);
 
+const MATERIAL_EXTENSION_BY_MIME: Record<string, string> = {
+  'application/pdf': '.pdf',
+  'application/msword': '.doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+    '.docx',
+  'application/vnd.ms-powerpoint': '.ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation':
+    '.pptx',
+  'application/vnd.ms-excel': '.xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'text/plain': '.txt',
+  'application/zip': '.zip',
+};
+
 @Injectable()
 export class ClassroomMaterialService {
   constructor(
@@ -49,6 +67,7 @@ export class ClassroomMaterialService {
     private readonly classroomRepository: Repository<Classroom>,
     @InjectRepository(ClassroomMember)
     private readonly memberRepository: Repository<ClassroomMember>,
+    private readonly storage: ClassroomMaterialStorageService,
   ) {}
 
   async list(
@@ -82,46 +101,62 @@ export class ClassroomMaterialService {
     }
     files.forEach((file) => assertDeclaredFileType(file));
 
-    await mkdir(CLASSROOM_MATERIAL_UPLOAD_DIR, { recursive: true });
-    const storedFiles = files.map((file) => {
-      const extension = extname(file.originalname).slice(0, 16).toLowerCase();
-      return { file, extension, storageName: `${randomUUID()}${extension}` };
+    const pendingFiles = files.map((file) => {
+      const originalName = safeOriginalName(file.originalname);
+      const titleExtension = extname(originalName).slice(0, 16);
+      const storageExtension = MATERIAL_EXTENSION_BY_MIME[file.mimetype];
+      return {
+        file,
+        originalName,
+        titleExtension,
+        storageName: `${randomUUID()}${storageExtension}`,
+      };
     });
-    await Promise.all(
-      storedFiles.map(({ file, storageName }) =>
-        writeFile(
-          join(CLASSROOM_MATERIAL_UPLOAD_DIR, storageName),
-          file.buffer,
-        ),
-      ),
+    const uploadResults = await Promise.allSettled(
+      pendingFiles.map(async (pending) => ({
+        ...pending,
+        stored: await this.storage.store({
+          classroomId,
+          storageName: pending.storageName,
+          originalName: pending.originalName,
+          mimeType: pending.file.mimetype,
+          buffer: pending.file.buffer,
+        }),
+      })),
     );
+    const storedFiles = uploadResults
+      .filter((result) => result.status === 'fulfilled')
+      .map((result) => result.value);
+    const failedUpload = uploadResults.find(
+      (result) => result.status === 'rejected',
+    );
+    if (failedUpload?.status === 'rejected') {
+      await this.cleanupStoredFiles(storedFiles);
+      throw failedUpload.reason;
+    }
 
     try {
-      const entities = storedFiles.map(({ file, extension, storageName }) =>
-        this.materialRepository.create({
-          classroomId,
-          title:
-            basename(file.originalname, extension).trim().slice(0, 160) ||
-            'Tài liệu',
-          description: dto.description ?? null,
-          type: ClassroomMaterialType.FILE,
-          url: null,
-          storageName,
-          originalName: file.originalname.slice(0, 255),
-          mimeType: file.mimetype,
-          size: file.size,
-        }),
+      const entities = storedFiles.map(
+        ({ file, originalName, titleExtension, stored }) =>
+          this.materialRepository.create({
+            classroomId,
+            title:
+              basename(originalName, titleExtension).trim().slice(0, 160) ||
+              'Tài liệu',
+            description: dto.description ?? null,
+            type: ClassroomMaterialType.FILE,
+            url: null,
+            storageName: stored.key,
+            storageProvider: stored.provider,
+            originalName,
+            mimeType: file.mimetype,
+            size: file.size,
+          }),
       );
       const saved = await this.materialRepository.save(entities);
       return saved.map((material) => this.toResponse(material));
     } catch (error) {
-      await Promise.all(
-        storedFiles.map(({ storageName }) =>
-          unlink(join(CLASSROOM_MATERIAL_UPLOAD_DIR, storageName)).catch(
-            () => undefined,
-          ),
-        ),
-      );
+      await this.cleanupStoredFiles(storedFiles);
       throw error;
     }
   }
@@ -153,26 +188,30 @@ export class ClassroomMaterialService {
   ): Promise<void> {
     await this.assertOwner(classroomId, teacherId);
     const material = await this.loadMaterial(classroomId, materialId);
-    await this.materialRepository.remove(material);
     if (material.storageName) {
-      await unlink(
-        join(CLASSROOM_MATERIAL_UPLOAD_DIR, material.storageName),
-      ).catch(() => undefined);
+      await this.storage.delete(
+        material.storageProvider ?? ClassroomMaterialStorageProvider.LOCAL,
+        material.storageName,
+      );
     }
+    await this.materialRepository.remove(material);
   }
 
   async getDownload(
     classroomId: string,
     materialId: string,
     currentUser: AuthenticatedUser,
-  ): Promise<{ path: string; filename: string; mimeType: string }> {
+  ): Promise<{ stream: Readable; filename: string; mimeType: string }> {
     await this.assertCanAccess(classroomId, currentUser);
     const material = await this.loadMaterial(classroomId, materialId);
     if (!material.storageName || material.type !== ClassroomMaterialType.FILE) {
       throw new BadRequestException('Tài liệu này không phải là tệp tải xuống');
     }
     return {
-      path: join(CLASSROOM_MATERIAL_UPLOAD_DIR, material.storageName),
+      stream: await this.storage.createReadStream(
+        material.storageProvider ?? ClassroomMaterialStorageProvider.LOCAL,
+        material.storageName,
+      ),
       filename: material.originalName ?? material.title,
       mimeType: material.mimeType ?? 'application/octet-stream',
     };
@@ -223,6 +262,21 @@ export class ClassroomMaterialService {
     return material;
   }
 
+  private async cleanupStoredFiles(
+    files: Array<{
+      stored: {
+        provider: ClassroomMaterialStorageProvider;
+        key: string;
+      };
+    }>,
+  ): Promise<void> {
+    await Promise.allSettled(
+      files.map(({ stored }) =>
+        this.storage.delete(stored.provider, stored.key),
+      ),
+    );
+  }
+
   private toResponse(material: ClassroomMaterial): MaterialResponse {
     return {
       id: material.id,
@@ -237,4 +291,11 @@ export class ClassroomMaterialService {
       updatedAt: material.updatedAt.toISOString(),
     };
   }
+}
+
+function safeOriginalName(value: string): string {
+  const filename = basename(
+    value.replace(/\\/g, '/').replace(/[\0\r\n]/g, ''),
+  ).slice(0, 255);
+  return filename || 'tai-lieu';
 }
