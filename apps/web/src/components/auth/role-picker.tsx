@@ -20,7 +20,7 @@ export function RolePicker() {
 
   return (
     <div role="radiogroup" aria-label="Bạn là Giáo viên hay Học sinh?">
-      <p className="mb-1.5 block text-sm font-bold text-foreground">
+      <p className="mb-2 block text-sm font-semibold text-foreground">
         Bạn là Giáo viên hay Học sinh?
       </p>
       <div className="grid grid-cols-2 gap-3">
@@ -33,10 +33,10 @@ export function RolePicker() {
               role="radio"
               aria-checked={selected}
               onClick={() => setRole(value)}
-              className={`relative flex min-h-24 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-foreground px-3 py-4 text-sm font-bold transition-[transform,box-shadow,background-color] duration-150 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
+              className={`relative flex min-h-24 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 px-3 py-4 text-sm font-semibold transition-[border-color,background-color,box-shadow] duration-200 focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring ${
                 selected
-                  ? "-translate-x-px -translate-y-px bg-primary text-foreground shadow-brutal-md"
-                  : "bg-surface text-foreground/70 shadow-brutal-xs hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-sm"
+                  ? "border-foreground bg-primary text-on-primary shadow-brutal-xs"
+                  : "border-border bg-surface text-muted-foreground hover:border-foreground/60 hover:bg-surface-soft hover:text-foreground"
               }`}
             >
               {selected ? (

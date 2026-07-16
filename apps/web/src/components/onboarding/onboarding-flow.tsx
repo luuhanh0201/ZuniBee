@@ -29,14 +29,14 @@ const roleOptions: {
     value: UserRole.STUDENT,
     icon: BookOpen,
     title: "Học sinh",
-    description: "Luyện quiz, theo dõi XP và học theo nhịp riêng.",
+    description: "Tiếp tục bài đang học, hoàn thành hoạt động và xem phản hồi.",
     color: "bg-secondary-soft",
   },
   {
     value: UserRole.TEACHER,
     icon: GraduationCap,
     title: "Giáo viên",
-    description: "Tạo hoạt động, quản lý lớp và xem tiến bộ học sinh.",
+    description: "Tổ chức nội dung, quản lý lớp và đồng hành cùng người học.",
     color: "bg-warning-soft",
   },
 ];
@@ -69,40 +69,31 @@ export function OnboardingFlow() {
   }
 
   return (
-    <main className="relative flex min-h-dvh flex-1 items-center justify-center overflow-hidden bg-background px-4 py-12 text-foreground sm:px-6">
-      <div
-        aria-hidden="true"
-        className="absolute -left-12 top-16 h-32 w-32 rounded-full border-2 border-foreground bg-secondary"
-      />
-      <div
-        aria-hidden="true"
-        className="absolute -right-10 bottom-12 h-28 w-28 rotate-12 rounded-3xl border-2 border-foreground bg-success"
-      />
-
-      <section className="relative z-10 w-full max-w-3xl rounded-3xl border-[3px] border-foreground bg-surface p-5 shadow-brutal-2xl sm:p-8">
+    <main className="flex min-h-dvh flex-1 items-center justify-center bg-background px-4 py-12 text-foreground sm:px-6">
+      <section className="w-full max-w-4xl rounded-3xl border-2 border-foreground bg-surface p-5 shadow-brutal-lg sm:p-8 lg:p-10">
         <header className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-xl border-2 border-foreground bg-primary shadow-brutal-sm">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-on-primary">
               <Sparkles aria-hidden="true" className="h-5 w-5" />
             </span>
             <div>
               <p className="font-display text-lg font-bold">
-                Thiết lập ZuniBee
+                Thiết lập không gian
               </p>
               <p className="text-sm font-semibold text-muted-foreground">
-                Bản demo · không cần backend
+                Chọn cách bạn muốn bắt đầu
               </p>
             </div>
           </div>
-          <span className="rounded-full border-2 border-foreground bg-surface-soft px-3 py-1 text-sm font-bold tabular-nums">
+          <span className="rounded-full border border-divider bg-surface-soft px-3 py-1 text-sm font-semibold tabular-nums">
             Bước {step}/2
           </span>
         </header>
 
-        <div className="mt-6 h-3 overflow-hidden rounded-full border-2 border-foreground bg-surface-soft">
+        <div className="mt-6 h-2 overflow-hidden rounded-full bg-surface-soft">
           <div
             className={
-              "h-full bg-success transition-[width] duration-300 motion-reduce:transition-none " +
+              "h-full bg-primary transition-[width] duration-200 motion-reduce:transition-none " +
               (step === 1 ? "w-1/2" : "w-full")
             }
           />
@@ -110,12 +101,13 @@ export function OnboardingFlow() {
 
         {step === 1 ? (
           <div className="mt-8">
-            <div className="text-center">
+            <div className="max-w-2xl">
               <h1 className="font-display text-3xl font-bold sm:text-4xl">
-                Bạn muốn trải nghiệm ZuniBee với vai trò nào?
+                Bạn sẽ dùng ZuniBee theo cách nào?
               </h1>
-              <p className="mt-3 font-semibold text-muted-foreground">
-                Bạn có thể đổi lại vai trò bất cứ lúc nào trong bản demo.
+              <p className="mt-3 text-muted-foreground">
+                ZuniBee sẽ chuẩn bị navigation và hành động tiếp theo phù hợp
+                với vai trò của bạn.
               </p>
             </div>
 
@@ -135,11 +127,10 @@ export function OnboardingFlow() {
                     aria-checked={selected}
                     onClick={() => setRole(option.value)}
                     className={
-                      "relative min-h-48 cursor-pointer rounded-2xl border-[3px] border-foreground p-5 text-left transition-[transform,box-shadow,background-color] duration-200 ease-out focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-ring motion-reduce:transform-none " +
+                      "relative min-h-48 cursor-pointer rounded-2xl border-2 p-5 text-left transition-[border-color,box-shadow,background-color] duration-200 ease-out focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-ring " +
                       (selected
-                        ? option.color +
-                          " -translate-x-px -translate-y-px shadow-brutal-lg"
-                        : "bg-surface shadow-brutal-sm hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-md")
+                        ? option.color + " border-foreground shadow-brutal-xs"
+                        : "border-border bg-surface hover:border-foreground/60 hover:bg-surface-soft")
                     }
                   >
                     {selected ? (
@@ -153,7 +144,7 @@ export function OnboardingFlow() {
                     ) : null}
                     <span
                       className={
-                        "flex h-14 w-14 items-center justify-center rounded-xl border-2 border-foreground shadow-brutal-sm " +
+                        "flex h-14 w-14 items-center justify-center rounded-xl " +
                         option.color
                       }
                     >
@@ -166,7 +157,7 @@ export function OnboardingFlow() {
                     <h2 className="mt-5 font-display text-2xl font-bold">
                       {option.title}
                     </h2>
-                    <p className="mt-2 font-semibold leading-relaxed text-muted-foreground">
+                    <p className="mt-2 leading-relaxed text-muted-foreground">
                       {option.description}
                     </p>
                   </button>
@@ -178,7 +169,7 @@ export function OnboardingFlow() {
               type="button"
               disabled={!role}
               onClick={() => setStep(2)}
-              className="mt-7 inline-flex min-h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-primary px-6 text-lg font-bold text-on-primary shadow-brutal-md transition-[transform,box-shadow] duration-200 hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-lg active:translate-x-0.5 active:translate-y-0.5 active:shadow-brutal-xs disabled:cursor-not-allowed disabled:border-border disabled:bg-surface-soft disabled:text-muted-foreground disabled:shadow-none disabled:transform-none motion-reduce:transform-none focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-ring"
+              className="mt-7 inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-primary px-6 font-semibold text-on-primary shadow-brutal-sm transition-[transform,box-shadow,background-color] duration-200 hover:-translate-y-px hover:bg-primary-hover hover:shadow-brutal-md disabled:cursor-not-allowed disabled:border-border disabled:bg-surface-soft disabled:text-muted-foreground disabled:shadow-none disabled:transform-none motion-reduce:transform-none focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-ring"
             >
               Tiếp tục
               <ArrowRight aria-hidden="true" className="h-5 w-5" />
@@ -186,11 +177,11 @@ export function OnboardingFlow() {
           </div>
         ) : (
           <div className="mt-8">
-            <div className="text-center">
+            <div className="max-w-2xl">
               <h1 className="font-display text-3xl font-bold sm:text-4xl">
-                Cá nhân hóa trải nghiệm demo
+                Chọn điểm bắt đầu phù hợp
               </h1>
-              <p className="mt-3 font-semibold text-muted-foreground">
+              <p className="mt-3 text-muted-foreground">
                 {role === UserRole.STUDENT
                   ? "Chọn lớp và môn bạn muốn luyện tập trước."
                   : "Chọn khối lớp và môn bạn đang giảng dạy."}
@@ -198,14 +189,14 @@ export function OnboardingFlow() {
             </div>
 
             <div className="mx-auto mt-8 grid max-w-xl gap-5 sm:grid-cols-2">
-              <label className="font-bold">
+              <label className="font-semibold">
                 {role === UserRole.STUDENT
                   ? "Bạn đang học"
                   : "Khối lớp phụ trách"}
                 <select
                   value={level}
                   onChange={(event) => setLevel(event.target.value)}
-                  className="mt-2 min-h-12 w-full cursor-pointer rounded-xl border-2 border-foreground bg-surface px-4 font-semibold shadow-brutal-sm focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring"
+                  className="mt-2 min-h-12 w-full cursor-pointer rounded-xl border-2 border-border bg-surface px-4 font-medium hover:border-foreground/60 focus-visible:border-foreground focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring"
                 >
                   {["Lớp 6", "Lớp 7", "Lớp 8", "Lớp 9", "THPT"].map((item) => (
                     <option key={item}>{item}</option>
@@ -213,12 +204,12 @@ export function OnboardingFlow() {
                 </select>
               </label>
 
-              <label className="font-bold">
+              <label className="font-semibold">
                 Môn học ưu tiên
                 <select
                   value={subject}
                   onChange={(event) => setSubject(event.target.value)}
-                  className="mt-2 min-h-12 w-full cursor-pointer rounded-xl border-2 border-foreground bg-surface px-4 font-semibold shadow-brutal-sm focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring"
+                  className="mt-2 min-h-12 w-full cursor-pointer rounded-xl border-2 border-border bg-surface px-4 font-medium hover:border-foreground/60 focus-visible:border-foreground focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring"
                 >
                   {[
                     "Khoa học",
@@ -237,7 +228,7 @@ export function OnboardingFlow() {
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="inline-flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-surface px-6 font-bold shadow-brutal-md transition-[transform,box-shadow] duration-200 hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-lg motion-reduce:transform-none focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                className="inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-surface px-6 font-semibold shadow-brutal-xs transition-colors duration-200 hover:bg-surface-soft focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-ring"
               >
                 <ArrowLeft aria-hidden="true" className="h-5 w-5" />
                 Quay lại
@@ -245,9 +236,9 @@ export function OnboardingFlow() {
               <button
                 type="button"
                 onClick={() => finish()}
-                className="inline-flex min-h-14 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-primary px-6 text-lg font-bold text-on-primary shadow-brutal-md transition-[transform,box-shadow] duration-200 hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-lg motion-reduce:transform-none focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                className="inline-flex min-h-12 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-primary px-6 font-semibold text-on-primary shadow-brutal-sm transition-[transform,box-shadow,background-color] duration-200 hover:-translate-y-px hover:bg-primary-hover hover:shadow-brutal-md motion-reduce:transform-none focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-ring"
               >
-                Vào dashboard
+                Vào không gian của tôi
                 <ArrowRight aria-hidden="true" className="h-5 w-5" />
               </button>
             </div>

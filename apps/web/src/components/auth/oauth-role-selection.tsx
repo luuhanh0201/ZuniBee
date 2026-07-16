@@ -17,14 +17,14 @@ const roleOptions = [
   {
     role: UserRole.STUDENT,
     title: "Học sinh",
-    description: "Luyện quiz, tích lũy XP và theo dõi tiến bộ mỗi ngày.",
+    description: "Tiếp tục hoạt động, nhận phản hồi và theo dõi tiến bộ.",
     icon: BookOpen,
     color: "bg-secondary-soft",
   },
   {
     role: UserRole.TEACHER,
     title: "Giáo viên",
-    description: "Tạo bài học, quản lý lớp và đồng hành cùng học sinh.",
+    description: "Tổ chức nội dung, quản lý lớp và đồng hành cùng người học.",
     icon: GraduationCap,
     color: "bg-warning-soft",
   },
@@ -87,30 +87,19 @@ export function OAuthRoleSelection({ returnTo }: { returnTo?: string }) {
   }
 
   return (
-    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-background px-4 py-12 text-foreground sm:px-6">
-      <div
-        aria-hidden="true"
-        className="absolute -left-12 top-16 h-32 w-32 rounded-full border-2 border-foreground bg-secondary"
-      />
-      <div
-        aria-hidden="true"
-        className="absolute -right-10 bottom-12 h-28 w-28 rotate-12 rounded-3xl border-2 border-foreground bg-success"
-      />
-
-      <section className="relative z-10 w-full max-w-3xl rounded-3xl border-[3px] border-foreground bg-surface p-5 shadow-brutal-2xl sm:p-8">
-        <header className="text-center">
-          <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl border-2 border-foreground bg-primary shadow-brutal-sm">
+    <main className="flex min-h-dvh items-center justify-center bg-background px-4 py-12 text-foreground sm:px-6">
+      <section className="w-full max-w-4xl rounded-3xl border-2 border-foreground bg-surface p-5 shadow-brutal-lg sm:p-8 lg:p-10">
+        <header className="max-w-2xl">
+          <span className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-on-primary">
             <Sparkles className="h-6 w-6" aria-hidden="true" />
           </span>
-          <p className="font-bold text-secondary-strong">
-            Chào {user.fullName}!
-          </p>
-          <h1 className="mt-2 font-display text-3xl font-bold sm:text-4xl">
-            Bạn muốn dùng ZuniBee với vai trò nào?
+          <p className="editorial-label">Chào {user.fullName}!</p>
+          <h1 className="mt-3 font-display text-3xl font-bold sm:text-4xl">
+            Chuẩn bị không gian phù hợp với bạn
           </h1>
           <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
-            Chọn một vai trò để ZuniBee chuẩn bị không gian phù hợp nhất cho
-            bạn.
+            Vai trò quyết định navigation, công cụ và hành động tiếp theo mà
+            ZuniBee ưu tiên cho bạn.
           </p>
         </header>
 
@@ -129,10 +118,10 @@ export function OAuthRoleSelection({ returnTo }: { returnTo?: string }) {
                   role="radio"
                   aria-checked={selected}
                   onClick={() => setSelectedRole(role)}
-                  className={`cursor-pointer rounded-2xl border-[3px] border-foreground p-5 text-left transition-[transform,box-shadow,background-color] duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring ${selected ? "bg-purple-soft shadow-brutal-lg -translate-x-px -translate-y-px" : "bg-surface shadow-brutal-sm hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-md"}`}
+                  className={`cursor-pointer rounded-2xl border-2 p-5 text-left transition-[border-color,box-shadow,background-color] duration-200 focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-ring ${selected ? "border-foreground bg-primary shadow-brutal-xs" : "border-border bg-surface hover:border-foreground/60 hover:bg-surface-soft"}`}
                 >
                   <span
-                    className={`flex h-12 w-12 items-center justify-center rounded-xl border-2 border-foreground ${color}`}
+                    className={`flex h-12 w-12 items-center justify-center rounded-xl ${color}`}
                   >
                     <Icon className="h-6 w-6" aria-hidden="true" />
                   </span>
@@ -161,7 +150,7 @@ export function OAuthRoleSelection({ returnTo }: { returnTo?: string }) {
           type="button"
           disabled={!selectedRole || isSubmitting}
           onClick={handleSubmit}
-          className="mt-7 inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-primary px-6 py-3 font-bold text-foreground shadow-brutal-md transition-[transform,box-shadow] duration-200 hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-lg active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:cursor-not-allowed disabled:opacity-50 disabled:transform-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="mt-7 inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-primary px-6 py-3 font-semibold text-on-primary shadow-brutal-sm transition-[transform,box-shadow,background-color] duration-200 hover:-translate-y-px hover:bg-primary-hover hover:shadow-brutal-md active:translate-y-0 active:shadow-brutal-xs disabled:cursor-not-allowed disabled:opacity-50 disabled:transform-none focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring motion-reduce:transform-none"
         >
           {isSubmitting ? (
             <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />

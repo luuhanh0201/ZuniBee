@@ -29,7 +29,7 @@ export function TextField({
     <div>
       <label
         htmlFor={id}
-        className="mb-1.5 block text-sm font-bold text-foreground"
+        className="mb-2 block text-sm font-semibold text-foreground"
       >
         {label}
       </label>
@@ -41,14 +41,14 @@ export function TextField({
           autoComplete={autoComplete}
           placeholder={placeholder}
           defaultValue={defaultValue}
-          className="min-h-12 w-full rounded-xl border-2 border-foreground bg-surface px-4 py-3 text-base text-foreground placeholder:text-foreground/40 transition-shadow duration-150 focus:shadow-brutal-sm focus:outline-none"
+          className="min-h-12 w-full rounded-xl border-2 border-border bg-surface px-4 py-3 text-base text-foreground placeholder:text-muted-foreground/65 transition-[border-color,box-shadow] duration-200 hover:border-foreground/60 focus:border-foreground focus:outline focus:outline-3 focus:outline-offset-2 focus:outline-ring"
         />
         {isPassword ? (
           <button
             type="button"
             onClick={() => setShowPassword((v) => !v)}
             aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
-            className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-foreground/50 hover:text-foreground"
+            className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface-soft hover:text-foreground focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {showPassword ? (
               <EyeOff className="h-5 w-5" strokeWidth={2} />

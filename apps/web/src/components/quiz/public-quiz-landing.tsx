@@ -10,6 +10,7 @@ import {
   PRIMARY_ACTION_CLASS,
 } from "@/components/classroom/classroom-ui";
 import { getErrorMessage } from "@/components/classroom/classroom-utils";
+import { BrandLockup } from "@/components/ui/brand-lockup";
 import { getQuiz, startQuizAttempt } from "./quiz-api";
 export function PublicQuizLanding({ quizId }: { quizId: string }) {
   const { accessToken, user } = useAuth();
@@ -49,55 +50,66 @@ export function PublicQuizLanding({ quizId }: { quizId: string }) {
     }
   }
   return (
-    <main className="min-h-dvh bg-background px-4 py-12 text-foreground">
-      <div className="mx-auto max-w-2xl rounded-3xl border-2 border-foreground bg-surface p-7 shadow-brutal-lg sm:p-10">
-        <span className="flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-foreground bg-primary shadow-brutal-md">
-          <BookOpenCheck className="h-8 w-8" />
-        </span>
-        {quiz ? (
-          <>
-            <p className="mt-6 font-extrabold uppercase text-muted-foreground">
-              Quiz · {quiz.questionCount} câu · {quiz.totalScore} điểm
-            </p>
-            <h1 className="mt-2 font-display text-4xl font-extrabold">
-              {quiz.title}
-            </h1>
-            <p className="mt-3 font-semibold text-muted-foreground">
-              {quiz.description || "Sẵn sàng bắt đầu bài quiz."}
-            </p>
-            <form onSubmit={start} className="mt-7 space-y-4">
+    <main className="min-h-dvh bg-background px-4 py-8 text-foreground sm:py-12">
+      <div className="mx-auto mb-8 max-w-2xl">
+        <BrandLockup />
+      </div>
+      <div className="study-surface mx-auto max-w-2xl overflow-hidden">
+        <div className="border-b border-divider bg-surface-soft p-7 sm:p-10">
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-soft">
+            <BookOpenCheck className="h-7 w-7" aria-hidden="true" />
+          </span>
+          {quiz ? (
+            <>
+              <p className="editorial-label mt-6">
+                Hoạt động học · {quiz.questionCount} câu · {quiz.totalScore}{" "}
+                điểm
+              </p>
+              <h1 className="mt-3 font-display text-4xl font-bold">
+                {quiz.title}
+              </h1>
+              <p className="mt-3 font-semibold text-muted-foreground">
+                {quiz.description || "Đọc kỹ hướng dẫn trước khi bắt đầu."}
+              </p>
+            </>
+          ) : (
+            <p className="mt-6 font-bold">Đang tải hoạt động...</p>
+          )}
+        </div>
+        <div className="p-7 sm:p-10">
+          {quiz ? (
+            <form onSubmit={start} className="space-y-4">
               {!user ? (
-                <label className="block font-extrabold">
+                <label className="block font-bold">
                   Tên hiển thị
                   <input
                     className={`${INPUT_CLASS} mt-2`}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     maxLength={120}
+                    autoComplete="name"
                   />
                 </label>
               ) : (
-                <p className="rounded-xl bg-success-soft p-3 font-bold">
-                  Bạn sẽ làm bài bằng tài khoản hiện tại.
+                <p className="rounded-xl border border-success/30 bg-success-soft p-3 font-bold">
+                  Bài làm sẽ được ghi nhận bằng tài khoản hiện tại.
                 </p>
               )}
               <button className={`${PRIMARY_ACTION_CLASS} w-full`}>
-                <Play className="h-5 w-5" />
-                Bắt đầu làm bài
+                <Play className="h-5 w-5" aria-hidden="true" />
+                Bắt đầu hoạt động
               </button>
             </form>
-          </>
-        ) : (
-          <p className="mt-6 font-bold">Đang tải quiz...</p>
-        )}
-        {error ? (
-          <p
-            className="mt-5 rounded-xl bg-destructive-soft p-3 font-bold"
-            role="alert"
-          >
-            {error}
-          </p>
-        ) : null}
+          ) : null}
+          {error ? (
+            <p
+              className="mt-5 rounded-xl border border-destructive/30 bg-destructive-soft p-3 font-bold"
+              role="alert"
+            >
+              {error}
+            </p>
+          ) : null}
+        </div>
       </div>
     </main>
   );

@@ -66,7 +66,7 @@ export function QuizQuestionForm({
   return (
     <form
       onSubmit={submit}
-      className="space-y-4 rounded-2xl border-2 border-foreground bg-secondary-soft p-5"
+      className="space-y-4 rounded-2xl border border-divider bg-surface-soft p-5"
     >
       <div className="flex justify-between">
         <h3 className="font-display text-xl font-extrabold">

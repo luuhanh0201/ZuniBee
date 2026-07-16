@@ -1,744 +1,740 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
-  BarChart3,
-  Bell,
   BookOpen,
-  BrainCircuit,
-  CheckCircle2,
-  Clock,
-  Flame,
+  BookOpenCheck,
+  CalendarClock,
+  Clock3,
+  FileText,
   GraduationCap,
-  KeyRound,
-  LayoutDashboard,
-  Library,
-  LogOut,
-  Medal,
-  UserRound,
+  Loader2,
   Plus,
+  RefreshCw,
   Sparkles,
-  Snowflake,
-  Trophy,
   Users,
-  Zap,
-  type LucideIcon,
 } from "lucide-react";
-import { UserRole } from "@zunibee/shared";
-import { ROUTES } from "@/config/routes";
+import {
+  UserRole,
+  type ClassroomSummary,
+  type QuizSummary,
+  type StudentQuizItem,
+} from "@zunibee/shared";
+import {
+  publicQuizRoute,
+  quizAttemptRoute,
+  ROUTES,
+  teacherQuizRoute,
+} from "@/config/routes";
 import { useAuth } from "@/lib/auth-context";
+import {
+  getStudentClassrooms,
+  getTeacherClassrooms,
+} from "@/components/classroom/classroom-api";
+import { getErrorMessage } from "@/components/classroom/classroom-utils";
+import {
+  PRIMARY_ACTION_CLASS,
+  SECONDARY_ACTION_CLASS,
+} from "@/components/classroom/classroom-ui";
+import { listQuizzes, listStudentQuizzes } from "@/components/quiz/quiz-api";
+import {
+  DashboardHeader,
+  type DashboardRole,
+} from "@/components/dashboard/dashboard-header";
 
-type DashboardRole = UserRole.STUDENT | UserRole.TEACHER;
-
-type Stat = {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  helper: string;
-  color: string;
+type StudentDashboardData = {
+  kind: "student";
+  classrooms: ClassroomSummary[];
+  quizzes: StudentQuizItem[];
 };
 
-const studentStats: Stat[] = [
-  {
-    icon: Zap,
-    label: "Tổng XP",
-    value: "1.240",
-    helper: "+120 tuần này",
-    color: "bg-warning-soft",
-  },
-  {
-    icon: Flame,
-    label: "Chuỗi học",
-    value: "5 ngày",
-    helper: "Kỷ lục: 8 ngày",
-    color: "bg-destructive-soft",
-  },
-  {
-    icon: CheckCircle2,
-    label: "Quiz hoàn thành",
-    value: "18",
-    helper: "Đúng trung bình 82%",
-    color: "bg-success-soft",
-  },
-];
+type TeacherDashboardData = {
+  kind: "teacher";
+  classrooms: ClassroomSummary[];
+  quizzes: QuizSummary[];
+};
 
-const teacherStats: Stat[] = [
-  {
-    icon: Users,
-    label: "Học sinh",
-    value: "86",
-    helper: "Trong 3 lớp",
-    color: "bg-secondary-soft",
-  },
-  {
-    icon: Library,
-    label: "Quiz đã tạo",
-    value: "24",
-    helper: "6 quiz tháng này",
-    color: "bg-warning-soft",
-  },
-  {
-    icon: BarChart3,
-    label: "Tỉ lệ hoàn thành",
-    value: "84%",
-    helper: "+6% so với tuần trước",
-    color: "bg-success-soft",
-  },
-];
+type DashboardData = StudentDashboardData | TeacherDashboardData;
 
 export function DemoDashboard({ role }: { role: DashboardRole }) {
-  const student = role === UserRole.STUDENT;
-  const stats = student ? studentStats : teacherStats;
+  const { accessToken, user } = useAuth();
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [error, setError] = useState("");
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    let active = true;
+
+    const request: Promise<DashboardData> =
+      role === UserRole.STUDENT
+        ? Promise.all([
+            getStudentClassrooms(accessToken),
+            listStudentQuizzes(accessToken),
+          ]).then(([classrooms, quizzes]) => ({
+            kind: "student" as const,
+            classrooms,
+            quizzes,
+          }))
+        : Promise.all([
+            getTeacherClassrooms(accessToken),
+            listQuizzes(accessToken),
+          ]).then(([classrooms, quizzes]) => ({
+            kind: "teacher" as const,
+            classrooms,
+            quizzes,
+          }));
+
+    request
+      .then((nextData) => {
+        if (active) {
+          setData(nextData);
+          setError("");
+        }
+      })
+      .catch((cause) => {
+        if (active) setError(getErrorMessage(cause));
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [accessToken, reload, role]);
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
+      <a href="#main-content" className="skip-link">
+        Bỏ qua điều hướng
+      </a>
       <DashboardHeader role={role} />
 
-      <main className="mx-auto max-w-7xl px-4 pb-16 pt-8 sm:px-6 lg:px-8">
-        {student ? <StudentAttendanceStreak /> : <TeacherWelcomeBanner />}
-
-        <section
-          aria-label="Tổng quan"
-          className="mt-8 grid gap-5 sm:grid-cols-3"
-        >
-          {stats.map((stat) => {
-            const Icon = stat.icon;
-            return (
-              <article
-                key={stat.label}
-                className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-md"
+      <main
+        id="main-content"
+        className="mx-auto max-w-7xl px-4 pb-16 pt-8 sm:px-6 sm:pt-10 lg:px-8"
+      >
+        <header className="motion-enter mb-8 grid gap-5 border-b border-divider pb-7 lg:grid-cols-[1fr_auto] lg:items-end">
+          <div>
+            <p className="editorial-label">
+              {role === UserRole.STUDENT
+                ? "Không gian học hôm nay"
+                : "Không gian giảng dạy"}
+            </p>
+            <h1 className="mt-2 max-w-4xl font-display text-3xl font-bold sm:text-4xl lg:text-5xl">
+              {role === UserRole.STUDENT
+                ? `Chào ${firstName(user?.fullName)}, hôm nay bạn sẽ học gì?`
+                : `Chào ${firstName(user?.fullName)}, bắt đầu từ nội dung quan trọng nhất.`}
+            </h1>
+            <p className="mt-3 max-w-2xl text-base text-muted-foreground sm:text-lg">
+              {role === UserRole.STUDENT
+                ? "Tiếp tục hoạt động gần nhất, hoàn thành phần được giao rồi quay lại ôn những gì cần nhớ."
+                : "Tạo nội dung, đưa vào lớp học và theo dõi phản hồi trong cùng một mạch làm việc."}
+            </p>
+          </div>
+          {role === UserRole.TEACHER ? (
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href={ROUTES.teacherCreateClassroom}
+                className={SECONDARY_ACTION_CLASS}
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="font-bold text-muted-foreground">
-                      {stat.label}
-                    </p>
-                    <p className="mt-2 font-display text-3xl font-bold tabular-nums">
-                      {stat.value}
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-muted-foreground">
-                      {stat.helper}
-                    </p>
-                  </div>
-                  <span
-                    className={
-                      "flex h-12 w-12 items-center justify-center rounded-xl border-2 border-foreground shadow-brutal-sm " +
-                      stat.color
-                    }
-                  >
-                    <Icon
-                      aria-hidden="true"
-                      className="h-6 w-6"
-                      strokeWidth={2.5}
-                    />
-                  </span>
-                </div>
-              </article>
-            );
-          })}
-        </section>
+                <Plus className="h-5 w-5" aria-hidden="true" />
+                Tạo lớp
+              </Link>
+              <Link
+                href={ROUTES.teacherCreateAiQuiz}
+                className={PRIMARY_ACTION_CLASS}
+              >
+                <Sparkles className="h-5 w-5" aria-hidden="true" />
+                Tạo hoạt động với AI
+              </Link>
+            </div>
+          ) : null}
+        </header>
 
-        {student ? <StudentContent /> : <TeacherContent />}
+        {!data && !error ? <DashboardLoading /> : null}
+        {error ? (
+          <DashboardError
+            message={error}
+            onRetry={() => setReload((value) => value + 1)}
+          />
+        ) : null}
+        {data?.kind === "student" ? <StudentDashboard data={data} /> : null}
+        {data?.kind === "teacher" ? <TeacherDashboard data={data} /> : null}
       </main>
     </div>
   );
 }
 
-type StreakTheme = "energy" | "frost" | "galaxy";
-
-const streakThemes: Record<
-  StreakTheme,
-  {
-    label: string;
-    icon: LucideIcon;
-    panel: string;
-    accent: string;
-    soft: string;
-    message: string;
-  }
-> = {
-  energy: {
-    label: "Năng lượng",
-    icon: Flame,
-    panel: "bg-warning-soft",
-    accent: "bg-destructive",
-    soft: "bg-primary",
-    message: "Ngọn lửa đang rực cháy!",
-  },
-  frost: {
-    label: "Băng giá",
-    icon: Snowflake,
-    panel: "bg-secondary-soft",
-    accent: "bg-secondary",
-    soft: "bg-surface",
-    message: "Chuỗi học tập mát lạnh!",
-  },
-  galaxy: {
-    label: "Ngân hà",
-    icon: Sparkles,
-    panel: "bg-purple-soft",
-    accent: "bg-purple text-white",
-    soft: "bg-secondary-soft",
-    message: "Bạn đang bay qua dải ngân hà!",
-  },
-};
-
-const attendanceDays = [
-  { day: "T2", date: "07", state: "done" },
-  { day: "T3", date: "08", state: "done" },
-  { day: "T4", date: "09", state: "done" },
-  { day: "T5", date: "10", state: "done" },
-  { day: "T6", date: "11", state: "done" },
-  { day: "T7", date: "12", state: "today" },
-  { day: "CN", date: "13", state: "next" },
-] as const;
-
-function StudentAttendanceStreak() {
-  const [themeName, setThemeName] = useState<StreakTheme>("energy");
-  const [checkedIn, setCheckedIn] = useState(false);
-  const theme = streakThemes[themeName];
-  const ThemeIcon = theme.icon;
+function StudentDashboard({ data }: { data: StudentDashboardData }) {
+  const nextQuiz = useMemo(
+    () =>
+      data.quizzes.find((quiz) => quiz.state === "in_progress") ??
+      data.quizzes.find((quiz) => quiz.state === "available") ??
+      data.quizzes.find((quiz) => quiz.state === "upcoming") ??
+      null,
+    [data.quizzes],
+  );
+  const completed = data.quizzes.filter(
+    (quiz) => quiz.state === "completed",
+  ).length;
+  const inProgress = data.quizzes.filter(
+    (quiz) => quiz.state === "in_progress",
+  ).length;
+  const pending = data.quizzes.filter((quiz) =>
+    ["available", "upcoming"].includes(quiz.state),
+  ).length;
 
   return (
-    <section
-      aria-labelledby="attendance-title"
-      className={`streak-panel relative overflow-hidden rounded-3xl border-[3px] border-foreground p-5 shadow-brutal-xl sm:p-7 ${theme.panel}`}
-    >
-      <div
-        aria-hidden="true"
-        className={`absolute -right-9 -top-10 h-32 w-32 rotate-12 rounded-[2rem] border-[3px] border-foreground opacity-80 ${theme.soft}`}
-      />
-      <div className="relative flex flex-col gap-6">
-        <header className="flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
-          <div className="flex items-center gap-4">
-            <span
-              className={`streak-icon flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border-[3px] border-foreground shadow-brutal-md ${theme.accent}`}
+    <>
+      <section
+        aria-labelledby="today-plan-title"
+        className="motion-enter motion-delay-1 grid overflow-hidden rounded-3xl border-2 border-foreground bg-surface shadow-brutal-lg lg:grid-cols-[1.45fr_0.55fr]"
+      >
+        <div className="relative p-6 sm:p-8 lg:p-10">
+          <div className="absolute inset-y-0 left-0 w-2 bg-primary" />
+          <div className="pl-2 sm:pl-3">
+            <p className="editorial-label flex items-center gap-2">
+              <CalendarClock
+                className="h-4 w-4 text-secondary-strong"
+                aria-hidden="true"
+              />
+              Kế hoạch tiếp theo
+            </p>
+            <h2
+              id="today-plan-title"
+              className="mt-4 max-w-3xl font-display text-3xl font-bold sm:text-4xl"
             >
-              <ThemeIcon className="h-8 w-8" aria-hidden="true" />
-            </span>
-            <div>
-              <p className="text-sm font-extrabold text-muted-foreground">
-                ĐIỂM DANH HỌC TẬP
-              </p>
-              <h1
-                id="attendance-title"
-                className="font-display text-3xl font-bold sm:text-4xl"
+              {nextQuiz
+                ? nextQuiz.title
+                : "Bạn đã xử lý xong các hoạt động hiện có."}
+            </h2>
+            <p className="mt-3 max-w-2xl text-muted-foreground sm:text-lg">
+              {nextQuiz
+                ? nextQuiz.description ||
+                  `${nextQuiz.questionCount} câu từ ${nextQuiz.teacherName}.`
+                : "Tham gia một lớp học hoặc xem lại kết quả cũ để tiếp tục củng cố kiến thức."}
+            </p>
+
+            <div className="mt-7 flex flex-wrap items-center gap-3">
+              {nextQuiz && studentQuizHref(nextQuiz) ? (
+                <Link
+                  href={studentQuizHref(nextQuiz) ?? ROUTES.studentQuizzes}
+                  className={PRIMARY_ACTION_CLASS}
+                >
+                  {nextQuiz.state === "in_progress" ? (
+                    <Clock3 className="h-5 w-5" aria-hidden="true" />
+                  ) : (
+                    <BookOpenCheck className="h-5 w-5" aria-hidden="true" />
+                  )}
+                  {nextQuiz.state === "in_progress"
+                    ? "Tiếp tục hoạt động"
+                    : "Bắt đầu hoạt động"}
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+              ) : (
+                <Link
+                  href={ROUTES.studentClasses}
+                  className={PRIMARY_ACTION_CLASS}
+                >
+                  <Plus className="h-5 w-5" aria-hidden="true" />
+                  Tham gia lớp học
+                </Link>
+              )}
+              <Link
+                href={ROUTES.studentQuizzes}
+                className={SECONDARY_ACTION_CLASS}
               >
-                7 ngày liên tiếp
-              </h1>
-              <p className="mt-1 font-semibold text-muted-foreground">
-                {theme.message}
-              </p>
+                Xem tất cả hoạt động
+              </Link>
             </div>
           </div>
-
-          <div
-            className="flex w-fit flex-wrap gap-2 rounded-2xl border-2 border-foreground bg-surface p-2 shadow-brutal-sm"
-            aria-label="Chọn phong cách streak demo"
-          >
-            {(Object.keys(streakThemes) as StreakTheme[]).map((name) => {
-              const option = streakThemes[name];
-              const OptionIcon = option.icon;
-              return (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => setThemeName(name)}
-                  aria-pressed={themeName === name}
-                  className={`inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-xl border-2 px-3 text-sm font-bold transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${themeName === name ? "border-foreground bg-primary" : "border-transparent bg-surface hover:bg-surface-soft"}`}
-                >
-                  <OptionIcon className="h-4 w-4" aria-hidden="true" />
-                  <span className="hidden sm:inline">{option.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </header>
-
-        <div className="grid grid-cols-4 gap-2 sm:grid-cols-7 sm:gap-3">
-          {attendanceDays.map(({ day, date, state }) => {
-            const completed =
-              state === "done" || (state === "today" && checkedIn);
-            const today = state === "today";
-            return (
-              <div
-                key={day}
-                className={`relative flex min-h-24 flex-col items-center justify-center rounded-2xl border-2 border-foreground px-2 py-3 text-center shadow-brutal-sm ${completed ? theme.accent : today ? "bg-surface" : "bg-surface-soft text-muted-foreground"}`}
-              >
-                <span className="text-xs font-extrabold uppercase">{day}</span>
-                <span className="mt-1 font-display text-2xl font-bold tabular-nums">
-                  {date}
-                </span>
-                {completed ? (
-                  <CheckCircle2
-                    className="streak-check mt-1 h-5 w-5"
-                    aria-label="Đã điểm danh"
-                  />
-                ) : today ? (
-                  <span className="mt-1 text-[11px] font-extrabold">
-                    HÔM NAY
-                  </span>
-                ) : (
-                  <span className="mt-1 text-[11px] font-bold">Sắp tới</span>
-                )}
-              </div>
-            );
-          })}
         </div>
 
-        <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-          <p className="font-semibold text-muted-foreground">
-            {checkedIn
-              ? "Tuyệt vời! Bạn vừa nhận 10 XP điểm danh."
-              : "Điểm danh hôm nay để giữ chuỗi và nhận 10 XP."}
-          </p>
-          <button
-            type="button"
-            disabled={checkedIn}
-            onClick={() => setCheckedIn(true)}
-            className="inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-primary px-5 font-bold shadow-brutal-md transition-[transform,box-shadow] duration-200 hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-lg active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:cursor-default disabled:bg-success disabled:transform-none sm:w-auto"
-          >
-            <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
-            {checkedIn ? "Đã điểm danh" : "Điểm danh hôm nay"}
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
+        <aside className="border-t border-divider bg-surface-soft p-6 lg:border-l lg:border-t-0 lg:p-8">
+          <p className="editorial-label">Nhịp học hiện tại</p>
+          <dl className="mt-5 space-y-5">
+            <DashboardMetric label="Đang thực hiện" value={inProgress} />
+            <DashboardMetric label="Đang chờ" value={pending} />
+            <DashboardMetric label="Đã hoàn thành" value={completed} />
+          </dl>
+        </aside>
+      </section>
 
-function TeacherWelcomeBanner() {
-  return (
-    <section className="relative overflow-hidden rounded-3xl border-[3px] border-foreground bg-purple px-6 py-8 text-white shadow-brutal-xl sm:px-8 lg:px-10">
-      <div
-        aria-hidden="true"
-        className="absolute -right-8 -top-12 h-40 w-40 rounded-full border-[3px] border-foreground bg-primary"
-      />
-      <div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
-        <div>
-          <span className="inline-flex items-center gap-2 rounded-full border-2 border-foreground bg-surface px-3 py-1.5 text-sm font-bold text-foreground shadow-brutal-sm">
-            <Sparkles aria-hidden="true" className="h-4 w-4" />
-            Không gian lớp học
-          </span>
-          <h1 className="mt-5 max-w-3xl font-display text-3xl font-bold sm:text-4xl">
-            Tạo lớp mới và mời học sinh cùng học trên ZuniBee.
-          </h1>
-          <p className="mt-3 max-w-2xl font-semibold leading-relaxed text-on-purple-muted">
-            Chia sẻ bằng mã lớp, đường link, mã QR hoặc gửi lời mời qua email.
-          </p>
-        </div>
-        <Link
-          href={ROUTES.teacherCreateClassroom}
-          className="inline-flex min-h-14 cursor-pointer items-center justify-center gap-2 self-start rounded-xl border-2 border-foreground bg-primary px-6 font-bold text-on-primary shadow-brutal-lg transition-[transform,box-shadow,background-color] duration-200 hover:-translate-x-px hover:-translate-y-px hover:bg-primary-hover hover:shadow-brutal-hover motion-reduce:transform-none focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-white"
-        >
-          <Plus aria-hidden="true" className="h-5 w-5" />
-          Tạo lớp mới
-        </Link>
-      </div>
-    </section>
-  );
-}
-
-export function DashboardHeader({ role }: { role: DashboardRole }) {
-  const student = role === UserRole.STUDENT;
-  const { user, logout } = useAuth();
-  const router = useRouter();
-  const pathname = usePathname();
-
-  async function handleLogout() {
-    await logout();
-    router.push(ROUTES.login);
-  }
-
-  const navItems: Array<{
-    icon: LucideIcon;
-    label: string;
-    href: string | null;
-  }> = [
-    {
-      icon: LayoutDashboard,
-      label: "Tổng quan",
-      href: student ? ROUTES.studentDashboard : ROUTES.teacherDashboard,
-    },
-    {
-      icon: student ? BookOpen : Users,
-      label: student ? "Lớp của tôi" : "Lớp học",
-      href: student ? ROUTES.studentClasses : ROUTES.teacherClasses,
-    },
-    {
-      icon: student ? Medal : Library,
-      label: student ? "Quiz của tôi" : "Kho quiz",
-      href: student ? ROUTES.studentQuizzes : ROUTES.teacherQuizzes,
-    },
-  ];
-
-  return (
-    <header className="border-b-2 border-foreground bg-surface px-4 py-3 sm:px-6 lg:px-8">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
-        <Link
-          href={ROUTES.home}
-          className="flex cursor-pointer items-center gap-2 rounded-lg focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring"
-        >
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-foreground bg-primary shadow-brutal-sm">
-            <Sparkles aria-hidden="true" className="h-5 w-5" />
-          </span>
-          <span className="hidden font-display text-xl font-bold sm:inline">
-            ZuniBee
-          </span>
-        </Link>
-
-        <nav
-          aria-label="Điều hướng dashboard"
-          className="hidden items-center gap-2 md:flex"
-        >
-          {navItems.map(({ icon: NavIcon, label, href }) =>
-            href ? (
-              <Link
-                key={label}
-                href={href}
-                aria-current={
-                  pathname === href ||
-                  (href.endsWith("/classes") && pathname.startsWith(`${href}/`))
-                    ? "page"
-                    : undefined
-                }
-                className={`inline-flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-colors duration-200 hover:bg-surface-soft hover:text-foreground focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring ${pathname === href || (href.endsWith("/classes") && pathname.startsWith(`${href}/`)) ? "bg-surface-soft text-foreground" : "text-muted-foreground"}`}
-              >
-                <NavIcon aria-hidden="true" className="h-4 w-4" />
-                {label}
-              </Link>
-            ) : (
-              <span
-                key={label}
-                aria-disabled="true"
-                className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold text-muted-foreground"
-              >
-                <NavIcon aria-hidden="true" className="h-4 w-4" />
-                {label}
-              </span>
-            ),
-          )}
-        </nav>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            aria-label="Thông báo demo"
-            className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl border-2 border-foreground bg-surface shadow-brutal-sm transition-[transform,box-shadow] duration-200 hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-md motion-reduce:transform-none focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring"
-          >
-            <Bell aria-hidden="true" className="h-5 w-5" />
-          </button>
-          {user ? (
-            <>
-              <Link
-                href={ROUTES.profile}
-                aria-label="Hồ sơ cá nhân"
-                title="Hồ sơ cá nhân"
-                className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl border-2 border-foreground bg-surface shadow-brutal-sm transition-[transform,box-shadow] duration-200 hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-md motion-reduce:transform-none focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring"
-              >
-                <UserRound aria-hidden="true" className="h-5 w-5" />
-              </Link>
-              <Link
-                href={ROUTES.changePassword}
-                aria-label="Đổi mật khẩu"
-                title="Đổi mật khẩu"
-                className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl border-2 border-foreground bg-surface shadow-brutal-sm transition-[transform,box-shadow] duration-200 hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-md motion-reduce:transform-none focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring"
-              >
-                <KeyRound aria-hidden="true" className="h-5 w-5" />
-              </Link>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border-2 border-foreground bg-warning-soft px-3 font-bold shadow-brutal-sm transition-[transform,box-shadow] duration-200 hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-md motion-reduce:transform-none focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring"
-              >
-                <LogOut aria-hidden="true" className="h-5 w-5" />
-                <span className="hidden sm:inline">Đăng xuất</span>
-              </button>
-            </>
+      <div className="motion-stagger mt-10 grid gap-10 lg:grid-cols-[1.25fr_0.75fr]">
+        <section aria-labelledby="assigned-title">
+          <SectionHeading
+            label="Hành trình gần đây"
+            title="Hoạt động được giao"
+            id="assigned-title"
+            href={ROUTES.studentQuizzes}
+          />
+          {data.quizzes.length ? (
+            <div className="motion-stagger mt-5 overflow-hidden rounded-2xl border-2 border-foreground bg-surface shadow-brutal-sm">
+              {data.quizzes.slice(0, 5).map((quiz) => (
+                <StudentActivityRow key={quiz.id} quiz={quiz} />
+              ))}
+            </div>
           ) : (
-            <Link
-              href={ROUTES.onboarding}
-              className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border-2 border-foreground bg-warning-soft px-3 font-bold shadow-brutal-sm transition-[transform,box-shadow] duration-200 hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-md motion-reduce:transform-none focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring"
-            >
-              {student ? (
-                <BookOpen aria-hidden="true" className="h-5 w-5" />
-              ) : (
-                <GraduationCap aria-hidden="true" className="h-5 w-5" />
-              )}
-              <span className="hidden sm:inline">Đổi vai trò</span>
-            </Link>
-          )}
-        </div>
-      </div>
-    </header>
-  );
-}
-
-function StudentContent() {
-  return (
-    <div className="mt-8 grid gap-7 lg:grid-cols-[1.3fr_0.7fr]">
-      <section id="thu-thach">
-        <div className="mb-4 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
-          <div>
-            <p className="text-sm font-extrabold text-secondary-strong">
-              GỢI Ý CHO BẠN
-            </p>
-            <h2 className="mt-1 font-display text-2xl font-bold">
-              Tiếp tục học tập
-            </h2>
-          </div>
-          <Link
-            href={ROUTES.studentClasses}
-            className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border-2 border-foreground bg-primary px-4 font-bold shadow-brutal-sm transition-[transform,box-shadow] duration-200 hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-md motion-reduce:transform-none focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring"
-          >
-            <Plus aria-hidden="true" className="h-4 w-4" />
-            Tham gia lớp
-          </Link>
-        </div>
-
-        <div className="grid gap-5 sm:grid-cols-2">
-          <LearningCard
-            icon={BrainCircuit}
-            color="bg-purple-soft"
-            label="Khoa học · Lớp 8"
-            title="Khám phá hệ Mặt Trời"
-            progress={60}
-            helper="3/5 câu"
-          />
-          <LearningCard
-            icon={Trophy}
-            color="bg-warning-soft"
-            label="Thử thách hôm nay"
-            title="10 câu Toán tư duy"
-            progress={20}
-            helper="+100 XP"
-          />
-        </div>
-
-        <section className="mt-8">
-          <h2 className="font-display text-2xl font-bold">Quiz được giao</h2>
-          <div className="mt-4 overflow-hidden rounded-2xl border-2 border-foreground bg-surface shadow-brutal-md">
-            {[
-              ["Tiếng Anh: Thì hiện tại hoàn thành", "Cô Lan", "Hạn thứ Sáu"],
-              ["Lịch sử: Nhà Trần", "Cô Mai", "12 câu"],
-            ].map(([title, teacher, meta], index) => (
-              <div
-                key={title}
-                className="flex flex-col gap-3 border-b-2 border-divider p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-xl border-2 border-foreground bg-secondary-soft">
-                    <BookOpen aria-hidden="true" className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <h3 className="font-bold">{title}</h3>
-                    <p className="text-sm font-semibold text-muted-foreground">
-                      {teacher} · {meta}
-                    </p>
-                  </div>
-                </div>
-                <span className="self-start rounded-full border-2 border-foreground bg-surface-soft px-3 py-1 text-sm font-bold sm:self-auto">
-                  {index === 0 ? "Chưa làm" : "Đang làm"}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-      </section>
-
-      <aside className="space-y-6">
-        <DashboardSideCard
-          icon={Flame}
-          color="bg-destructive-soft"
-          title="Giữ chuỗi học"
-          description="Hoàn thành một quiz hôm nay để nối dài chuỗi 5 ngày."
-        />
-        <DashboardSideCard
-          icon={Medal}
-          color="bg-success-soft"
-          title="Sắp mở khóa"
-          description="Còn 60 XP để đạt huy hiệu Nhà thám hiểm kiến thức."
-        />
-      </aside>
-    </div>
-  );
-}
-
-function TeacherContent() {
-  return (
-    <div className="mt-8 grid gap-7 lg:grid-cols-[1.3fr_0.7fr]">
-      <section id="quiz-gan-day">
-        <div className="mb-4 flex items-end justify-between gap-4">
-          <div>
-            <p className="text-sm font-extrabold text-secondary-strong">
-              HOẠT ĐỘNG GẦN ĐÂY
-            </p>
-            <h2 className="mt-1 font-display text-2xl font-bold">
-              Quiz của cô
-            </h2>
-          </div>
-          <span className="rounded-full border-2 border-foreground bg-warning-soft px-3 py-1 text-sm font-bold">
-            Dữ liệu demo
-          </span>
-        </div>
-
-        <div className="grid gap-5">
-          {[
-            {
-              title: "Khám phá hệ Mặt Trời",
-              className: "8A",
-              completion: "28/32",
-              score: "82%",
-              color: "bg-purple-soft",
-            },
-            {
-              title: "Ôn tập phản ứng hóa học",
-              className: "8B",
-              completion: "25/29",
-              score: "76%",
-              color: "bg-secondary-soft",
-            },
-            {
-              title: "Sinh học: Hệ tuần hoàn",
-              className: "8C",
-              completion: "20/25",
-              score: "88%",
-              color: "bg-success-soft",
-            },
-          ].map((quiz) => (
-            <article
-              key={quiz.title}
-              className="grid gap-4 rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-md sm:grid-cols-[1fr_auto_auto] sm:items-center"
-            >
-              <div className="flex items-center gap-3">
-                <span
-                  className={
-                    "flex h-12 w-12 items-center justify-center rounded-xl border-2 border-foreground " +
-                    quiz.color
-                  }
+            <EmptyPanel
+              icon={BookOpenCheck}
+              title="Chưa có hoạt động được giao"
+              description="Khi giáo viên giao nội dung, hoạt động tiếp theo sẽ xuất hiện tại đây."
+              action={
+                <Link
+                  href={ROUTES.studentClasses}
+                  className={SECONDARY_ACTION_CLASS}
                 >
-                  <Library aria-hidden="true" className="h-6 w-6" />
+                  Xem lớp học
+                </Link>
+              }
+            />
+          )}
+        </section>
+
+        <aside aria-labelledby="classrooms-title">
+          <SectionHeading
+            label="Không gian đang tham gia"
+            title="Lớp học của bạn"
+            id="classrooms-title"
+            href={ROUTES.studentClasses}
+          />
+          <div className="motion-stagger mt-5 space-y-3">
+            {data.classrooms.slice(0, 4).map((classroom) => (
+              <Link
+                key={classroom.id}
+                href={`${ROUTES.studentClasses}/${encodeURIComponent(classroom.id)}`}
+                className="motion-lift group flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-divider bg-surface p-4 transition-[border-color,background-color] duration-200 hover:border-foreground/40 hover:bg-surface-soft focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate font-semibold">
+                    {classroom.name}
+                  </span>
+                  <span className="mt-1 block truncate text-sm text-muted-foreground">
+                    {[classroom.subject, classroom.grade]
+                      .filter(Boolean)
+                      .join(" · ") || "Không gian học tập"}
+                  </span>
                 </span>
-                <div>
-                  <h3 className="font-bold">{quiz.title}</h3>
-                  <p className="text-sm font-semibold text-muted-foreground">
-                    Lớp {quiz.className}
-                  </p>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-bold text-muted-foreground">
-                  HOÀN THÀNH
-                </p>
-                <p className="font-bold tabular-nums">{quiz.completion}</p>
-              </div>
-              <div>
-                <p className="text-xs font-bold text-muted-foreground">
-                  ĐIỂM TB
-                </p>
-                <p className="font-bold tabular-nums">{quiz.score}</p>
-              </div>
-            </article>
-          ))}
+                <ArrowRight
+                  className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transform-none"
+                  aria-hidden="true"
+                />
+              </Link>
+            ))}
+            {!data.classrooms.length ? (
+              <EmptyPanel
+                compact
+                icon={BookOpen}
+                title="Chưa tham gia lớp học"
+                description="Dùng mã hoặc liên kết từ giáo viên để bắt đầu."
+                action={
+                  <Link
+                    href={ROUTES.studentClasses}
+                    className={SECONDARY_ACTION_CLASS}
+                  >
+                    Tham gia lớp
+                  </Link>
+                }
+              />
+            ) : null}
+          </div>
+        </aside>
+      </div>
+    </>
+  );
+}
+
+function TeacherDashboard({ data }: { data: TeacherDashboardData }) {
+  const totalStudents = data.classrooms.reduce(
+    (total, classroom) => total + classroom.memberCount,
+    0,
+  );
+  const published = data.quizzes.filter(
+    (quiz) => quiz.status === "published",
+  ).length;
+  const drafts = data.quizzes.length - published;
+
+  return (
+    <>
+      <section className="motion-enter motion-delay-1 grid overflow-hidden rounded-3xl border-2 border-foreground bg-surface shadow-brutal-lg lg:grid-cols-[1.3fr_0.7fr]">
+        <div className="relative p-6 sm:p-8 lg:p-10">
+          <div className="absolute inset-y-0 left-0 w-2 bg-primary" />
+          <div className="pl-2 sm:pl-3">
+            <p className="editorial-label flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-purple" aria-hidden="true" />
+              AI theo đúng ngữ cảnh
+            </p>
+            <h2 className="mt-4 max-w-3xl font-display text-3xl font-bold sm:text-4xl">
+              Biến tài liệu đang có thành một hoạt động học có thể sử dụng ngay.
+            </h2>
+            <p className="mt-3 max-w-2xl text-muted-foreground sm:text-lg">
+              Tải nguồn, để AI dựng bản nháp, sau đó bạn kiểm tra và quyết định
+              cách phân phối cho lớp.
+            </p>
+            <div className="mt-7 flex flex-wrap gap-3">
+              <Link
+                href={ROUTES.teacherCreateAiQuiz}
+                className={PRIMARY_ACTION_CLASS}
+              >
+                <Sparkles className="h-5 w-5" aria-hidden="true" />
+                Bắt đầu từ tài liệu
+              </Link>
+              <Link
+                href={ROUTES.teacherQuizzes}
+                className={SECONDARY_ACTION_CLASS}
+              >
+                Mở thư viện nội dung
+              </Link>
+            </div>
+          </div>
         </div>
+
+        <aside className="border-t border-divider bg-surface-soft p-6 lg:border-l lg:border-t-0 lg:p-8">
+          <p className="editorial-label">Tổng quan thực tế</p>
+          <dl className="mt-5 space-y-5">
+            <DashboardMetric
+              label="Lớp đang quản lý"
+              value={data.classrooms.length}
+            />
+            <DashboardMetric label="Học sinh trong lớp" value={totalStudents} />
+            <DashboardMetric label="Nội dung đã phát hành" value={published} />
+            <DashboardMetric label="Bản nháp đang soạn" value={drafts} />
+          </dl>
+        </aside>
       </section>
 
-      <aside className="space-y-6">
-        <DashboardSideCard
-          icon={Sparkles}
-          color="bg-warning-soft"
-          title="Tạo quiz với AI"
-          description="Khu vực tạo quiz sẽ là bước tiếp theo khi backend và chức năng AI sẵn sàng."
-        />
-        <DashboardSideCard
-          icon={BarChart3}
-          color="bg-destructive-soft"
-          title="Chủ đề cần chú ý"
-          description="Lớp 8B đang gặp khó với cân bằng phương trình hóa học."
-        />
-        <DashboardSideCard
-          icon={Clock}
-          color="bg-secondary-soft"
-          title="Lịch sắp tới"
-          description="Quiz Khoa học lớp 8A kết thúc vào 17:00 thứ Sáu."
-        />
-      </aside>
+      <div className="motion-stagger mt-10 grid gap-10 lg:grid-cols-[1.25fr_0.75fr]">
+        <section aria-labelledby="content-title">
+          <SectionHeading
+            label="Luồng tạo nội dung"
+            title="Nội dung gần đây"
+            id="content-title"
+            href={ROUTES.teacherQuizzes}
+          />
+          {data.quizzes.length ? (
+            <div className="motion-stagger mt-5 overflow-hidden rounded-2xl border-2 border-foreground bg-surface shadow-brutal-sm">
+              {data.quizzes.slice(0, 5).map((quiz) => (
+                <Link
+                  key={quiz.id}
+                  href={teacherQuizRoute(quiz.id)}
+                  className="motion-lift group grid cursor-pointer gap-3 border-b border-divider p-5 transition-colors duration-200 last:border-b-0 hover:bg-surface-soft focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-[-3px] focus-visible:outline-ring sm:grid-cols-[1fr_auto] sm:items-center"
+                >
+                  <span className="min-w-0">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="truncate font-display text-lg font-semibold">
+                        {quiz.title}
+                      </span>
+                      <StatusLabel
+                        label={
+                          quiz.status === "published"
+                            ? "Đã phát hành"
+                            : "Bản nháp"
+                        }
+                        tone={
+                          quiz.status === "published" ? "success" : "neutral"
+                        }
+                      />
+                    </span>
+                    <span className="mt-1 block text-sm text-muted-foreground">
+                      {quiz.questionCount} hoạt động · cập nhật{" "}
+                      {formatDate(quiz.updatedAt)}
+                    </span>
+                  </span>
+                  <span className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground group-hover:text-foreground">
+                    Tiếp tục soạn
+                    <ArrowRight
+                      className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transform-none"
+                      aria-hidden="true"
+                    />
+                  </span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <EmptyPanel
+              icon={FileText}
+              title="Chưa có nội dung học"
+              description="Tạo bản đầu tiên từ tài liệu hoặc bắt đầu thủ công."
+              action={
+                <Link
+                  href={ROUTES.teacherCreateAiQuiz}
+                  className={PRIMARY_ACTION_CLASS}
+                >
+                  <Sparkles className="h-5 w-5" aria-hidden="true" />
+                  Tạo với AI
+                </Link>
+              }
+            />
+          )}
+        </section>
+
+        <aside aria-labelledby="teacher-classrooms-title">
+          <SectionHeading
+            label="Phân phối và đồng hành"
+            title="Lớp học"
+            id="teacher-classrooms-title"
+            href={ROUTES.teacherClasses}
+          />
+          <div className="motion-stagger mt-5 space-y-3">
+            {data.classrooms.slice(0, 4).map((classroom) => (
+              <Link
+                key={classroom.id}
+                href={`${ROUTES.teacherClasses}/${encodeURIComponent(classroom.id)}`}
+                className="motion-lift group block cursor-pointer rounded-2xl border border-divider bg-surface p-4 transition-[border-color,background-color] duration-200 hover:border-foreground/40 hover:bg-surface-soft focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                <span className="flex items-start justify-between gap-3">
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold">
+                      {classroom.name}
+                    </span>
+                    <span className="mt-1 block text-sm text-muted-foreground">
+                      {classroom.memberCount} học sinh ·{" "}
+                      {classroom.pendingInvitationCount} lời mời chờ
+                    </span>
+                  </span>
+                  <Users
+                    className="h-5 w-5 shrink-0 text-secondary-strong"
+                    aria-hidden="true"
+                  />
+                </span>
+              </Link>
+            ))}
+            {!data.classrooms.length ? (
+              <EmptyPanel
+                compact
+                icon={GraduationCap}
+                title="Chưa có lớp học"
+                description="Tạo lớp để đưa nội dung đến đúng người học."
+                action={
+                  <Link
+                    href={ROUTES.teacherCreateClassroom}
+                    className={SECONDARY_ACTION_CLASS}
+                  >
+                    <Plus className="h-5 w-5" aria-hidden="true" />
+                    Tạo lớp
+                  </Link>
+                }
+              />
+            ) : null}
+          </div>
+        </aside>
+      </div>
+    </>
+  );
+}
+
+function StudentActivityRow({ quiz }: { quiz: StudentQuizItem }) {
+  const href = studentQuizHref(quiz);
+  const label =
+    quiz.state === "in_progress"
+      ? "Đang thực hiện"
+      : quiz.state === "completed"
+        ? "Đã hoàn thành"
+        : quiz.state === "upcoming"
+          ? "Sắp mở"
+          : quiz.state === "overdue"
+            ? "Quá hạn"
+            : "Sẵn sàng";
+
+  const content = (
+    <>
+      <span className="min-w-0">
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="truncate font-display text-lg font-semibold">
+            {quiz.title}
+          </span>
+          <StatusLabel
+            label={label}
+            tone={
+              quiz.state === "completed"
+                ? "success"
+                : quiz.state === "in_progress"
+                  ? "brand"
+                  : "neutral"
+            }
+          />
+        </span>
+        <span className="mt-1 block text-sm text-muted-foreground">
+          {quiz.teacherName} · {quiz.questionCount} câu
+        </span>
+      </span>
+      <ArrowRight
+        className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transform-none"
+        aria-hidden="true"
+      />
+    </>
+  );
+
+  return href ? (
+    <Link
+      href={href}
+      className="motion-lift group flex cursor-pointer items-center justify-between gap-4 border-b border-divider p-5 transition-colors duration-200 last:border-b-0 hover:bg-surface-soft focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-[-3px] focus-visible:outline-ring"
+    >
+      {content}
+    </Link>
+  ) : (
+    <div className="flex items-center justify-between gap-4 border-b border-divider p-5 last:border-b-0">
+      {content}
     </div>
   );
 }
 
-function LearningCard({
-  icon: Icon,
-  color,
+function SectionHeading({
   label,
   title,
-  progress,
-  helper,
+  id,
+  href,
 }: {
-  icon: LucideIcon;
-  color: string;
   label: string;
   title: string;
-  progress: number;
-  helper: string;
+  id: string;
+  href: string;
 }) {
   return (
-    <article className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-md">
-      <span
-        className={
-          "flex h-12 w-12 items-center justify-center rounded-xl border-2 border-foreground shadow-brutal-sm " +
-          color
-        }
-      >
-        <Icon aria-hidden="true" className="h-6 w-6" />
-      </span>
-      <p className="mt-5 text-sm font-bold text-muted-foreground">{label}</p>
-      <h3 className="mt-1 font-display text-xl font-bold">{title}</h3>
-      <div className="mt-5 flex items-center gap-3">
-        <div className="h-3 flex-1 overflow-hidden rounded-full border-2 border-foreground bg-surface-soft">
-          <div
-            className="h-full bg-success"
-            style={{ width: progress + "%" }}
-          />
-        </div>
-        <span className="text-sm font-bold tabular-nums">{progress}%</span>
+    <div className="flex items-end justify-between gap-4">
+      <div>
+        <p className="editorial-label">{label}</p>
+        <h2
+          id={id}
+          className="mt-1 font-display text-2xl font-bold sm:text-3xl"
+        >
+          {title}
+        </h2>
       </div>
-      <p className="mt-3 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-        <ArrowRight aria-hidden="true" className="h-4 w-4" />
-        {helper}
-      </p>
-    </article>
+      <Link
+        href={href}
+        className="inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-xl px-2 text-sm font-semibold text-muted-foreground transition-colors duration-200 hover:text-foreground focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        Xem tất cả
+        <ArrowRight className="h-4 w-4" aria-hidden="true" />
+      </Link>
+    </div>
   );
 }
 
-function DashboardSideCard({
+function DashboardMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-end justify-between gap-4 border-b border-divider pb-4 last:border-b-0 last:pb-0">
+      <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
+      <dd className="font-display text-2xl font-bold tabular-nums">{value}</dd>
+    </div>
+  );
+}
+
+function StatusLabel({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: "neutral" | "success" | "brand";
+}) {
+  const className =
+    tone === "success"
+      ? "border-success/40 bg-success-soft"
+      : tone === "brand"
+        ? "border-foreground/50 bg-primary"
+        : "border-divider bg-surface-soft";
+  return (
+    <span
+      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${className}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function EmptyPanel({
   icon: Icon,
-  color,
   title,
   description,
+  action,
+  compact = false,
 }: {
-  icon: LucideIcon;
-  color: string;
+  icon: typeof BookOpen;
   title: string;
   description: string;
+  action: React.ReactNode;
+  compact?: boolean;
 }) {
   return (
-    <article className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-md">
-      <span
-        className={
-          "flex h-12 w-12 items-center justify-center rounded-xl border-2 border-foreground shadow-brutal-sm " +
-          color
-        }
-      >
-        <Icon aria-hidden="true" className="h-6 w-6" />
+    <div
+      className={`rounded-2xl border-2 border-dashed border-border bg-surface text-center ${compact ? "p-5" : "mt-5 p-8 sm:p-10"}`}
+    >
+      <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-surface-soft text-muted-foreground">
+        <Icon className="h-5 w-5" aria-hidden="true" />
       </span>
-      <h2 className="mt-4 font-display text-xl font-bold">{title}</h2>
-      <p className="mt-2 font-semibold leading-relaxed text-muted-foreground">
+      <h3 className="mt-4 font-display text-xl font-semibold">{title}</h3>
+      <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
         {description}
       </p>
-    </article>
+      <div className="mt-5 flex justify-center">{action}</div>
+    </div>
+  );
+}
+
+function DashboardLoading() {
+  return (
+    <div
+      className="grid min-h-80 place-items-center rounded-3xl border border-divider bg-surface p-8"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="text-center">
+        <Loader2
+          className="mx-auto h-7 w-7 animate-spin text-secondary-strong"
+          aria-hidden="true"
+        />
+        <p className="mt-3 font-medium">Đang chuẩn bị không gian của bạn...</p>
+      </div>
+    </div>
+  );
+}
+
+function DashboardError({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div
+      className="rounded-3xl border-2 border-destructive bg-destructive-soft p-6 sm:p-8"
+      role="alert"
+    >
+      <h2 className="font-display text-2xl font-bold">
+        Chưa thể chuẩn bị không gian học tập
+      </h2>
+      <p className="mt-2 max-w-2xl text-muted-foreground">{message}</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className={`${SECONDARY_ACTION_CLASS} mt-5`}
+      >
+        <RefreshCw className="h-5 w-5" aria-hidden="true" />
+        Thử lại
+      </button>
+    </div>
+  );
+}
+
+function studentQuizHref(quiz: StudentQuizItem): string | null {
+  if (quiz.inProgressAttemptId)
+    return quizAttemptRoute(quiz.inProgressAttemptId);
+  if (quiz.state === "completed" && quiz.latestResult)
+    return quizAttemptRoute(quiz.latestResult.attemptId);
+  if (quiz.state === "available") return publicQuizRoute(quiz.id);
+  return null;
+}
+
+function firstName(fullName?: string | null): string {
+  const value = fullName?.trim();
+  return value ? (value.split(/\s+/).at(-1) ?? value) : "bạn";
+}
+
+function formatDate(value: string): string {
+  return new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium" }).format(
+    new Date(value),
   );
 }

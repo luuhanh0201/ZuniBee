@@ -171,17 +171,16 @@ export function AiQuizGenerator() {
     <TeacherClassroomFrame>
       <header className="mb-7 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="font-extrabold uppercase tracking-wide text-muted-foreground">
-            Phase 2 · AI Generator
-          </p>
-          <h1 className="font-display text-4xl font-extrabold">
-            Sinh quiz bằng AI
+          <p className="editorial-label">Trợ lý soạn nội dung</p>
+          <h1 className="mt-3 font-display text-4xl font-bold">
+            Tạo hoạt động từ tài liệu
           </h1>
           <p className="mt-2 max-w-2xl font-semibold text-muted-foreground">
-            AI tạo bản nháp để bạn kiểm tra và chỉnh sửa trước khi phát hành.
+            AI chuẩn bị một bản nháp có căn cứ. Giáo viên luôn là người kiểm
+            tra, chỉnh sửa và quyết định phát hành.
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-2xl border-2 border-foreground bg-warning-soft px-4 py-3 shadow-brutal-sm">
+        <div className="flex items-center gap-2 rounded-full border border-warning/30 bg-warning-soft px-4 py-2.5">
           <Coins className="h-5 w-5" aria-hidden="true" />
           <span className="font-extrabold tabular-nums">
             {credit?.available ?? 0} credit khả dụng
@@ -192,8 +191,8 @@ export function AiQuizGenerator() {
         onSubmit={submit}
         className="grid items-start gap-6 lg:grid-cols-[1fr_22rem]"
       >
-        <section className="grid gap-5 rounded-2xl border-2 border-foreground bg-surface p-6 shadow-brutal-lg sm:grid-cols-2">
-          <Field label="Tiêu đề quiz">
+        <section className="study-surface grid gap-5 p-6 sm:grid-cols-2">
+          <Field label="Tiêu đề hoạt động">
             <input
               required
               maxLength={200}
@@ -255,12 +254,12 @@ export function AiQuizGenerator() {
             />
           </Field>
           <fieldset className="sm:col-span-2">
-            <legend className="font-extrabold">Loại câu hỏi</legend>
+            <legend className="font-bold">Loại câu hỏi</legend>
             <div className="mt-2 flex flex-wrap gap-2">
               {TYPES.map((item) => (
                 <label
                   key={item.value}
-                  className="flex cursor-pointer items-center gap-2 rounded-xl border-2 border-foreground bg-surface-soft px-3 py-2 font-bold"
+                  className="flex cursor-pointer items-center gap-2 rounded-xl border border-divider bg-surface-soft px-3 py-2 font-bold transition-colors hover:border-foreground/40 has-checked:border-foreground has-checked:bg-primary-soft"
                 >
                   <input
                     type="checkbox"
@@ -279,7 +278,7 @@ export function AiQuizGenerator() {
             </div>
           </fieldset>
           <fieldset className="sm:col-span-2">
-            <legend className="font-extrabold">Nguồn nội dung</legend>
+            <legend className="font-bold">Nguồn nội dung</legend>
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
               <SourceButton
                 selected={sourceType === "prompt"}
@@ -313,21 +312,21 @@ export function AiQuizGenerator() {
           {error ? (
             <p
               role="alert"
-              className="rounded-xl border-2 border-foreground bg-destructive-soft p-3 font-bold sm:col-span-2"
+              className="rounded-xl border border-destructive/30 bg-destructive-soft p-3 font-bold sm:col-span-2"
             >
               {error}
             </p>
           ) : null}
         </section>
-        <aside className="rounded-2xl border-2 border-foreground bg-secondary-soft p-5 shadow-brutal-md lg:sticky lg:top-5">
+        <aside className="rounded-2xl border border-divider bg-surface-soft p-5 lg:sticky lg:top-5">
           <Sparkles className="h-8 w-8" aria-hidden="true" />
-          <h2 className="mt-3 font-display text-2xl font-extrabold">
-            Trước khi tạo
+          <h2 className="mt-3 font-display text-2xl font-bold">
+            Quy trình có kiểm soát
           </h2>
           <ul className="mt-3 list-disc space-y-2 pl-5 font-semibold text-muted-foreground">
             <li>Credit được giữ chỗ trước khi gọi AI.</li>
             <li>Nếu provider lỗi, credit được hoàn tự động.</li>
-            <li>Quiz luôn ở trạng thái bản nháp.</li>
+            <li>Hoạt động luôn được tạo ở trạng thái bản nháp.</li>
           </ul>
           <button
             disabled={
@@ -345,7 +344,7 @@ export function AiQuizGenerator() {
             ) : (
               <Sparkles className="h-5 w-5" aria-hidden="true" />
             )}
-            {busy ? "AI đang soạn quiz..." : "Sinh quiz bằng AI"}
+            {busy ? "AI đang chuẩn bị bản nháp..." : "Tạo bản nháp bằng AI"}
           </button>
           {busy ? (
             <GenerationProgressPanel
@@ -378,7 +377,7 @@ function GenerationProgressPanel({
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      className="mt-4 rounded-xl border-2 border-foreground bg-surface p-4 shadow-brutal-sm"
+      className="mt-4 rounded-xl border border-divider bg-surface p-4"
     >
       <div className="flex items-start gap-3">
         <span className="relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary">
@@ -390,9 +389,9 @@ function GenerationProgressPanel({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="font-extrabold tabular-nums">{copy.title}</p>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-xs font-extrabold">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-xs font-bold">
               <span
-                className="h-2 w-2 rounded-full bg-success motion-safe:animate-pulse"
+                className="h-2 w-2 rounded-full bg-success"
                 aria-hidden="true"
               />
               Đang xử lý
@@ -589,7 +588,7 @@ function SourceButton({
       type="button"
       aria-pressed={selected}
       onClick={onClick}
-      className={`flex min-h-16 cursor-pointer items-center gap-3 rounded-xl border-2 border-foreground px-4 text-left font-extrabold transition-colors ${selected ? "bg-primary" : "bg-surface hover:bg-surface-soft"}`}
+      className={`flex min-h-16 cursor-pointer items-center gap-3 rounded-xl border px-4 text-left font-bold transition-colors ${selected ? "border-foreground bg-primary-soft" : "border-divider bg-surface hover:border-foreground/40 hover:bg-surface-soft"}`}
     >
       <Icon className="h-5 w-5" />
       {label}

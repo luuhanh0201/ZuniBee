@@ -1,43 +1,49 @@
 @import "tailwindcss";
 
-/* Design tokens — nguồn: design-system/zunibee/MASTER.md (brand reference .claude/image.png) */
+/* Design tokens — source of truth: design-system/zunibee/MASTER.md */
 :root {
   /* Luôn render theme sáng, không ăn theo prefers-color-scheme của hệ điều hành */
   color-scheme: light;
-  --background: #fffef8;
+  --background: #f8f7f2;
   --surface: #ffffff;
-  --surface-soft: #f1f5f9;
-  --foreground: #0f172a;
-  --muted-foreground: #475569;
+  --surface-soft: #f0efe8;
+  --foreground: #172033;
+  --muted-foreground: #596273;
   --primary: #ffd84d;
-  --primary-hover: #ffcf24;
-  --on-primary: #0f172a;
-  --secondary: #60a5fa;
-  --secondary-strong: #2563eb;
-  --secondary-soft: #dff4fd;
-  --success: #4ade80;
-  --success-soft: #ddf8ec;
-  --destructive: #fa6e64;
-  --destructive-soft: #ffe4e1;
-  --warning-soft: #fff1b8;
-  --purple: #6548d8;
-  --purple-soft: #e9e2ff;
+  --primary-hover: #f4c62f;
+  --on-primary: #172033;
+  --secondary: #78a5d2;
+  --secondary-strong: #4f7cac;
+  --secondary-soft: #e8f1fb;
+  --success: #39b980;
+  --success-soft: #e3f6ed;
+  --destructive: #e35d6a;
+  --destructive-soft: #fce8ea;
+  --warning-soft: #fff4c7;
+  --purple: #6658d3;
+  --purple-soft: #ece9fc;
   --on-purple-muted: #f8f7ff;
-  --section: #eaf5ff;
-  --banner: #0f172a;
-  --divider: #cbd5e1;
-  --border: #9aa1af;
+  --section: #f1efe8;
+  --banner: #172033;
+  --divider: #d8d6ce;
+  --border: #a8a59c;
   --ring: #2f6bff;
-  --shadow-color: #0f172a;
+  --shadow-color: #172033;
 
-  /* Hard offset shadow — đặc trưng Neo-Brutalism, không blur. Thang độ sâu dùng chung cho mọi component. */
+  /* Light hard shadows keep the study-paper metaphor without cartoon weight. */
   --shadow-brutal-xs: 1px 1px 0 0 var(--shadow-color);
-  --shadow-brutal-sm: 2px 2px 0 0 var(--shadow-color);
-  --shadow-brutal-md: 3px 3px 0 0 var(--shadow-color);
-  --shadow-brutal-lg: 4px 4px 0 0 var(--shadow-color);
-  --shadow-brutal-hover: 5px 5px 0 0 var(--shadow-color);
-  --shadow-brutal-xl: 7px 7px 0 0 var(--shadow-color);
-  --shadow-brutal-2xl: 8px 8px 0 0 var(--shadow-color);
+  --shadow-brutal-sm: 1px 2px 0 0 var(--shadow-color);
+  --shadow-brutal-md: 2px 3px 0 0 var(--shadow-color);
+  --shadow-brutal-lg: 3px 4px 0 0 var(--shadow-color);
+  --shadow-brutal-hover: 4px 5px 0 0 var(--shadow-color);
+  --shadow-brutal-xl: 4px 5px 0 0 var(--shadow-color);
+  --shadow-brutal-2xl: 5px 6px 0 0 var(--shadow-color);
+
+  /* Motion tokens — ngắn, có chủ đích và chỉ dùng transform/opacity. */
+  --motion-duration-fast: 160ms;
+  --motion-duration-base: 240ms;
+  --motion-duration-reveal: 320ms;
+  --motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @theme inline {
@@ -65,8 +71,9 @@
   --color-divider: var(--divider);
   --color-border: var(--border);
   --color-ring: var(--ring);
-  --font-sans: var(--font-nunito);
-  --font-display: var(--font-quicksand);
+  --font-sans: var(--font-interface);
+  --font-display: var(--font-editorial);
+  --font-brand: var(--font-wordmark);
   --shadow-brutal-xs: var(--shadow-brutal-xs);
   --shadow-brutal-sm: var(--shadow-brutal-sm);
   --shadow-brutal-md: var(--shadow-brutal-md);
@@ -79,26 +86,26 @@
 /* Dark mode bật thủ công qua nút toggle (ThemeToggle), không ăn theo prefers-color-scheme của hệ điều hành */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --background: #101629;
-  --surface: #1c2438;
-  --surface-soft: #263149;
-  --foreground: #f8fafc;
-  --muted-foreground: #cbd5e1;
+  --background: #111722;
+  --surface: #1b2432;
+  --surface-soft: #263142;
+  --foreground: #f6f7f9;
+  --muted-foreground: #c6ceda;
   --primary: #ffd84d;
   --primary-hover: #ffe16f;
-  --secondary: #60a5fa;
-  --secondary-strong: #93c5fd;
-  --secondary-soft: #1e3a5f;
-  --success: #4ade80;
-  --success-soft: #183c2a;
+  --secondary: #8cb4e2;
+  --secondary-strong: #8cb4e2;
+  --secondary-soft: #203b58;
+  --success: #55d79a;
+  --success-soft: #183d2e;
   --destructive: #fb7185;
-  --destructive-soft: #4a2228;
+  --destructive-soft: #49252c;
   --warning-soft: #493d17;
-  --purple: #5b3fc0;
-  --purple-soft: #34265e;
+  --purple: #9b8ff0;
+  --purple-soft: #342f61;
   --on-purple-muted: #f8fafc;
-  --section: #182e4a;
-  --banner: #070b14;
+  --section: #202938;
+  --banner: #080d15;
   --divider: #475569;
   --border: #64748b;
   --ring: #93c5fd;
@@ -148,6 +155,42 @@
 
   to {
     transform: scaleX(1);
+  }
+}
+
+@keyframes motion-rise-in {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes motion-pop-in {
+  from {
+    opacity: 0;
+    scale: 0.94;
+    translate: 0 6px;
+  }
+
+  to {
+    opacity: 1;
+    scale: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes home-underline-draw {
+  from {
+    stroke-dashoffset: 600;
+  }
+
+  to {
+    stroke-dashoffset: 0;
   }
 }
 
@@ -214,17 +257,6 @@
   }
 }
 
-@keyframes streak-icon-float {
-  0%,
-  100% {
-    transform: translateY(0) rotate(-2deg);
-  }
-
-  50% {
-    transform: translateY(-4px) rotate(2deg);
-  }
-}
-
 @keyframes streak-check-pop {
   from {
     opacity: 0;
@@ -241,45 +273,164 @@
   animation: streak-panel-in 350ms ease-out both;
 }
 
-.streak-icon {
-  animation: streak-icon-float 2.4s ease-in-out infinite;
-}
-
 .streak-check {
   animation: streak-check-pop 220ms ease-out both;
 }
 
 .home-hero-copy {
-  animation: home-reveal 450ms ease-out both;
+  animation: home-reveal var(--motion-duration-reveal) var(--motion-ease-out)
+    both;
 }
 
 .home-quiz-preview {
-  animation: home-quiz-reveal 550ms 120ms ease-out both;
+  animation: home-quiz-reveal 380ms 80ms var(--motion-ease-out) both;
 }
 
 .home-progress-fill {
-  animation: home-progress 500ms 420ms ease-out both;
+  animation: home-progress 360ms 260ms var(--motion-ease-out) both;
   transform-origin: left;
+}
+
+.home-hero-underline path {
+  animation: home-underline-draw 440ms 180ms var(--motion-ease-out) both;
+  stroke-dasharray: 600;
+  stroke-dashoffset: 600;
+}
+
+.motion-enter,
+.motion-scroll-reveal {
+  animation: motion-rise-in var(--motion-duration-reveal) var(--motion-ease-out)
+    both;
+}
+
+.motion-pop {
+  animation: motion-pop-in var(--motion-duration-base) var(--motion-ease-out)
+    both;
+}
+
+.motion-delay-1 {
+  animation-delay: 60ms;
+}
+
+.motion-delay-2 {
+  animation-delay: 120ms;
+}
+
+.motion-delay-3 {
+  animation-delay: 180ms;
+}
+
+.motion-stagger > *,
+.motion-scroll-stagger > * {
+  animation: motion-rise-in var(--motion-duration-reveal) var(--motion-ease-out)
+    both;
+}
+
+.motion-stagger > :nth-child(2),
+.motion-scroll-stagger > :nth-child(2) {
+  animation-delay: 45ms;
+}
+
+.motion-stagger > :nth-child(3),
+.motion-scroll-stagger > :nth-child(3) {
+  animation-delay: 90ms;
+}
+
+.motion-stagger > :nth-child(4),
+.motion-scroll-stagger > :nth-child(4) {
+  animation-delay: 135ms;
+}
+
+.motion-stagger > :nth-child(5),
+.motion-scroll-stagger > :nth-child(5) {
+  animation-delay: 180ms;
+}
+
+.motion-stagger > :nth-child(6),
+.motion-scroll-stagger > :nth-child(6) {
+  animation-delay: 225ms;
+}
+
+.motion-lift {
+  transition-duration: var(--motion-duration-fast);
+  transition-property: transform, border-color, background-color, color,
+    box-shadow;
+  transition-timing-function: var(--motion-ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .motion-lift:hover {
+    transform: translateY(-2px);
+  }
+
+  .motion-lift:active {
+    transform: translateY(0) scale(0.99);
+  }
+}
+
+/* View timeline chỉ tăng cường progressive enhancement cho section dưới fold. */
+@supports (animation-timeline: view()) {
+  .motion-scroll-reveal {
+    animation-delay: 0ms;
+    animation-duration: 1ms;
+    animation-range: entry 8% cover 26%;
+    animation-timeline: view();
+    animation-timing-function: linear;
+  }
+
+  .motion-scroll-stagger > * {
+    animation-delay: 0ms;
+    animation-duration: 1ms;
+    animation-range: entry 8% cover 24%;
+    animation-timeline: view();
+    animation-timing-function: linear;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .home-hero-copy,
   .home-quiz-preview,
-  .home-progress-fill {
+  .home-progress-fill,
+  .home-hero-underline path,
+  .motion-enter,
+  .motion-pop,
+  .motion-scroll-reveal,
+  .motion-stagger > *,
+  .motion-scroll-stagger > * {
     animation: none;
   }
 
+  .motion-lift:hover,
+  .motion-lift:active {
+    transform: none;
+  }
+
   .streak-panel,
-  .streak-icon,
   .streak-check {
     animation: none;
   }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 6rem;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
+  line-height: 1.55;
+  text-rendering: optimizeLegibility;
 }
 
 h1,
@@ -290,4 +441,50 @@ h5,
 h6 {
   font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
   font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+::selection {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.font-brand {
+  font-family: var(--font-wordmark), var(--font-display), sans-serif;
+}
+
+.skip-link {
+  position: fixed;
+  left: 1rem;
+  top: 1rem;
+  z-index: 100;
+  transform: translateY(-180%);
+  border: 2px solid var(--foreground);
+  border-radius: 0.75rem;
+  background: var(--primary);
+  color: var(--on-primary);
+  padding: 0.7rem 1rem;
+  font-weight: 700;
+  box-shadow: var(--shadow-brutal-md);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+  outline: 3px solid var(--ring);
+  outline-offset: 3px;
+}
+
+.study-surface {
+  border: 2px solid var(--foreground);
+  border-radius: 1rem;
+  background: var(--surface);
+  box-shadow: var(--shadow-brutal-md);
+}
+
+.editorial-label {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }

@@ -9,7 +9,7 @@ import { ROUTES } from "@/config/routes";
 
 export const metadata: Metadata = {
   title: "Đăng nhập — ZuniBee",
-  description: "Đăng nhập vào ZuniBee để tiếp tục học tập và quiz.",
+  description: "Đăng nhập ZuniBee để tiếp tục hành trình học tập của bạn.",
 };
 
 export default async function LoginPage({
@@ -23,7 +23,7 @@ export default async function LoginPage({
   return (
     <AuthShell
       title="Chào mừng trở lại!"
-      subtitle="Đăng nhập để tiếp tục hành trình học tập"
+      subtitle="Tiếp tục từ lớp học, tài liệu hoặc hoạt động gần nhất của bạn."
       footer={{
         text: "Chưa có tài khoản?",
         linkLabel: "Đăng ký ngay",

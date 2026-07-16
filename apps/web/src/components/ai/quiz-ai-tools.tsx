@@ -98,11 +98,11 @@ export function QuizAiTools({
     (item) => item.status === "failed",
   ).length;
   return (
-    <div className="mt-8 grid gap-5 border-t-2 border-foreground pt-6 lg:grid-cols-2">
+    <div className="mt-8 grid gap-5 border-t border-divider pt-6 lg:grid-cols-2">
       {error ? (
         <p
           role="alert"
-          className="rounded-xl border-2 border-foreground bg-destructive-soft p-3 font-bold lg:col-span-2"
+          className="rounded-xl border border-destructive/30 bg-destructive-soft p-3 font-bold lg:col-span-2"
         >
           {error}
         </p>
@@ -110,17 +110,17 @@ export function QuizAiTools({
       {notice ? (
         <p
           role="status"
-          className="rounded-xl border-2 border-foreground bg-success-soft p-3 font-bold lg:col-span-2"
+          className="rounded-xl border border-success/30 bg-success-soft p-3 font-bold lg:col-span-2"
         >
           {notice}
         </p>
       ) : null}
-      <section className="rounded-2xl border-2 border-foreground bg-secondary-soft p-5 shadow-brutal-sm">
+      <section className="rounded-2xl border border-divider bg-surface p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="flex items-center gap-2 font-display text-xl font-extrabold">
+            <h3 className="flex items-center gap-2 font-display text-xl font-bold">
               <BrainCircuit className="h-5 w-5" />
-              AI phân tích điểm yếu
+              Phân tích sau hoạt động
             </h3>
             <p className="mt-1 font-semibold text-muted-foreground">
               Dữ liệu được tổng hợp, không gửi tên học sinh cho AI.
@@ -155,15 +155,15 @@ export function QuizAiTools({
           </div>
         ) : null}
       </section>
-      <section className="rounded-2xl border-2 border-foreground bg-warning-soft p-5 shadow-brutal-sm">
+      <section className="rounded-2xl border border-divider bg-surface p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="flex items-center gap-2 font-display text-xl font-extrabold">
+            <h3 className="flex items-center gap-2 font-display text-xl font-bold">
               <Mail className="h-5 w-5" />
               Gửi kết quả hàng loạt
             </h3>
             <p className="mt-1 font-semibold text-muted-foreground">
-              Transactional outbox + Redis retry; Guest luôn bị loại.
+              Gửi thông báo cho học sinh có tài khoản; lượt khách được bỏ qua.
             </p>
           </div>
           <button
@@ -203,7 +203,7 @@ function InsightList({ title, items }: { title: string; items: string[] }) {
 }
 function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border-2 border-foreground bg-surface p-3">
+    <div className="rounded-xl border border-divider bg-surface-soft p-3">
       <strong className="block font-display text-2xl tabular-nums">
         {value}
       </strong>

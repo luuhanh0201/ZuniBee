@@ -7,10 +7,10 @@ export default function NotFound() {
       code="404"
       icon={Compass}
       accent="secondary"
-      sticker="Lạc đường rồi!"
+      sticker="Đường dẫn gián đoạn"
       eyebrow="Trang không tồn tại"
-      title="Chỗ này chưa có bài học nào cả"
-      description="Có thể đường dẫn đã thay đổi hoặc trang bạn tìm kiếm không còn tồn tại. Mình quay về điểm xuất phát nhé!"
+      title="Trang bạn tìm không còn ở đường dẫn này"
+      description="Đường dẫn có thể đã thay đổi hoặc nội dung đã được di chuyển. Hãy quay về không gian chính để tiếp tục."
       primaryAction={{ href: "/", label: "Về trang chủ" }}
     />
   );

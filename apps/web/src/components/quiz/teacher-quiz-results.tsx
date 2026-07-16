@@ -144,12 +144,12 @@ export function TeacherQuizResults({
 
   return (
     <section className="space-y-6">
-      <div className="flex flex-col gap-4 rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-md lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex flex-col gap-4 border-b border-divider pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="font-extrabold uppercase tracking-wide text-muted-foreground">
-            Phân tích lớp học
-          </p>
-          <h2 className="font-display text-3xl font-extrabold">Kết quả quiz</h2>
+          <p className="editorial-label">Dữ liệu sau hoạt động</p>
+          <h2 className="mt-3 font-display text-3xl font-bold">
+            Kết quả hoạt động
+          </h2>
         </div>
         <div className="flex flex-wrap gap-2">
           {quiz.answersChangedAt ? (
@@ -190,7 +190,7 @@ export function TeacherQuizResults({
       {error ? (
         <p
           role="alert"
-          className="rounded-xl border-2 border-foreground bg-destructive-soft p-3 font-bold"
+          className="rounded-xl border border-destructive/30 bg-destructive-soft p-3 font-bold"
         >
           {error}
         </p>
@@ -198,7 +198,7 @@ export function TeacherQuizResults({
       {notice ? (
         <p
           role="status"
-          className="rounded-xl border-2 border-foreground bg-success-soft p-3 font-bold"
+          className="rounded-xl border border-success/30 bg-success-soft p-3 font-bold"
         >
           {notice}
         </p>
@@ -236,8 +236,8 @@ export function TeacherQuizResults({
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
-        <section className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-sm">
-          <h3 className="font-display text-xl font-extrabold">Phân bố điểm</h3>
+        <section className="rounded-2xl border border-divider bg-surface p-5">
+          <h3 className="font-display text-xl font-bold">Phân bố điểm</h3>
           <div className="mt-5 space-y-4">
             {analytics?.distribution.map((item) => (
               <div key={item.label}>
@@ -245,7 +245,7 @@ export function TeacherQuizResults({
                   <span>{item.label} điểm</span>
                   <span>{item.count}</span>
                 </div>
-                <div className="mt-2 h-4 overflow-hidden rounded-full border-2 border-foreground bg-surface-soft">
+                <div className="mt-2 h-3 overflow-hidden rounded-full bg-surface-soft">
                   <div
                     className="h-full bg-primary"
                     style={{
@@ -257,22 +257,20 @@ export function TeacherQuizResults({
             ))}
           </div>
         </section>
-        <section className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-sm">
-          <h3 className="font-display text-xl font-extrabold">
-            Độ khó theo câu
-          </h3>
+        <section className="rounded-2xl border border-divider bg-surface p-5">
+          <h3 className="font-display text-xl font-bold">Độ khó theo câu</h3>
           <div className="mt-4 max-h-72 space-y-3 overflow-y-auto pr-1">
             {analytics?.questions.map((question, index) => (
               <div
                 key={question.questionId}
-                className="rounded-xl border-2 border-divider bg-background p-3"
+                className="rounded-xl border border-divider bg-background p-3"
               >
                 <div className="flex items-start justify-between gap-3">
                   <p className="font-bold">
                     Câu {index + 1}: {question.content}
                   </p>
                   <span
-                    className={`shrink-0 rounded-full border-2 border-foreground px-2 py-1 text-xs font-extrabold ${question.correctRate < 50 ? "bg-destructive-soft" : question.correctRate < 75 ? "bg-warning-soft" : "bg-success-soft"}`}
+                    className={`shrink-0 rounded-full border px-2 py-1 text-xs font-bold ${question.correctRate < 50 ? "border-destructive/30 bg-destructive-soft" : question.correctRate < 75 ? "border-warning/30 bg-warning-soft" : "border-success/30 bg-success-soft"}`}
                   >
                     {question.correctRate}% đúng
                   </span>
@@ -283,11 +281,9 @@ export function TeacherQuizResults({
         </section>
       </div>
 
-      <section className="overflow-hidden rounded-2xl border-2 border-foreground bg-surface shadow-brutal-md">
-        <div className="flex flex-col gap-3 border-b-2 border-foreground p-4 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="font-display text-xl font-extrabold">
-            Chi tiết lượt làm
-          </h3>
+      <section className="overflow-hidden rounded-2xl border border-divider bg-surface">
+        <div className="flex flex-col gap-3 border-b border-divider p-4 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="font-display text-xl font-bold">Chi tiết lượt làm</h3>
           <label className="relative block sm:w-72">
             <span className="sr-only">Tìm học sinh</span>
             <Search
@@ -298,14 +294,14 @@ export function TeacherQuizResults({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Tìm tên hoặc email"
-              className="min-h-11 w-full rounded-xl border-2 border-foreground bg-background py-2 pl-9 pr-3 font-semibold outline-none focus:ring-2 focus:ring-ring"
+              className="min-h-11 w-full rounded-xl border border-divider bg-background py-2 pl-9 pr-3 font-semibold outline-none focus:border-foreground focus:ring-2 focus:ring-ring/30"
             />
           </label>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-left">
             <thead className="bg-surface-soft">
-              <tr className="border-b-2 border-foreground">
+              <tr className="border-b border-divider">
                 <th className="p-3">#</th>
                 <th>Học sinh</th>
                 <th>Điểm</th>
@@ -371,16 +367,16 @@ function Metric({
   color: string;
 }) {
   return (
-    <article className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-sm">
+    <article className="rounded-2xl border border-divider bg-surface p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="font-bold text-muted-foreground">{label}</p>
-          <p className="mt-2 font-display text-3xl font-extrabold tabular-nums">
+          <p className="mt-2 font-display text-3xl font-bold tabular-nums">
             {value}
           </p>
         </div>
         <span
-          className={`flex h-11 w-11 items-center justify-center rounded-xl border-2 border-foreground ${color}`}
+          className={`flex h-11 w-11 items-center justify-center rounded-xl ${color}`}
         >
           <Icon className="h-5 w-5" aria-hidden="true" />
         </span>

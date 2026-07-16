@@ -201,11 +201,11 @@ function WizardProgress({ currentStep }: { currentStep: WizardStep }) {
             <li
               key={number}
               aria-current={isCurrent ? "step" : undefined}
-              className={`relative flex min-w-0 flex-col items-center gap-2 rounded-2xl border-2 px-2 py-3 text-center sm:flex-row sm:justify-center sm:px-4 ${
+              className={`relative flex min-w-0 flex-col items-center gap-2 rounded-2xl border px-2 py-3 text-center sm:flex-row sm:justify-center sm:px-4 ${
                 isCurrent
-                  ? "border-foreground bg-primary shadow-brutal-md"
+                  ? "border-foreground bg-primary-soft"
                   : isComplete
-                    ? "border-foreground bg-success-soft shadow-brutal-sm"
+                    ? "border-success/30 bg-success-soft"
                     : "border-border bg-surface text-muted-foreground"
               }`}
             >
@@ -261,20 +261,18 @@ function ClassroomDetailsStep({
 }) {
   return (
     <section
-      className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-lg sm:p-8"
+      className="study-surface p-5 sm:p-8"
       aria-labelledby="classroom-details-heading"
     >
       <div className="mb-7 flex items-start gap-4">
-        <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border-2 border-foreground bg-secondary shadow-brutal-md">
+        <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-secondary-soft text-secondary">
           <ListChecks className="h-6 w-6" aria-hidden="true" />
         </span>
         <div>
-          <p className="text-sm font-extrabold text-secondary-strong">
-            Bước 1 / 3
-          </p>
+          <p className="editorial-label">Bước 1 / 3</p>
           <h2
             id="classroom-details-heading"
-            className="font-display text-2xl font-extrabold"
+            className="mt-2 font-display text-2xl font-bold"
           >
             Thông tin lớp học
           </h2>
@@ -399,7 +397,7 @@ function ClassroomDetailsStep({
 
         {error ? (
           <p
-            className="mt-5 rounded-xl border-2 border-foreground bg-destructive-soft px-4 py-3 font-bold"
+            className="mt-5 rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3 font-bold"
             role="alert"
           >
             {error}
@@ -451,20 +449,18 @@ function InvitationStep({
 
   return (
     <section
-      className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-lg sm:p-8"
+      className="study-surface p-5 sm:p-8"
       aria-labelledby="invite-students-heading"
     >
       <div className="mb-7 flex items-start gap-4">
-        <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border-2 border-foreground bg-success shadow-brutal-md">
+        <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-success-soft text-success">
           <MailPlus className="h-6 w-6" aria-hidden="true" />
         </span>
         <div>
-          <p className="text-sm font-extrabold text-secondary-strong">
-            Bước 2 / 3
-          </p>
+          <p className="editorial-label">Bước 2 / 3</p>
           <h2
             id="invite-students-heading"
-            className="font-display text-2xl font-extrabold"
+            className="mt-2 font-display text-2xl font-bold"
           >
             Mời sinh viên vào {classroom.name}
           </h2>
@@ -485,7 +481,7 @@ function InvitationStep({
 
         {error ? (
           <p
-            className="mt-5 rounded-xl border-2 border-foreground bg-destructive-soft px-4 py-3 font-bold"
+            className="mt-5 rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3 font-bold"
             role="alert"
           >
             {error}
@@ -541,16 +537,14 @@ function SharingStep({
 }) {
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border-2 border-foreground bg-success-soft p-5 shadow-brutal-lg sm:p-6">
+      <section className="rounded-2xl border border-success/30 bg-success-soft p-5 sm:p-6">
         <div className="flex items-start gap-4">
-          <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-foreground bg-success shadow-brutal-md">
+          <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-success text-white">
             <CheckCircle2 className="h-7 w-7" aria-hidden="true" />
           </span>
           <div>
-            <p className="text-sm font-extrabold text-secondary-strong">
-              Bước 3 / 3
-            </p>
-            <h2 className="font-display text-2xl font-extrabold">
+            <p className="editorial-label">Bước 3 / 3</p>
+            <h2 className="mt-2 font-display text-2xl font-bold">
               Lớp {classroom.name} đã sẵn sàng
             </h2>
             <p className="mt-1 font-semibold text-muted-foreground">
@@ -593,12 +587,12 @@ function InvitationResultSummary({
 }) {
   return (
     <section
-      className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-md"
+      className="rounded-2xl border border-divider bg-surface p-5"
       aria-labelledby="invite-results-heading"
     >
       <h2
         id="invite-results-heading"
-        className="flex items-center gap-2 font-display text-xl font-extrabold"
+        className="flex items-center gap-2 font-display text-xl font-bold"
       >
         <MailPlus className="h-5 w-5" aria-hidden="true" />
         Kết quả mời sinh viên
@@ -607,7 +601,7 @@ function InvitationResultSummary({
         {results.map((result) => (
           <li
             key={result.email}
-            className="flex min-w-0 items-center gap-3 rounded-xl border-2 border-foreground bg-surface-soft px-4 py-3"
+            className="flex min-w-0 items-center gap-3 rounded-xl border border-divider bg-surface-soft px-4 py-3"
           >
             {result.status === "added" || result.status === "invited" ? (
               <CheckCircle2
@@ -620,7 +614,7 @@ function InvitationResultSummary({
             <span className="min-w-0 flex-1 truncate font-bold">
               {result.email}
             </span>
-            <span className="shrink-0 rounded-full border-2 border-foreground bg-success-soft px-2 py-1 text-xs font-extrabold">
+            <span className="shrink-0 rounded-full border border-success/30 bg-success-soft px-2 py-1 text-xs font-bold">
               {inviteResultLabel(result.status)}
             </span>
           </li>

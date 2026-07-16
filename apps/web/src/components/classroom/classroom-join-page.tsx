@@ -15,7 +15,6 @@ import {
   Mail,
   RefreshCw,
   ShieldAlert,
-  Sparkles,
   UserRoundX,
 } from "lucide-react";
 import {
@@ -37,6 +36,7 @@ import {
 } from "@/components/classroom/classroom-ui";
 import { formatDateTime } from "@/components/classroom/classroom-utils";
 import { withReturnTo } from "@/components/classroom/safe-return-to";
+import { BrandLockup } from "@/components/ui/brand-lockup";
 
 type PreviewState =
   | { requestKey: string; status: "error"; message: string }
@@ -152,44 +152,27 @@ export function ClassroomJoinPage({
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
-      <header className="border-b-2 border-foreground bg-surface px-4 py-3 sm:px-6">
+      <header className="border-b border-divider bg-surface px-4 py-3 sm:px-6">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-          <Link
-            href="/"
-            className="flex cursor-pointer items-center gap-2 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-ring"
-          >
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-foreground bg-primary shadow-brutal-sm">
-              <Sparkles className="h-5 w-5" aria-hidden="true" />
-            </span>
-            <span className="font-display text-xl font-extrabold">ZuniBee</span>
-          </Link>
-          <span className="hidden rounded-full border-2 border-foreground bg-secondary-soft px-3 py-1.5 text-sm font-extrabold shadow-brutal-xs sm:inline-flex">
+          <BrandLockup />
+          <span className="editorial-label hidden sm:inline-flex">
             Lời mời lớp học
           </span>
         </div>
       </header>
 
-      <main className="relative overflow-hidden px-4 py-10 sm:px-6 sm:py-14">
-        <div
-          aria-hidden="true"
-          className="absolute -left-16 top-10 h-32 w-32 rounded-full border-2 border-foreground bg-secondary"
-        />
-        <div
-          aria-hidden="true"
-          className="absolute -right-16 bottom-12 h-32 w-32 rotate-12 rounded-3xl border-2 border-foreground bg-success"
-        />
-
-        <div className="relative mx-auto max-w-3xl">
+      <main className="px-4 py-10 sm:px-6 sm:py-14">
+        <div className="mx-auto max-w-3xl">
           {!visiblePreviewState ? (
             <div
-              className="flex min-h-96 flex-col items-center justify-center gap-4 rounded-3xl border-[3px] border-foreground bg-surface p-8 text-center shadow-brutal-2xl"
+              className="study-surface flex min-h-80 flex-col items-center justify-center gap-4 p-8 text-center"
               role="status"
               aria-live="polite"
             >
-              <span className="flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-foreground bg-primary shadow-brutal-md">
+              <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary">
                 <Loader2 className="h-8 w-8 animate-spin" aria-hidden="true" />
               </span>
-              <h1 className="font-display text-2xl font-extrabold">
+              <h1 className="font-display text-2xl font-bold">
                 Đang kiểm tra lớp học...
               </h1>
               <p className="font-semibold text-muted-foreground">
@@ -200,15 +183,15 @@ export function ClassroomJoinPage({
 
           {visiblePreviewState?.status === "error" ? (
             <section
-              className="rounded-3xl border-[3px] border-foreground bg-surface p-6 shadow-brutal-2xl sm:p-10"
+              className="study-surface p-6 sm:p-10"
               aria-labelledby="invalid-invite-title"
             >
-              <span className="flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-foreground bg-destructive shadow-brutal-lg">
+              <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive-soft text-destructive">
                 <AlertCircle className="h-8 w-8" aria-hidden="true" />
               </span>
               <h1
                 id="invalid-invite-title"
-                className="mt-6 font-display text-3xl font-extrabold"
+                className="mt-6 font-display text-3xl font-bold"
               >
                 Lời mời không khả dụng
               </h1>
@@ -297,17 +280,17 @@ function JoinPreviewCard({
   );
 
   return (
-    <article className="overflow-hidden rounded-3xl border-[3px] border-foreground bg-surface shadow-brutal-2xl">
-      <div className="border-b-[3px] border-foreground bg-secondary-soft p-6 sm:p-8">
+    <article className="study-surface overflow-hidden">
+      <div className="border-b border-divider bg-surface-soft p-6 sm:p-8">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-          <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border-[3px] border-foreground bg-secondary shadow-brutal-lg">
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-secondary-soft text-secondary">
             <KindIcon className="h-8 w-8" aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <span className="inline-flex rounded-full border-2 border-foreground bg-surface px-3 py-1 text-sm font-extrabold shadow-brutal-xs">
+            <span className="editorial-label">
               {kind === "invitation" ? "Mời qua email" : "Link tham gia lớp"}
             </span>
-            <h1 className="mt-4 break-words font-display text-3xl font-extrabold sm:text-4xl">
+            <h1 className="mt-4 break-words font-display text-3xl font-bold sm:text-4xl">
               {preview.classroom.name}
             </h1>
             <p className="mt-2 font-semibold text-muted-foreground">
@@ -349,10 +332,10 @@ function JoinPreviewCard({
           {joinResult ? (
             <div
               role="status"
-              className="rounded-2xl border-2 border-foreground bg-success-soft p-5 shadow-brutal-md sm:p-6"
+              className="rounded-2xl border border-success/30 bg-success-soft p-5 sm:p-6"
             >
               <CheckCircle2 className="h-8 w-8" aria-hidden="true" />
-              <h2 className="mt-3 font-display text-2xl font-extrabold">
+              <h2 className="mt-3 font-display text-2xl font-bold">
                 {joinResult.alreadyMember
                   ? "Bạn đã ở trong lớp này"
                   : "Tham gia lớp thành công!"}
@@ -371,15 +354,15 @@ function JoinPreviewCard({
           ) : isAuthLoading ? (
             <div
               role="status"
-              className="flex min-h-24 items-center justify-center gap-3 rounded-2xl border-2 border-foreground bg-surface-soft p-5 font-bold"
+              className="flex min-h-24 items-center justify-center gap-3 rounded-2xl border border-divider bg-surface-soft p-5 font-bold"
             >
               <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
               Đang kiểm tra đăng nhập...
             </div>
           ) : !user ? (
-            <div className="rounded-2xl border-2 border-foreground bg-warning-soft p-5 shadow-brutal-md sm:p-6">
+            <div className="rounded-2xl border border-warning/30 bg-warning-soft p-5 sm:p-6">
               <LogIn className="h-7 w-7" aria-hidden="true" />
-              <h2 className="mt-3 font-display text-xl font-extrabold">
+              <h2 className="mt-3 font-display text-xl font-bold">
                 Đăng nhập để xác nhận
               </h2>
               <p className="mt-2 font-semibold text-muted-foreground">
@@ -398,10 +381,10 @@ function JoinPreviewCard({
           ) : !user.roleSelected ? (
             <div
               role="alert"
-              className="rounded-2xl border-2 border-foreground bg-warning-soft p-5 shadow-brutal-md sm:p-6"
+              className="rounded-2xl border border-warning/30 bg-warning-soft p-5 sm:p-6"
             >
               <ShieldAlert className="h-7 w-7" aria-hidden="true" />
-              <h2 className="mt-3 font-display text-xl font-extrabold">
+              <h2 className="mt-3 font-display text-xl font-bold">
                 Hãy chọn vai trò Học sinh
               </h2>
               <p className="mt-2 font-semibold text-muted-foreground">
@@ -417,10 +400,10 @@ function JoinPreviewCard({
           ) : user.role !== UserRole.STUDENT ? (
             <div
               role="alert"
-              className="rounded-2xl border-2 border-foreground bg-destructive-soft p-5 shadow-brutal-md sm:p-6"
+              className="rounded-2xl border border-destructive/30 bg-destructive-soft p-5 sm:p-6"
             >
               <ShieldAlert className="h-7 w-7" aria-hidden="true" />
-              <h2 className="mt-3 font-display text-xl font-extrabold">
+              <h2 className="mt-3 font-display text-xl font-bold">
                 Tài khoản giáo viên không thể tham gia lớp
               </h2>
               <p className="mt-2 font-semibold text-muted-foreground">
@@ -447,10 +430,10 @@ function JoinPreviewCard({
           ) : hasEmailMismatch ? (
             <div
               role="alert"
-              className="rounded-2xl border-2 border-foreground bg-destructive-soft p-5 shadow-brutal-md sm:p-6"
+              className="rounded-2xl border border-destructive/30 bg-destructive-soft p-5 sm:p-6"
             >
               <UserRoundX className="h-7 w-7" aria-hidden="true" />
-              <h2 className="mt-3 font-display text-xl font-extrabold">
+              <h2 className="mt-3 font-display text-xl font-bold">
                 Lời mời dành cho email khác
               </h2>
               <p className="mt-2 font-semibold text-muted-foreground">
@@ -475,7 +458,7 @@ function JoinPreviewCard({
             </div>
           ) : (
             <div>
-              <h2 className="font-display text-xl font-extrabold">
+              <h2 className="font-display text-xl font-bold">
                 Sẵn sàng tham gia?
               </h2>
               <p className="mt-2 font-semibold text-muted-foreground">
@@ -484,7 +467,7 @@ function JoinPreviewCard({
               {acceptError ? (
                 <p
                   role="alert"
-                  className="mt-4 rounded-xl border-2 border-foreground bg-destructive-soft px-4 py-3 font-bold"
+                  className="mt-4 rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3 font-bold"
                 >
                   {acceptError}
                 </p>
@@ -523,12 +506,12 @@ function PreviewDetail({
   value: string;
 }) {
   return (
-    <div className="rounded-xl border-2 border-foreground bg-surface-soft p-4">
-      <dt className="flex items-center gap-2 text-sm font-extrabold text-muted-foreground">
+    <div className="rounded-xl border border-divider bg-surface-soft p-4">
+      <dt className="flex items-center gap-2 text-sm font-bold text-muted-foreground">
         <Icon className="h-4 w-4" aria-hidden="true" />
         {label}
       </dt>
-      <dd className="mt-2 break-words font-display text-lg font-extrabold">
+      <dd className="mt-2 break-words font-display text-lg font-bold">
         {value}
       </dd>
     </div>

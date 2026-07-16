@@ -76,10 +76,10 @@ export function JoinCodeForm({ onJoined, compact = false }: JoinCodeFormProps) {
   return (
     <section
       aria-labelledby="join-code-title"
-      className={`rounded-2xl border-2 border-foreground bg-surface shadow-brutal-lg ${compact ? "p-5 sm:p-6" : "p-6 sm:p-8"}`}
+      className={`rounded-2xl border border-divider bg-surface ${compact ? "p-5 sm:p-6" : "p-6 sm:p-8"}`}
     >
       <div className="flex items-start gap-3">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border-2 border-foreground bg-primary shadow-brutal-sm">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-soft">
           <KeyRound className="h-6 w-6" aria-hidden="true" />
         </span>
         <div>
@@ -153,7 +153,7 @@ export function JoinCodeForm({ onJoined, compact = false }: JoinCodeFormProps) {
           {result ? (
             <div
               role="status"
-              className="mt-4 rounded-xl border-2 border-foreground bg-success-soft p-4 shadow-brutal-sm"
+              className="mt-4 rounded-xl border border-success/30 bg-success-soft p-4"
             >
               <div className="flex items-start gap-3">
                 <CheckCircle2

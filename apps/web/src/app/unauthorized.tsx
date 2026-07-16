@@ -8,7 +8,7 @@ export default function Unauthorized() {
       code="401"
       icon={LogIn}
       accent="success"
-      sticker="Đăng nhập nhé!"
+      sticker="Xác thực tài khoản"
       eyebrow="Cần đăng nhập"
       title="Bạn cần đăng nhập để vào đây"
       description="Vui lòng đăng nhập để tiếp tục truy cập trang này."

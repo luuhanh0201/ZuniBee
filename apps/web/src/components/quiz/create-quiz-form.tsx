@@ -42,10 +42,7 @@ export function CreateQuizForm() {
     <TeacherClassroomFrame>
       <div className="mx-auto max-w-2xl">
         <h1 className="font-display text-4xl font-extrabold">Tạo quiz mới</h1>
-        <form
-          onSubmit={submit}
-          className="mt-7 space-y-5 rounded-2xl border-2 border-foreground bg-surface p-6 shadow-brutal-lg"
-        >
+        <form onSubmit={submit} className="study-surface mt-7 space-y-5 p-6">
           <label className="block font-extrabold">
             Tiêu đề
             <input

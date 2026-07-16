@@ -91,8 +91,8 @@ export function StudentQuizWorkspace() {
   return (
     <StudentClassroomFrame>
       <StudentClassroomPageHeader
-        title="Quiz của tôi"
-        description="Theo dõi bài được giao, tiếp tục lượt đang làm và xem lại kết quả."
+        title="Hoạt động học"
+        description="Tiếp tục phần đang làm, hoàn thành nội dung được giao và xem lại phản hồi."
       />
       {!items && !error ? (
         <ClassroomLoadingState label="Đang tải danh sách quiz..." />
@@ -109,8 +109,8 @@ export function StudentQuizWorkspace() {
       {items ? (
         <>
           <section
-            className="grid gap-4 sm:grid-cols-3"
-            aria-label="Tổng quan quiz"
+            className="grid overflow-hidden rounded-2xl border border-divider bg-surface sm:grid-cols-3 sm:divide-x sm:divide-divider"
+            aria-label="Tổng quan hoạt động"
           >
             <SummaryCard
               label="Được giao"
@@ -145,13 +145,13 @@ export function StudentQuizWorkspace() {
                 type="button"
                 aria-pressed={filter === id}
                 onClick={() => setFilter(id)}
-                className={`min-h-11 cursor-pointer rounded-xl border-2 border-foreground px-4 font-extrabold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${filter === id ? "bg-primary shadow-brutal-sm" : "bg-surface hover:bg-surface-soft"}`}
+                className={`min-h-11 cursor-pointer rounded-xl border px-4 font-semibold transition-colors focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring ${filter === id ? "border-foreground bg-primary text-on-primary" : "border-divider bg-surface hover:border-foreground/50 hover:bg-surface-soft"}`}
               >
                 {label}
               </button>
             ))}
           </div>
-          <section className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <section className="mt-5 space-y-4">
             {visible.map((quiz) => (
               <StudentQuizCard key={quiz.id} quiz={quiz} />
             ))}
@@ -159,8 +159,8 @@ export function StudentQuizWorkspace() {
           {!visible.length ? (
             <div className="mt-5 rounded-2xl border-2 border-dashed border-foreground bg-surface p-10 text-center">
               <BookOpenCheck className="mx-auto h-10 w-10" aria-hidden="true" />
-              <h2 className="mt-3 font-display text-xl font-extrabold">
-                Chưa có quiz trong nhóm này
+              <h2 className="mt-3 font-display text-xl font-bold">
+                Chưa có hoạt động trong nhóm này
               </h2>
             </div>
           ) : null}
@@ -180,43 +180,45 @@ function StudentQuizCard({ quiz }: { quiz: StudentQuizItem }) {
       : publicQuizRoute(quiz.id);
   const disabled = quiz.state === "upcoming" || quiz.state === "overdue";
   return (
-    <article className="flex min-h-72 flex-col rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-md">
-      <div className="flex items-start justify-between gap-3">
+    <article className="grid gap-5 rounded-2xl border border-divider bg-surface p-5 sm:p-6 lg:grid-cols-[auto_1fr_auto] lg:items-center">
+      <div className="flex items-start gap-3 lg:self-start">
         <span
-          className={`flex h-11 w-11 items-center justify-center rounded-xl border-2 border-foreground shadow-brutal-sm ${meta.color}`}
+          className={`flex h-11 w-11 items-center justify-center rounded-xl ${meta.color}`}
         >
           <Icon className="h-5 w-5" aria-hidden="true" />
         </span>
         <span
-          className={`rounded-full border-2 border-foreground px-3 py-1 text-xs font-extrabold ${meta.color}`}
+          className={`rounded-full border border-divider px-3 py-1 text-xs font-semibold ${meta.color}`}
         >
           {meta.label}
         </span>
       </div>
-      <p className="mt-4 text-sm font-bold text-muted-foreground">
-        {quiz.teacherName}
-      </p>
-      <h2 className="mt-1 font-display text-xl font-extrabold">{quiz.title}</h2>
-      <p className="mt-2 line-clamp-2 font-semibold text-muted-foreground">
-        {quiz.description ||
-          `${quiz.questionCount} câu · ${quiz.totalScore} điểm`}
-      </p>
-      <div className="mt-4 space-y-1 text-sm font-bold text-muted-foreground">
-        <p>
-          {quiz.questionCount} câu · Đã dùng {quiz.attemptsUsed}/
-          {quiz.maxAttempts ?? "∞"} lượt
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-muted-foreground">
+          {quiz.teacherName}
         </p>
-        <p>{formatSchedule(quiz.opensAt, quiz.dueAt)}</p>
-        {quiz.latestResult ? (
-          <p className="text-foreground">
-            Điểm gần nhất:{" "}
-            {quiz.latestResult.score === null
-              ? "Chưa công bố"
-              : `${quiz.latestResult.score}/${quiz.latestResult.maxScore}`}
+        <h2 className="mt-1 font-display text-xl font-bold">{quiz.title}</h2>
+        <p className="mt-1 line-clamp-2 text-muted-foreground">
+          {quiz.description ||
+            `${quiz.questionCount} câu · ${quiz.totalScore} điểm`}
+        </p>
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm font-medium text-muted-foreground">
+          <p>
+            {quiz.questionCount} câu · Đã dùng {quiz.attemptsUsed}/
+            {quiz.maxAttempts ?? "∞"} lượt
           </p>
-        ) : null}
+          <p>{formatSchedule(quiz.opensAt, quiz.dueAt)}</p>
+          {quiz.latestResult ? (
+            <p className="text-foreground">
+              Điểm gần nhất:{" "}
+              {quiz.latestResult.score === null
+                ? "Chưa công bố"
+                : `${quiz.latestResult.score}/${quiz.latestResult.maxScore}`}
+            </p>
+          ) : null}
+        </div>
       </div>
-      <div className="mt-auto pt-5">
+      <div className="lg:min-w-44">
         {disabled ? (
           <span
             className={`${SECONDARY_ACTION_CLASS} w-full cursor-not-allowed opacity-60`}
@@ -256,11 +258,11 @@ function SummaryCard({
   color: string;
 }) {
   return (
-    <article
-      className={`rounded-2xl border-2 border-foreground p-5 shadow-brutal-sm ${color}`}
-    >
-      <p className="font-bold text-muted-foreground">{label}</p>
-      <p className="mt-1 font-display text-3xl font-extrabold tabular-nums">
+    <article className="p-5">
+      <p className="text-sm font-medium text-muted-foreground">{label}</p>
+      <p
+        className={`mt-2 inline-flex min-w-12 justify-center rounded-lg px-2 font-display text-2xl font-bold tabular-nums ${color}`}
+      >
         {value}
       </p>
     </article>

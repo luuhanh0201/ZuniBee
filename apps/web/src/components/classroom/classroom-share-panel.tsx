@@ -86,18 +86,18 @@ export function ClassroomSharePanel({
 
   return (
     <section
-      className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-lg sm:p-6"
+      className="rounded-2xl border border-divider bg-surface p-5 sm:p-6"
       aria-labelledby="share-classroom-heading"
     >
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <div className="mb-2 flex items-center gap-2 text-sm font-extrabold text-secondary-strong">
+          <div className="editorial-label mb-2">
             <ShieldCheck className="h-5 w-5" aria-hidden="true" />
             Chia sẻ an toàn
           </div>
           <h2
             id="share-classroom-heading"
-            className="font-display text-2xl font-extrabold"
+            className="font-display text-2xl font-bold"
           >
             Mời sinh viên vào lớp
           </h2>
@@ -135,7 +135,7 @@ export function ClassroomSharePanel({
             <div className="flex flex-col gap-3 sm:flex-row">
               <output
                 aria-label="Mã tham gia lớp"
-                className="flex min-h-16 min-w-0 flex-1 items-center justify-center rounded-xl border-2 border-foreground bg-primary px-4 py-3 text-center font-display text-2xl font-extrabold tracking-[0.22em] shadow-brutal-sm sm:text-3xl"
+                className="flex min-h-16 min-w-0 flex-1 items-center justify-center rounded-xl border border-divider bg-primary-soft px-4 py-3 text-center font-display text-2xl font-bold tracking-[0.22em] sm:text-3xl"
               >
                 {joinCode}
               </output>
@@ -162,7 +162,7 @@ export function ClassroomSharePanel({
             <div className="flex flex-col gap-3 sm:flex-row">
               <output
                 aria-label="Link tham gia lớp"
-                className="flex min-h-14 min-w-0 flex-1 items-center overflow-hidden rounded-xl border-2 border-foreground bg-surface-soft px-4 py-3 font-semibold"
+                className="flex min-h-14 min-w-0 flex-1 items-center overflow-hidden rounded-xl border border-divider bg-surface-soft px-4 py-3 font-semibold"
               >
                 <span className="truncate">{joinUrl}</span>
               </output>
@@ -182,14 +182,14 @@ export function ClassroomSharePanel({
           </div>
         </div>
 
-        <div className="flex flex-col items-center rounded-2xl border-2 border-foreground bg-secondary-soft p-4 shadow-brutal-sm">
+        <div className="flex flex-col items-center rounded-2xl border border-divider bg-surface-soft p-4">
           <p className="mb-3 flex items-center gap-2 font-extrabold">
             <QrCode className="h-5 w-5" aria-hidden="true" />
             Mã QR
           </p>
           <div
             ref={qrContainerRef}
-            className="rounded-xl border-2 border-foreground bg-white p-3"
+            className="rounded-xl border border-divider bg-white p-3"
           >
             <QRCodeSVG
               value={joinUrl}

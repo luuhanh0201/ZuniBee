@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { GraduationCap } from "lucide-react";
-import { ROUTES } from "@/config/routes";
+import { BookOpen, Check, Sparkles } from "lucide-react";
+import { BrandLockup } from "@/components/ui/brand-lockup";
 
 type AuthShellProps = {
   title: string;
@@ -16,53 +16,75 @@ export function AuthShell({
   footer,
 }: AuthShellProps) {
   return (
-    <main className="relative flex flex-1 items-center justify-center overflow-hidden bg-background px-4 py-10 sm:px-6 sm:py-14">
-      {/* Hình trang trí — cùng bảng màu brand, ẩn với screen reader */}
-      <div
-        aria-hidden="true"
-        className="absolute -left-14 top-10 h-32 w-32 rounded-full border-2 border-foreground bg-secondary sm:left-[6%]"
-      />
-      <div
-        aria-hidden="true"
-        className="absolute -right-12 bottom-10 h-28 w-28 rotate-12 rounded-3xl border-2 border-foreground bg-success sm:right-[8%]"
-      />
-
-      <div className="relative z-10 w-full max-w-md">
-        <Link
-          href={ROUTES.home}
-          className="mb-6 flex cursor-pointer items-center justify-center gap-2 font-display text-xl font-bold text-foreground"
-        >
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl border-2 border-foreground bg-primary shadow-brutal-sm">
-            <GraduationCap
-              className="h-5 w-5 text-foreground"
-              strokeWidth={2.5}
-            />
-          </span>
-          ZuniBee
-        </Link>
-
-        <section className="rounded-3xl border-[3px] border-foreground bg-surface p-6 shadow-brutal-2xl sm:p-8">
-          <div className="text-center">
-            <h1 className="font-display text-2xl font-bold text-foreground sm:text-3xl">
-              {title}
-            </h1>
-            <p className="mt-2 text-sm font-medium text-foreground/70 sm:text-base">
-              {subtitle}
+    <main className="flex flex-1 items-center bg-background px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+      <div className="motion-enter mx-auto grid w-full max-w-6xl overflow-hidden rounded-3xl border-2 border-foreground bg-surface shadow-brutal-lg lg:grid-cols-[0.85fr_1.15fr]">
+        <aside className="relative hidden overflow-hidden border-r border-divider bg-surface-soft p-10 lg:flex lg:flex-col lg:justify-between">
+          <div>
+            <BrandLockup />
+            <p className="editorial-label mt-14 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-purple" aria-hidden="true" />
+              Không gian học tập của bạn
+            </p>
+            <h2 className="mt-4 font-display text-4xl font-bold leading-tight">
+              Quay lại đúng nơi bạn đang học dở.
+            </h2>
+            <p className="mt-4 leading-relaxed text-muted-foreground">
+              Lớp học, tài liệu và hoạt động được giữ trong một mạch để bạn luôn
+              biết bước tiếp theo.
             </p>
           </div>
+          <ul className="motion-stagger mt-12 space-y-4 text-sm font-medium">
+            {[
+              "Tiếp tục hoạt động gần nhất",
+              "Nhận phản hồi ngay trong ngữ cảnh",
+              "Theo dõi tiến bộ từ công việc thật",
+            ].map((item) => (
+              <li key={item} className="flex items-center gap-3">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-on-primary">
+                  <Check
+                    className="h-4 w-4"
+                    strokeWidth={3}
+                    aria-hidden="true"
+                  />
+                </span>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </aside>
 
-          <div className="mt-6">{children}</div>
-        </section>
+        <div className="p-5 sm:p-8 lg:p-12">
+          <BrandLockup className="mb-8 lg:hidden" />
+          <section className="motion-stagger mx-auto max-w-md">
+            <div>
+              <p className="editorial-label flex items-center gap-2">
+                <BookOpen
+                  className="h-4 w-4 text-secondary-strong"
+                  aria-hidden="true"
+                />
+                ZuniBee account
+              </p>
+              <h1 className="mt-3 font-display text-3xl font-bold text-foreground sm:text-4xl">
+                {title}
+              </h1>
+              <p className="mt-3 text-sm text-muted-foreground sm:text-base">
+                {subtitle}
+              </p>
+            </div>
 
-        <p className="mt-6 text-center text-sm font-semibold text-foreground/70">
-          {footer.text}{" "}
-          <Link
-            href={footer.href}
-            className="cursor-pointer text-foreground underline decoration-2 underline-offset-2 hover:text-primary"
-          >
-            {footer.linkLabel}
-          </Link>
-        </p>
+            <div className="mt-7">{children}</div>
+
+            <p className="mt-7 border-t border-divider pt-6 text-center text-sm text-muted-foreground">
+              {footer.text}{" "}
+              <Link
+                href={footer.href}
+                className="cursor-pointer font-semibold text-foreground underline decoration-2 underline-offset-4 transition-colors hover:text-secondary-strong focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring"
+              >
+                {footer.linkLabel}
+              </Link>
+            </p>
+          </section>
+        </div>
       </div>
     </main>
   );

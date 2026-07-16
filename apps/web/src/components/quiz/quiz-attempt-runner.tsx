@@ -235,20 +235,20 @@ export function QuizAttemptRunner({ attemptId }: { attemptId: string }) {
       <div className="mx-auto max-w-3xl">
         {attempt ? (
           <>
-            <header className="sticky top-3 z-10 rounded-2xl border-2 border-foreground bg-surface p-4 shadow-brutal-md">
+            <header className="sticky top-3 z-10 rounded-2xl border border-divider bg-surface/95 p-4 shadow-sm backdrop-blur">
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-sm font-bold text-muted-foreground">
                     Lượt {attempt.attemptNumber} · {answered}/
                     {attempt.questions.length} câu
                   </p>
-                  <h1 className="font-display text-xl font-extrabold">
+                  <h1 className="font-display text-xl font-bold">
                     {attempt.quizTitle}
                   </h1>
                 </div>
                 {remaining !== null ? (
                   <span
-                    className={`flex items-center gap-2 rounded-xl border-2 border-foreground px-3 py-2 font-extrabold tabular-nums ${remaining <= 60 ? "bg-destructive-soft" : remaining <= 300 ? "bg-warning-soft" : "bg-surface-soft"}`}
+                    className={`flex items-center gap-2 rounded-full border px-3 py-2 font-bold tabular-nums ${remaining <= 60 ? "border-destructive/30 bg-destructive-soft" : remaining <= 300 ? "border-warning/30 bg-warning-soft" : "border-divider bg-surface-soft"}`}
                   >
                     <Clock3 className="h-4 w-4" aria-hidden="true" />
                     {Math.floor(remaining / 60)}:
@@ -268,7 +268,7 @@ export function QuizAttemptRunner({ attemptId }: { attemptId: string }) {
 
             {remaining !== null && remaining <= 300 ? (
               <p
-                className="mt-5 flex items-center gap-2 rounded-xl border-2 border-foreground bg-warning-soft p-3 font-bold"
+                className="mt-5 flex items-center gap-2 rounded-xl border border-warning/30 bg-warning-soft p-3 font-bold"
                 role="status"
               >
                 <AlertTriangle className="h-5 w-5" aria-hidden="true" />
@@ -282,9 +282,9 @@ export function QuizAttemptRunner({ attemptId }: { attemptId: string }) {
               {attempt.questions.map((question, index) => (
                 <fieldset
                   key={question.id}
-                  className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-sm"
+                  className="rounded-2xl border border-divider bg-surface p-5"
                 >
-                  <legend className="px-2 font-display text-xl font-extrabold">
+                  <legend className="px-2 font-display text-xl font-bold">
                     Câu {index + 1}
                   </legend>
                   <p className="font-bold">{question.content}</p>
@@ -296,7 +296,7 @@ export function QuizAttemptRunner({ attemptId }: { attemptId: string }) {
                       return (
                         <label
                           key={option.id}
-                          className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 p-3 font-semibold transition-colors duration-200 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring ${checked ? "border-foreground bg-primary" : "border-divider hover:bg-surface-soft"}`}
+                          className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 font-semibold transition-colors duration-200 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring ${checked ? "border-foreground bg-primary-soft" : "border-divider hover:border-foreground/30 hover:bg-surface-soft"}`}
                         >
                           <input
                             type={
@@ -344,7 +344,7 @@ export function QuizAttemptRunner({ attemptId }: { attemptId: string }) {
         )}
         {error ? (
           <p
-            className="mt-5 rounded-xl border-2 border-foreground bg-destructive-soft p-3 font-bold"
+            className="mt-5 rounded-xl border border-destructive/30 bg-destructive-soft p-3 font-bold"
             role="alert"
           >
             {error}
@@ -359,12 +359,12 @@ export function QuizAttemptRunner({ attemptId }: { attemptId: string }) {
           aria-modal="true"
           aria-labelledby="submit-title"
         >
-          <div className="w-full max-w-lg rounded-t-3xl border-[3px] border-foreground bg-surface p-6 shadow-brutal-xl sm:rounded-3xl">
+          <div className="w-full max-w-lg rounded-t-3xl border border-divider bg-surface p-6 shadow-xl sm:rounded-3xl">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2
                   id="submit-title"
-                  className="font-display text-2xl font-extrabold"
+                  className="font-display text-2xl font-bold"
                 >
                   Xác nhận nộp bài
                 </h2>

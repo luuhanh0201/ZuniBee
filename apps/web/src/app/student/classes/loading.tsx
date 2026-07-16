@@ -7,7 +7,7 @@ export default function StudentClassesLoading() {
       role="status"
       aria-live="polite"
     >
-      <span className="flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-foreground bg-primary shadow-brutal-md">
+      <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-soft">
         <Loader2 className="h-7 w-7 animate-spin" aria-hidden="true" />
       </span>
       <p className="font-bold">Đang mở không gian lớp học...</p>

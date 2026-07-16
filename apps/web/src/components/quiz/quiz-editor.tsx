@@ -183,10 +183,12 @@ export function QuizEditor({ quizId }: { quizId: string }) {
     <TeacherClassroomFrame>
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="font-extrabold uppercase text-muted-foreground">
-            {quiz.status === "published" ? "Đã phát hành" : "Bản nháp"}
+          <p className="editorial-label">
+            {quiz.status === "published"
+              ? "Hoạt động đã phát hành"
+              : "Bản nháp hoạt động"}
           </p>
-          <h1 className="font-display text-4xl font-extrabold">{quiz.title}</h1>
+          <h1 className="mt-3 font-display text-4xl font-bold">{quiz.title}</h1>
           <p className="mt-2 font-semibold text-muted-foreground">
             {quiz.description || "Chưa có mô tả"}
           </p>
@@ -220,14 +222,14 @@ export function QuizEditor({ quizId }: { quizId: string }) {
       {error ? (
         <p
           role="alert"
-          className="mb-5 rounded-xl border-2 border-foreground bg-destructive-soft p-3 font-bold"
+          className="mb-5 rounded-xl border border-destructive/30 bg-destructive-soft p-3 font-bold"
         >
           {error}
         </p>
       ) : null}
       <nav
         role="tablist"
-        className="mb-6 flex gap-2 overflow-x-auto rounded-2xl border-2 border-foreground bg-surface p-2"
+        className="mb-6 flex gap-1 overflow-x-auto border-b border-divider"
       >
         {tabs.map(([id, label, Icon]) => (
           <button
@@ -235,7 +237,7 @@ export function QuizEditor({ quizId }: { quizId: string }) {
             role="tab"
             aria-selected={tab === id}
             onClick={() => setTab(id)}
-            className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl px-4 font-extrabold ${tab === id ? "border-2 border-foreground bg-primary" : "text-muted-foreground"}`}
+            className={`inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-4 font-bold transition-colors ${tab === id ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           >
             <Icon className="h-4 w-4" />
             {label}

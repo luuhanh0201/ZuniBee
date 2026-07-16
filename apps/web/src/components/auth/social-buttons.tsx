@@ -15,7 +15,7 @@ export function SocialButtons({ returnTo }: { returnTo?: string }) {
       <a
         href={`${API_URL}/auth/google`}
         onClick={preserveReturnTo}
-        className="inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-surface px-4 py-2.5 text-sm font-bold text-foreground shadow-brutal-sm transition-[transform,box-shadow] duration-150 ease-out hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-md active:translate-x-0.5 active:translate-y-0.5 active:shadow-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-divider bg-surface px-4 py-2.5 text-sm font-semibold text-foreground transition-[border-color,background-color] duration-200 hover:border-foreground/40 hover:bg-surface-soft focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring"
       >
         <GoogleIcon className="h-5 w-5" />
         Google
@@ -23,7 +23,7 @@ export function SocialButtons({ returnTo }: { returnTo?: string }) {
       <a
         href={`${API_URL}/auth/facebook`}
         onClick={preserveReturnTo}
-        className="inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-surface px-4 py-2.5 text-sm font-bold text-foreground shadow-brutal-sm transition-[transform,box-shadow] duration-150 ease-out hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-md active:translate-x-0.5 active:translate-y-0.5 active:shadow-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-divider bg-surface px-4 py-2.5 text-sm font-semibold text-foreground transition-[border-color,background-color] duration-200 hover:border-foreground/40 hover:bg-surface-soft focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring"
       >
         <FacebookIcon className="h-5 w-5" />
         Facebook

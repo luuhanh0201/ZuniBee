@@ -106,15 +106,15 @@ export function ProfileForm() {
       <div className="mx-auto max-w-5xl">
         <Link
           href={dashboardUrl}
-          className="inline-flex cursor-pointer items-center gap-2 rounded-lg font-bold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+          className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg font-semibold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-ring"
         >
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
           Quay lại bảng điều khiển
         </Link>
 
-        <div className="mt-6 grid gap-6 lg:grid-cols-[0.72fr_1.28fr]">
-          <aside className="rounded-3xl border-[3px] border-foreground bg-purple-soft p-6 shadow-brutal-xl">
-            <label className="group relative mx-auto flex h-24 w-24 cursor-pointer items-center justify-center overflow-hidden rounded-3xl border-[3px] border-foreground bg-primary font-display text-3xl font-bold shadow-brutal-md transition-[transform,box-shadow] duration-200 hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-lg focus-within:outline focus-within:outline-2 focus-within:outline-offset-4 focus-within:outline-ring">
+        <div className="mt-6 grid overflow-hidden rounded-3xl border-2 border-foreground bg-surface shadow-brutal-lg lg:grid-cols-[0.72fr_1.28fr]">
+          <aside className="border-b border-divider bg-surface-soft p-6 lg:border-b-0 lg:border-r lg:p-8">
+            <label className="group relative flex h-24 w-24 cursor-pointer items-center justify-center overflow-hidden rounded-3xl border-2 border-foreground bg-primary font-display text-3xl font-bold shadow-brutal-xs transition-[box-shadow] duration-200 hover:shadow-brutal-sm focus-within:outline focus-within:outline-3 focus-within:outline-offset-4 focus-within:outline-ring">
               {avatarPreview || user.avatar ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -142,11 +142,11 @@ export function ProfileForm() {
             <h1 className="mt-5 font-display text-3xl font-bold">
               Hồ sơ của bạn
             </h1>
-            <p className="mt-2 text-sm font-semibold leading-6 text-muted-foreground">
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
               Cập nhật thông tin để trải nghiệm ZuniBee gần gũi và chính xác
               hơn.
             </p>
-            <div className="mt-6 inline-flex items-center gap-2 rounded-xl border-2 border-foreground bg-surface px-3 py-2 font-bold shadow-brutal-sm">
+            <div className="mt-6 inline-flex items-center gap-2 rounded-xl border border-divider bg-surface px-3 py-2 font-semibold">
               <RoleIcon className="h-5 w-5" aria-hidden="true" />
               {user.role === UserRole.TEACHER ? "Giáo viên" : "Học sinh"}
             </div>
@@ -158,9 +158,9 @@ export function ProfileForm() {
 
           <form
             onSubmit={handleSubmit}
-            className="flex min-h-full flex-col rounded-3xl border-[3px] border-foreground bg-surface p-5 shadow-brutal-xl sm:p-7"
+            className="flex min-h-full flex-col p-5 sm:p-8"
           >
-            <p className="font-bold text-secondary-strong">THÔNG TIN CÁ NHÂN</p>
+            <p className="editorial-label">Thông tin cá nhân</p>
             <h2 className="mt-1 font-display text-2xl font-bold">
               Chỉnh sửa hồ sơ
             </h2>
@@ -205,14 +205,14 @@ export function ProfileForm() {
             <div className="mt-auto flex flex-col-reverse gap-3 pt-10 sm:flex-row sm:justify-end">
               <Link
                 href={ROUTES.changePassword}
-                className="inline-flex min-h-12 cursor-pointer items-center justify-center rounded-xl border-2 border-foreground bg-surface-soft px-5 font-bold shadow-brutal-sm transition-[transform,box-shadow] hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-ring"
+                className="inline-flex min-h-12 cursor-pointer items-center justify-center rounded-xl border-2 border-foreground bg-surface px-5 font-semibold shadow-brutal-xs transition-colors hover:bg-surface-soft focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring"
               >
                 Đổi mật khẩu
               </Link>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-primary px-6 font-bold shadow-brutal-md transition-[transform,box-shadow] hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-lg active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:cursor-not-allowed disabled:opacity-60 disabled:transform-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-ring"
+                className="inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-primary px-6 font-semibold text-on-primary shadow-brutal-sm transition-[transform,box-shadow,background-color] duration-200 hover:-translate-y-px hover:bg-primary-hover hover:shadow-brutal-md disabled:cursor-not-allowed disabled:opacity-60 disabled:transform-none focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring motion-reduce:transform-none"
               >
                 {isSubmitting ? (
                   <Loader2
@@ -252,7 +252,7 @@ function ProfileField({
   ...props
 }: ProfileFieldProps) {
   return (
-    <label className="block text-sm font-bold">
+    <label className="block text-sm font-semibold">
       <span className="mb-2 flex items-center gap-2">
         <Icon className="h-4 w-4" aria-hidden="true" />
         {label}
@@ -260,7 +260,7 @@ function ProfileField({
       <input
         name={name}
         type={type}
-        className="min-h-12 w-full rounded-xl border-2 border-foreground bg-background px-4 py-3 font-medium text-foreground placeholder:text-muted-foreground/60 focus:shadow-brutal-sm focus:outline-none disabled:cursor-not-allowed disabled:bg-surface-soft disabled:text-muted-foreground"
+        className="min-h-12 w-full rounded-xl border-2 border-border bg-surface px-4 py-3 font-medium text-foreground placeholder:text-muted-foreground/60 transition-[border-color,box-shadow] duration-200 hover:border-foreground/60 focus:border-foreground focus:outline focus:outline-3 focus:outline-offset-2 focus:outline-ring disabled:cursor-not-allowed disabled:bg-surface-soft disabled:text-muted-foreground"
         {...props}
       />
     </label>

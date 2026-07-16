@@ -151,16 +151,14 @@ export function TeacherMaterialsManager({
       aria-labelledby="teacher-classroom-tab-materials"
       className="grid items-start gap-6 xl:grid-cols-[minmax(20rem,0.8fr)_minmax(0,1.2fr)]"
     >
-      <section className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-md sm:p-6">
+      <section className="rounded-2xl border border-divider bg-surface p-5 sm:p-6">
         <div className="flex items-start gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-xl border-2 border-foreground bg-primary shadow-brutal-sm">
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-soft">
             <Plus className="h-5 w-5" aria-hidden="true" />
           </span>
           <div>
-            <p className="text-sm font-extrabold text-secondary-strong">
-              Thêm nội dung
-            </p>
-            <h2 className="font-display text-xl font-extrabold">
+            <p className="editorial-label">Thêm nội dung</p>
+            <h2 className="mt-2 font-display text-xl font-bold">
               Tài liệu mới
             </h2>
           </div>
@@ -174,7 +172,7 @@ export function TeacherMaterialsManager({
           <div>
             <p className="mb-1.5 text-sm font-extrabold">Nguồn tài liệu</p>
             <div
-              className="grid grid-cols-2 gap-2 rounded-xl border-2 border-divider bg-surface-soft p-2"
+              className="grid grid-cols-2 gap-2 rounded-xl border border-divider bg-surface-soft p-2"
               role="group"
               aria-label="Chọn nguồn tài liệu"
             >
@@ -224,7 +222,7 @@ export function TeacherMaterialsManager({
                   {files.map((file, index) => (
                     <li
                       key={`${file.name}-${file.lastModified}`}
-                      className="flex items-center gap-3 rounded-xl border-2 border-divider bg-surface-soft px-3 py-2"
+                      className="flex items-center gap-3 rounded-xl border border-divider bg-surface-soft px-3 py-2"
                     >
                       <FileText
                         className="h-4 w-4 shrink-0"
@@ -286,7 +284,7 @@ export function TeacherMaterialsManager({
                   placeholder="https://drive.google.com/file/d/..."
                 />
               </Field>
-              <div className="flex gap-3 rounded-xl border-2 border-divider bg-secondary-soft px-4 py-3 text-sm font-semibold">
+              <div className="flex gap-3 rounded-xl border border-divider bg-secondary-soft px-4 py-3 text-sm font-semibold">
                 <ExternalLink
                   className="mt-0.5 h-4 w-4 shrink-0"
                   aria-hidden="true"
@@ -312,7 +310,7 @@ export function TeacherMaterialsManager({
           </Field>
           {error ? (
             <p
-              className="rounded-xl border-2 border-foreground bg-destructive-soft px-4 py-3 font-bold"
+              className="rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3 font-bold"
               role="alert"
             >
               {error}
@@ -342,22 +340,20 @@ export function TeacherMaterialsManager({
       </section>
 
       <section
-        className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-md sm:p-6"
+        className="rounded-2xl border border-divider bg-surface p-5 sm:p-6"
         aria-labelledby="teacher-material-list-title"
       >
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-extrabold text-secondary-strong">
-              Nội dung lớp
-            </p>
+            <p className="editorial-label">Nội dung lớp</p>
             <h2
               id="teacher-material-list-title"
-              className="font-display text-2xl font-extrabold"
+              className="mt-2 font-display text-2xl font-bold"
             >
               Danh sách tài liệu
             </h2>
           </div>
-          <span className="rounded-full border-2 border-foreground bg-secondary-soft px-3 py-1 text-sm font-extrabold">
+          <span className="rounded-full border border-divider bg-secondary-soft px-3 py-1 text-sm font-bold">
             {materials.length} mục
           </span>
         </div>
@@ -481,9 +477,9 @@ function MaterialRow({
   const isLink = material.type === "link";
   const isDrive = isLink && isGoogleDriveUrl(material.url);
   return (
-    <li className="rounded-xl border-2 border-divider bg-surface-soft p-4">
+    <li className="rounded-xl border border-divider bg-surface-soft p-4">
       <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border-2 border-foreground bg-primary">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft">
           {isLink ? (
             <Link2 className="h-5 w-5" aria-hidden="true" />
           ) : (
@@ -512,7 +508,7 @@ function MaterialRow({
           ) : null}
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-3 gap-2 border-t-2 border-divider pt-3">
+      <div className="mt-4 grid grid-cols-3 gap-2 border-t border-divider pt-3">
         {isLink && material.url ? (
           <a
             href={material.url}

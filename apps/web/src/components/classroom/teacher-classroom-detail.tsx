@@ -346,22 +346,22 @@ export function TeacherClassroomDetail({
               id="teacher-classroom-panel-quizzes"
               role="tabpanel"
               aria-labelledby="teacher-classroom-tab-quizzes"
-              className="rounded-2xl border-2 border-foreground bg-surface p-6 shadow-brutal-md"
+              className="rounded-2xl border border-divider bg-surface p-6"
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="font-display text-2xl font-extrabold">
-                    Quiz của lớp
+                  <h2 className="font-display text-2xl font-bold">
+                    Hoạt động của lớp
                   </h2>
                   <p className="font-semibold text-muted-foreground">
-                    Các quiz đã phân phối vào lớp này.
+                    Nội dung luyện tập đã được phân phối vào lớp này.
                   </p>
                 </div>
                 <Link
                   href={ROUTES.teacherQuizzes}
                   className={PRIMARY_ACTION_CLASS}
                 >
-                  Quản lý kho quiz
+                  Quản lý nội dung
                 </Link>
               </div>
               {classroom.quizzes.length ? (
@@ -370,7 +370,7 @@ export function TeacherClassroomDetail({
                     <Link
                       key={quiz.id}
                       href={teacherQuizRoute(quiz.id)}
-                      className="rounded-xl border-2 border-divider bg-surface-soft p-4 transition-colors hover:border-foreground"
+                      className="rounded-xl border border-divider bg-surface-soft p-4 transition-colors hover:border-foreground/40"
                     >
                       <h3 className="font-extrabold">{quiz.title}</h3>
                       <p className="mt-1 text-sm font-bold text-muted-foreground">
@@ -380,8 +380,8 @@ export function TeacherClassroomDetail({
                   ))}
                 </div>
               ) : (
-                <p className="mt-5 rounded-xl border-2 border-dashed p-8 text-center font-bold text-muted-foreground">
-                  Chưa có quiz được gán vào lớp.
+                <p className="mt-5 rounded-xl border border-dashed border-divider p-8 text-center font-bold text-muted-foreground">
+                  Chưa có hoạt động được gán vào lớp.
                 </p>
               )}
             </section>
@@ -428,7 +428,7 @@ function TeacherClassroomTabs({
     },
     {
       id: "quizzes",
-      label: "Quiz",
+      label: "Hoạt động",
       icon: BookOpen,
       count: classroom.quizzes.length,
     },
@@ -458,7 +458,7 @@ function TeacherClassroomTabs({
     <div
       role="tablist"
       aria-label="Quản lý lớp học"
-      className="mb-6 flex gap-2 overflow-x-auto rounded-2xl border-2 border-foreground bg-surface p-2 shadow-brutal-sm"
+      className="mb-6 flex gap-1 overflow-x-auto border-b border-divider"
     >
       {tabs.map((tab, index) => {
         const Icon = tab.icon;
@@ -474,7 +474,7 @@ function TeacherClassroomTabs({
             tabIndex={isActive ? 0 : -1}
             onClick={() => onChange(tab.id)}
             onKeyDown={(event) => handleKeyDown(event, index)}
-            className={`inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-xl border-2 px-4 py-2 text-sm font-extrabold transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${isActive ? "border-foreground bg-primary shadow-brutal-xs" : "border-transparent text-muted-foreground hover:bg-surface-soft hover:text-foreground"}`}
+            className={`inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 border-b-2 px-4 py-2 text-sm font-bold transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${isActive ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           >
             <Icon className="h-4 w-4" aria-hidden="true" />
             {tab.label}
@@ -494,7 +494,7 @@ function ClassroomOverview({ classroom }: { classroom: ClassroomDetail }) {
   const details = [classroom.subject, classroom.grade].filter(Boolean);
   return (
     <section
-      className="grid gap-4 rounded-2xl border-2 border-foreground bg-secondary-soft p-5 shadow-brutal-md sm:grid-cols-2 lg:grid-cols-4 sm:p-6"
+      className="grid gap-px overflow-hidden rounded-2xl border border-divider bg-divider sm:grid-cols-2 lg:grid-cols-4"
       aria-label="Tổng quan lớp học"
     >
       <OverviewItem
@@ -537,9 +537,9 @@ function OverviewItem({
   accent: string;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-3 rounded-xl border-2 border-foreground bg-surface p-3">
+    <div className="flex min-w-0 items-center gap-3 bg-surface p-4">
       <span
-        className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border-2 border-foreground ${accent}`}
+        className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${accent}`}
       >
         <Icon className="h-5 w-5" aria-hidden="true" />
       </span>
@@ -556,7 +556,7 @@ function OverviewItem({
 function MembersSection({ members }: { members: ClassroomMember[] }) {
   return (
     <section
-      className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-md sm:p-6"
+      className="rounded-2xl border border-divider bg-surface p-5 sm:p-6"
       aria-labelledby="classroom-members-heading"
     >
       <div className="flex items-center justify-between gap-3">

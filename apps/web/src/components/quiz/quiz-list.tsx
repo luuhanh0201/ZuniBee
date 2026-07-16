@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { ROUTES, teacherQuizRoute } from "@/config/routes";
 import {
   TeacherClassroomFrame,
+  ClassroomPageHeader,
   ClassroomErrorState,
   ClassroomLoadingState,
   PRIMARY_ACTION_CLASS,
@@ -35,33 +36,28 @@ export function QuizList() {
   }, [accessToken, reload]);
   return (
     <TeacherClassroomFrame>
-      <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="font-extrabold uppercase tracking-wide text-muted-foreground">
-            Ngân hàng đề
-          </p>
-          <h1 className="font-display text-4xl font-extrabold">Quiz của tôi</h1>
-          <p className="mt-2 font-semibold text-muted-foreground">
-            Soạn thủ công, cấu hình và phân phối quiz cho lớp học.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href={ROUTES.teacherCreateAiQuiz}
-            className={SECONDARY_ACTION_CLASS}
-          >
-            <Sparkles className="h-5 w-5" />
-            Tạo bằng AI
-          </Link>
-          <Link
-            href={ROUTES.teacherCreateQuiz}
-            className={PRIMARY_ACTION_CLASS}
-          >
-            <Plus className="h-5 w-5" />
-            Tạo thủ công
-          </Link>
-        </div>
-      </header>
+      <ClassroomPageHeader
+        title="Nội dung học"
+        description="Tạo, kiểm tra và phân phối các hoạt động học. Quiz là một định dạng trong thư viện nội dung của bạn."
+        actions={
+          <>
+            <Link
+              href={ROUTES.teacherCreateAiQuiz}
+              className={SECONDARY_ACTION_CLASS}
+            >
+              <Sparkles className="h-5 w-5" />
+              Tạo bằng AI
+            </Link>
+            <Link
+              href={ROUTES.teacherCreateQuiz}
+              className={PRIMARY_ACTION_CLASS}
+            >
+              <Plus className="h-5 w-5" />
+              Tạo thủ công
+            </Link>
+          </>
+        }
+      />
       {!items && !error ? (
         <ClassroomLoadingState label="Đang tải quiz..." />
       ) : null}
@@ -75,40 +71,45 @@ export function QuizList() {
         />
       ) : null}
       {items?.length === 0 ? (
-        <div className="rounded-2xl border-2 border-dashed border-foreground bg-surface p-12 text-center">
-          <BookOpenCheck className="mx-auto h-12 w-12" />
-          <h2 className="mt-4 font-display text-2xl font-extrabold">
-            Chưa có quiz
+        <div className="rounded-2xl border-2 border-dashed border-border bg-surface p-12 text-center">
+          <BookOpenCheck className="mx-auto h-10 w-10 text-muted-foreground" />
+          <h2 className="mt-4 font-display text-2xl font-bold">
+            Chưa có nội dung học
           </h2>
+          <p className="mx-auto mt-2 max-w-lg text-muted-foreground">
+            Bắt đầu từ tài liệu với AI hoặc tự tạo hoạt động đầu tiên.
+          </p>
         </div>
       ) : null}
       {items?.length ? (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="divide-y divide-divider overflow-hidden rounded-2xl border border-divider bg-surface">
           {items.map((quiz) => (
             <article
               key={quiz.id}
-              className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-md"
+              className="grid gap-4 p-5 sm:p-6 lg:grid-cols-[1fr_auto] lg:items-center"
             >
-              <div className="flex justify-between gap-3">
-                <span className="rounded-full border-2 border-foreground bg-secondary-soft px-3 py-1 text-xs font-extrabold">
-                  {quiz.status === "published" ? "Đã phát hành" : "Bản nháp"}
-                </span>
-                <span className="font-extrabold tabular-nums">
-                  {quiz.questionCount} câu
-                </span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="rounded-full border border-divider bg-secondary-soft px-3 py-1 text-xs font-semibold">
+                    {quiz.status === "published" ? "Đã phát hành" : "Bản nháp"}
+                  </span>
+                  <span className="text-sm font-medium tabular-nums text-muted-foreground">
+                    {quiz.questionCount} câu
+                  </span>
+                </div>
+                <h2 className="mt-3 font-display text-xl font-bold">
+                  {quiz.title}
+                </h2>
+                <p className="mt-1 line-clamp-2 text-muted-foreground">
+                  {quiz.description || "Chưa có mô tả"}
+                </p>
               </div>
-              <h2 className="mt-4 font-display text-xl font-extrabold">
-                {quiz.title}
-              </h2>
-              <p className="mt-2 line-clamp-2 min-h-12 font-semibold text-muted-foreground">
-                {quiz.description || "Chưa có mô tả"}
-              </p>
               <Link
                 href={teacherQuizRoute(quiz.id)}
-                className={`${SECONDARY_ACTION_CLASS} mt-5 w-full`}
+                className={SECONDARY_ACTION_CLASS}
               >
                 <Settings2 className="h-4 w-4" />
-                Mở trình soạn
+                Tiếp tục soạn
               </Link>
             </article>
           ))}

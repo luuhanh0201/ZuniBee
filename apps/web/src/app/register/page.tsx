@@ -9,7 +9,8 @@ import { ROUTES } from "@/config/routes";
 
 export const metadata: Metadata = {
   title: "Đăng ký — ZuniBee",
-  description: "Tạo tài khoản ZuniBee để bắt đầu học tập và quiz cùng AI.",
+  description:
+    "Tạo tài khoản ZuniBee để bắt đầu một hành trình học có cấu trúc cùng AI.",
 };
 
 export default async function RegisterPage({
@@ -23,7 +24,7 @@ export default async function RegisterPage({
   return (
     <AuthShell
       title="Tạo tài khoản ZuniBee"
-      subtitle="Bắt đầu hành trình học tập vui vẻ cùng AI"
+      subtitle="Chọn vai trò và chuẩn bị không gian học tập phù hợp với bạn."
       footer={{
         text: "Đã có tài khoản?",
         linkLabel: "Đăng nhập",

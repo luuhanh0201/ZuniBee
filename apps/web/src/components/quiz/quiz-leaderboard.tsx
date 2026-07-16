@@ -14,7 +14,7 @@ export function QuizLeaderboard({ quizId }: { quizId: string }) {
   }, [accessToken, quizId]);
   if (!rows?.length) return null;
   return (
-    <section className="mt-7 rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-md">
+    <section className="mt-7 rounded-2xl border border-divider bg-surface p-5">
       <h2 className="flex items-center gap-2 font-display text-2xl font-extrabold">
         <Trophy className="h-6 w-6" />
         Bảng xếp hạng

@@ -118,13 +118,11 @@ export function StudentClassroomDetail({
               aria-labelledby="classroom-tab-overview"
               className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]"
             >
-              <section className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-md sm:p-7">
+              <section className="rounded-2xl border border-divider bg-surface p-5 sm:p-7">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm font-extrabold uppercase tracking-wide text-muted-foreground">
-                      Thông tin lớp
-                    </p>
-                    <h2 className="mt-1 font-display text-2xl font-extrabold">
+                    <p className="editorial-label">Thông tin lớp</p>
+                    <h2 className="mt-3 font-display text-2xl font-bold">
                       Tổng quan
                     </h2>
                   </div>
@@ -160,14 +158,12 @@ export function StudentClassroomDetail({
                 </dl>
               </section>
 
-              <aside className="rounded-2xl border-2 border-foreground bg-secondary-soft p-5 shadow-brutal-md sm:p-6">
-                <span className="flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-foreground bg-secondary shadow-brutal-sm">
+              <aside className="rounded-2xl border border-divider bg-surface-soft p-5 sm:p-6">
+                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary-soft text-secondary">
                   <UserRound className="h-7 w-7" aria-hidden="true" />
                 </span>
-                <p className="mt-5 text-sm font-extrabold uppercase tracking-wide text-muted-foreground">
-                  Giáo viên phụ trách
-                </p>
-                <h2 className="mt-1 break-words font-display text-2xl font-extrabold">
+                <p className="editorial-label mt-5">Giáo viên phụ trách</p>
+                <h2 className="mt-3 break-words font-display text-2xl font-bold">
                   {classroom.teacher.fullName}
                 </h2>
                 <p className="mt-2 font-semibold text-muted-foreground">
@@ -194,7 +190,7 @@ export function StudentClassroomDetail({
                 {classroom.materials.map((material) => (
                   <article
                     key={material.id}
-                    className="rounded-xl border-2 border-divider bg-surface-soft p-4"
+                    className="rounded-xl border border-divider bg-surface-soft p-4"
                   >
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0">
@@ -259,18 +255,18 @@ export function StudentClassroomDetail({
               aria-labelledby="classroom-tab-quizzes"
             >
               <ContentSection
-                title="Quiz của lớp"
-                description="Bài luyện tập và kiểm tra dành cho lớp."
+                title="Hoạt động của lớp"
+                description="Nội dung luyện tập và kiểm tra dành cho lớp."
                 icon={BookOpenCheck}
-                emptyTitle="Chưa có quiz"
-                emptyDescription="Quiz giáo viên giao sẽ xuất hiện tại đây."
+                emptyTitle="Chưa có hoạt động"
+                emptyDescription="Nội dung giáo viên giao sẽ xuất hiện tại đây."
                 count={classroom.quizzes.length}
               >
                 {classroom.quizzes.map((quiz) => (
                   <Link
                     key={quiz.id}
                     href={publicQuizRoute(quiz.id)}
-                    className="block cursor-pointer rounded-xl border-2 border-divider bg-surface-soft p-4 transition-colors hover:border-foreground hover:bg-secondary-soft"
+                    className="block cursor-pointer rounded-xl border border-divider bg-surface-soft p-4 transition-colors hover:border-foreground/40 hover:bg-secondary-soft"
                   >
                     <h3 className="font-extrabold">{quiz.title}</h3>
                     <p className="mt-1 text-sm font-semibold text-muted-foreground">
@@ -320,7 +316,12 @@ function ClassroomTabs({
       icon: FileText,
       count: materialCount,
     },
-    { id: "quizzes", label: "Quiz", icon: BookOpenCheck, count: quizCount },
+    {
+      id: "quizzes",
+      label: "Hoạt động",
+      icon: BookOpenCheck,
+      count: quizCount,
+    },
   ];
 
   function handleKeyDown(
@@ -346,7 +347,7 @@ function ClassroomTabs({
     <div
       role="tablist"
       aria-label="Nội dung lớp học"
-      className="mb-6 flex gap-2 overflow-x-auto rounded-2xl border-2 border-foreground bg-surface p-2 shadow-brutal-sm"
+      className="mb-6 flex gap-1 overflow-x-auto border-b border-divider"
     >
       {tabs.map((tab, index) => {
         const Icon = tab.icon;
@@ -362,10 +363,10 @@ function ClassroomTabs({
             tabIndex={isActive ? 0 : -1}
             onClick={() => onChange(tab.id)}
             onKeyDown={(event) => handleKeyDown(event, index)}
-            className={`inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-xl border-2 px-4 py-2 text-sm font-extrabold transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
+            className={`inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 border-b-2 px-4 py-2 text-sm font-bold transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
               isActive
-                ? "border-foreground bg-primary shadow-brutal-xs"
-                : "border-transparent text-muted-foreground hover:bg-surface-soft hover:text-foreground"
+                ? "border-foreground text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             <Icon className="h-4 w-4" aria-hidden="true" />
@@ -392,7 +393,7 @@ function Info({
   value: string;
 }) {
   return (
-    <div className="rounded-xl border-2 border-divider bg-surface-soft p-4">
+    <div className="rounded-xl border border-divider bg-surface-soft p-4">
       <dt className="flex items-center gap-2 text-sm font-bold text-muted-foreground">
         <Icon className="h-4 w-4" aria-hidden="true" />
         {label}
@@ -421,22 +422,22 @@ function ContentSection({
 }) {
   return (
     <section
-      className="rounded-2xl border-2 border-foreground bg-surface p-5 shadow-brutal-md sm:p-6"
+      className="rounded-2xl border border-divider bg-surface p-5 sm:p-6"
       aria-labelledby={`${title}-title`}
     >
       <div className="flex items-start gap-4">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border-2 border-foreground bg-primary shadow-brutal-sm">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-soft">
           <Icon className="h-6 w-6" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2
               id={`${title}-title`}
-              className="font-display text-xl font-extrabold"
+              className="font-display text-xl font-bold"
             >
               {title}
             </h2>
-            <span className="rounded-full border-2 border-foreground bg-surface-soft px-3 py-1 text-xs font-extrabold">
+            <span className="rounded-full border border-divider bg-surface-soft px-3 py-1 text-xs font-bold">
               {count} mục
             </span>
           </div>
