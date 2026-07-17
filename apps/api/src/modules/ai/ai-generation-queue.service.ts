@@ -6,14 +6,20 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ModuleRef } from '@nestjs/core';
-import { Queue, Worker } from 'bullmq';
+import { Queue, UnrecoverableError, Worker } from 'bullmq';
+import { isNonRetryableAiError } from './ai-error';
+import { boundedConcurrency } from './bounded-concurrency';
 
 const QUEUE_NAME = 'zunibee-ai-generation';
 export const AI_GENERATION_PROCESSOR = Symbol('AI_GENERATION_PROCESSOR');
 
 export type AiGenerationProcessor = {
   process(jobId: string): Promise<void>;
-  markRetrying(jobId: string, error: unknown): Promise<void>;
+  markRetrying(
+    jobId: string,
+    error: unknown,
+    attemptCount: number,
+  ): Promise<void>;
   markFailed(jobId: string, error: unknown): Promise<void>;
 };
 
@@ -44,22 +50,39 @@ export class AiGenerationQueueService implements OnModuleInit, OnModuleDestroy {
 
     this.worker = new Worker<{ jobId: string }>(
       QUEUE_NAME,
-      async (job) => this.processor().process(job.data.jobId),
+      async (job) => {
+        try {
+          await this.processor().process(job.data.jobId);
+        } catch (error) {
+          // Lỗi cố định (HTTP 4xx, schema/validation, dữ liệu đầu vào sai)
+          // không thể tự phục hồi — UnrecoverableError dừng retry ngay,
+          // không gọi provider thêm lần nào với cùng payload.
+          if (isNonRetryableAiError(error))
+            throw new UnrecoverableError(safeError(error));
+          throw error;
+        }
+      },
       {
         connection,
-        concurrency: Math.max(
+        concurrency: boundedConcurrency(
+          this.config.get<string | number>('AI_GENERATION_WORKER_CONCURRENCY'),
           1,
-          this.config.get<number>('AI_GENERATION_WORKER_CONCURRENCY', 1),
+          4,
         ),
       },
     );
     this.worker.on('failed', (job, error) => {
       if (!job) return;
       const attempts = Number(job.opts.attempts ?? 1);
-      const finalAttempt = job.attemptsMade >= attempts;
+      const finalAttempt =
+        job.attemptsMade >= attempts || error instanceof UnrecoverableError;
       const update = finalAttempt
         ? this.processor().markFailed(job.data.jobId, error)
-        : this.processor().markRetrying(job.data.jobId, error);
+        : this.processor().markRetrying(
+            job.data.jobId,
+            error,
+            job.attemptsMade,
+          );
       void update.catch((updateError: unknown) =>
         this.logger.error(
           `Không thể cập nhật AI job ${job.data.jobId}: ${safeError(updateError)}`,
@@ -77,7 +100,6 @@ export class AiGenerationQueueService implements OnModuleInit, OnModuleDestroy {
       'generate',
       { jobId },
       {
-        jobId,
         attempts: 5,
         backoff: { type: 'exponential', delay: 5000 },
         removeOnComplete: 1000,

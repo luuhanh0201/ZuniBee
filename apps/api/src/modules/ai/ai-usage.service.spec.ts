@@ -1,6 +1,9 @@
 import type { Repository } from 'typeorm';
 import { AiUsageService, calculateUsageCostUsd } from './ai-usage.service';
-import { AiModelClientService } from './ai-model-client.service';
+import {
+  AiModelClientService,
+  parsePdfPagesReply,
+} from './ai-model-client.service';
 import { extractOpenRouterPricing } from './ai-provider.service';
 import type { AiProviderService } from './ai-provider.service';
 import type { AiProviderUrlPolicyService } from './ai-provider-url-policy.service';
@@ -371,6 +374,220 @@ describe('AiModelClientService + usage', () => {
         outputTokens: 18,
       }),
     );
+  });
+
+  it('gửi PDF trực tiếp qua OpenRouter và giữ pageNumber gốc', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  pages: [
+                    { pageNumber: 5, text: 'Trang năm' },
+                    { pageNumber: 6, text: 'Trang sáu' },
+                  ],
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 900, completion_tokens: 40 },
+        }),
+    });
+    const recordSafely = jest.fn().mockResolvedValue(undefined);
+    const client = buildClient(recordSafely, 'openrouter-secret');
+    const pdf = Buffer.from('%PDF-fake');
+
+    const result = await client.readPdfPagesText(provider(), pdf, [5, 6], {
+      source: 'document_vision_ocr',
+      referenceId: 'job-pdf',
+      userId: 'teacher-pdf',
+    });
+
+    expect([...result.pages.entries()]).toEqual([
+      [5, 'Trang năm'],
+      [6, 'Trang sáu'],
+    ]);
+    expect(result).toMatchObject({ inputTokens: 900, outputTokens: 40 });
+    expect(firstRequestBody()).toMatchObject({
+      messages: [
+        { role: 'system' },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'file',
+              file: {
+                filename: 'pages.pdf',
+                file_data: `data:application/pdf;base64,${pdf.toString('base64')}`,
+              },
+            },
+            { type: 'text' },
+          ],
+        },
+      ],
+      provider: { require_parameters: true },
+    });
+    expect(recordSafely).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'document_vision_ocr',
+        inputTokens: 900,
+        outputTokens: 40,
+      }),
+    );
+  });
+
+  it('gửi PDF trực tiếp bằng document block của Anthropic', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                pages: [{ pageNumber: 2, text: 'Nội dung trang hai' }],
+              }),
+            },
+          ],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 500, output_tokens: 20 },
+        }),
+    });
+    const client = buildClient(jest.fn().mockResolvedValue(undefined), 'key');
+    const pdf = Buffer.from('%PDF-anthropic');
+
+    await client.readPdfPagesText(
+      provider({
+        name: 'Anthropic Claude',
+        baseUrl: 'https://api.anthropic.com/v1',
+        model: 'claude-sonnet-4-6',
+      }),
+      pdf,
+      [2],
+      {
+        source: 'document_vision_ocr',
+        referenceId: 'job-pdf',
+        userId: 'teacher-pdf',
+      },
+    );
+
+    const request = firstRequestBody();
+    expect(request).toMatchObject({
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'document',
+              source: {
+                type: 'base64',
+                media_type: 'application/pdf',
+                data: pdf.toString('base64'),
+              },
+            },
+            { type: 'text' },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('gửi PDF native qua Gemini generateContent với inlineData', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                      pages: [{ pageNumber: 7, text: 'Nội dung trang bảy' }],
+                    }),
+                  },
+                ],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+          usageMetadata: {
+            promptTokenCount: 650,
+            candidatesTokenCount: 25,
+          },
+        }),
+    });
+    const recordSafely = jest.fn().mockResolvedValue(undefined);
+    const client = buildClient(recordSafely, 'gemini-secret');
+    const pdf = Buffer.from('%PDF-gemini');
+
+    const result = await client.readPdfPagesText(
+      provider({
+        name: 'Gemini direct',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        model: 'gemini-2.5-flash',
+      }),
+      pdf,
+      [7],
+      {
+        source: 'document_vision_ocr',
+        referenceId: 'job-pdf',
+        userId: 'teacher-pdf',
+      },
+    );
+
+    const fetchCall = (global.fetch as jest.MockedFunction<typeof global.fetch>)
+      .mock.calls[0];
+    expect(fetchCall?.[0]).toBe(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+    );
+    expect(new Headers(fetchCall?.[1]?.headers).get('x-goog-api-key')).toBe(
+      'gemini-secret',
+    );
+    expect(firstRequestBody()).toMatchObject({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              inlineData: {
+                mimeType: 'application/pdf',
+                data: pdf.toString('base64'),
+              },
+            },
+            { text: expect.any(String) as unknown },
+          ],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseJsonSchema: expect.any(Object) as unknown,
+        temperature: 0.2,
+      },
+    });
+    expect([...result.pages.entries()]).toEqual([[7, 'Nội dung trang bảy']]);
+    expect(result).toMatchObject({ inputTokens: 650, outputTokens: 25 });
+    expect(recordSafely).toHaveBeenCalledWith(
+      expect.objectContaining({ inputTokens: 650, outputTokens: 25 }),
+    );
+  });
+
+  it('rejects missing or duplicate pages in PDF provider output', () => {
+    expect(() =>
+      parsePdfPagesReply(
+        JSON.stringify({
+          pages: [
+            { pageNumber: 1, text: 'A' },
+            { pageNumber: 1, text: 'B' },
+          ],
+        }),
+        [1, 2],
+      ),
+    ).toThrow('bị trả trùng');
   });
 
   it.each([

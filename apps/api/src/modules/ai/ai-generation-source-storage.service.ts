@@ -16,7 +16,7 @@ const EXTENSION_BY_MIME: Record<string, string> = {
 export class AiGenerationSourceStorageService {
   async store(jobId: string, file: Express.Multer.File): Promise<string> {
     if (file.size > MAX_AI_SOURCE_SIZE)
-      throw new BadRequestException('Tài liệu AI không được vượt quá 50 MB');
+      throw new BadRequestException('Tài liệu AI không được vượt quá 150 MB');
     assertDeclaredFileType(file);
     const extension =
       EXTENSION_BY_MIME[file.mimetype] ?? extname(file.originalname);

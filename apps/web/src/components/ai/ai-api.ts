@@ -66,6 +66,21 @@ export const getAiQuizGenerationJob = (jobId: string, token?: string) =>
     accessToken: token,
     suppressGlobalError: true,
   });
+export const pauseAiQuizGenerationJob = (jobId: string, token?: string) =>
+  apiFetch<AiGenerationJob>(`/ai/quiz-generations/${jobId}/pause`, {
+    method: "POST",
+    accessToken: token,
+  });
+export const resumeAiQuizGenerationJob = (jobId: string, token?: string) =>
+  apiFetch<AiGenerationJob>(`/ai/quiz-generations/${jobId}/resume`, {
+    method: "POST",
+    accessToken: token,
+  });
+export const cancelAiQuizGenerationJob = (jobId: string, token?: string) =>
+  apiFetch<AiGenerationJob>(`/ai/quiz-generations/${jobId}/cancel`, {
+    method: "POST",
+    accessToken: token,
+  });
 export const getQuizInsight = (quizId: string, token?: string) =>
   apiFetch<QuizWeaknessInsight | null>(`/quizzes/${quizId}/ai-insight`, {
     accessToken: token,

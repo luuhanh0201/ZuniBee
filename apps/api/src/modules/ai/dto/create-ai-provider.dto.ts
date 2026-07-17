@@ -36,6 +36,7 @@ export class CreateAiProviderDto implements CreateAiProviderRequest {
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @IsBoolean() isDefault?: boolean;
   @IsOptional() @IsBoolean() isVisionDefault?: boolean;
+  @IsOptional() @IsBoolean() isAnalysisDefault?: boolean;
   @IsOptional() @IsInt() @Min(0) @Max(100000) baseCreditCost?: number;
   @IsOptional() @IsInt() @Min(0) @Max(100000) creditCostPer1kTokens?: number;
   // Đơn giá USD / 1 triệu token; gửi null để xoá giá (IsOptional bỏ qua null).

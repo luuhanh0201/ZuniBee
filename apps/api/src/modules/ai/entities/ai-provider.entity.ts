@@ -36,6 +36,9 @@ export class AiProviderEntity {
   isDefault!: boolean;
   @Column({ name: 'is_vision_default', type: 'boolean', default: false })
   isVisionDefault!: boolean;
+  /** Provider nhanh/rẻ dùng cho phân tích chunk; rỗng thì dùng provider quiz. */
+  @Column({ name: 'is_analysis_default', type: 'boolean', default: false })
+  isAnalysisDefault!: boolean;
   @Column({ name: 'base_credit_cost', type: 'integer', default: 1 })
   baseCreditCost!: number;
   @Column({ name: 'credit_cost_per_1k_tokens', type: 'integer', default: 1 })

@@ -53,6 +53,7 @@ export class AiProviderService {
       order: {
         isDefault: 'DESC',
         isVisionDefault: 'DESC',
+        isAnalysisDefault: 'DESC',
         name: 'ASC',
       },
     });
@@ -126,6 +127,17 @@ export class AiProviderService {
     return row;
   }
 
+  /**
+   * Provider phân tích chunk. Đây là nhiệm vụ tùy chọn: khi admin chưa giao
+   * cho provider nào, phân tích chạy trên provider quiz như trước.
+   */
+  async resolveAnalysis(): Promise<AiProviderEntity> {
+    const row = await this.repository.findOne({
+      where: { isAnalysisDefault: true, isActive: true },
+    });
+    return row ?? (await this.resolveQuiz());
+  }
+
   async create(dto: CreateAiProviderDto): Promise<AiProvider> {
     const row = await this.dataSource.transaction(async (manager) => {
       if (dto.isDefault)
@@ -140,13 +152,22 @@ export class AiProviderService {
           { isVisionDefault: true },
           { isVisionDefault: false },
         );
+      if (dto.isAnalysisDefault)
+        await manager.update(
+          AiProviderEntity,
+          { isAnalysisDefault: true },
+          { isAnalysisDefault: false },
+        );
       const entity = manager.create(AiProviderEntity, {
         ...dto,
         baseUrl: normalizeBaseUrl(dto.baseUrl),
         encryptedApiKey: dto.apiKey ? this.secrets.encrypt(dto.apiKey) : null,
         isActive:
-          dto.isDefault || dto.isVisionDefault ? true : (dto.isActive ?? true),
+          dto.isDefault || dto.isVisionDefault || dto.isAnalysisDefault
+            ? true
+            : (dto.isActive ?? true),
         isVisionDefault: dto.isVisionDefault ?? false,
+        isAnalysisDefault: dto.isAnalysisDefault ?? false,
         baseCreditCost: dto.baseCreditCost ?? 1,
         creditCostPer1kTokens: dto.creditCostPer1kTokens ?? 1,
         inputUsdPer1m: dto.inputUsdPer1m ?? null,
@@ -169,10 +190,13 @@ export class AiProviderService {
       });
       if (!current) throw new NotFoundException('Provider AI không tồn tại');
       if (
-        (current.isDefault || current.isVisionDefault) &&
+        (current.isDefault ||
+          current.isVisionDefault ||
+          current.isAnalysisDefault) &&
         dto.isActive === false &&
         (current.isDefault ? dto.isDefault !== false : true) &&
-        (current.isVisionDefault ? dto.isVisionDefault !== false : true)
+        (current.isVisionDefault ? dto.isVisionDefault !== false : true) &&
+        (current.isAnalysisDefault ? dto.isAnalysisDefault !== false : true)
       ) {
         throw new BadRequestException(
           'Provider đang được giao nhiệm vụ AI phải luôn được bật',
@@ -189,6 +213,12 @@ export class AiProviderService {
           AiProviderEntity,
           { isVisionDefault: true },
           { isVisionDefault: false },
+        );
+      if (dto.isAnalysisDefault)
+        await manager.update(
+          AiProviderEntity,
+          { isAnalysisDefault: true },
+          { isAnalysisDefault: false },
         );
       const connectionChanged =
         dto.kind !== undefined ||
@@ -208,7 +238,10 @@ export class AiProviderService {
       if (dto.isDefault !== undefined) current.isDefault = dto.isDefault;
       if (dto.isVisionDefault !== undefined)
         current.isVisionDefault = dto.isVisionDefault;
-      if (dto.isDefault || dto.isVisionDefault) current.isActive = true;
+      if (dto.isAnalysisDefault !== undefined)
+        current.isAnalysisDefault = dto.isAnalysisDefault;
+      if (dto.isDefault || dto.isVisionDefault || dto.isAnalysisDefault)
+        current.isActive = true;
       if (dto.baseCreditCost !== undefined)
         current.baseCreditCost = dto.baseCreditCost;
       if (dto.creditCostPer1kTokens !== undefined)
@@ -226,7 +259,7 @@ export class AiProviderService {
   async remove(id: string): Promise<void> {
     const row = await this.repository.findOne({ where: { id } });
     if (!row) throw new NotFoundException('Provider AI không tồn tại');
-    if (row.isDefault || row.isVisionDefault)
+    if (row.isDefault || row.isVisionDefault || row.isAnalysisDefault)
       throw new BadRequestException(
         'Hãy chuyển các nhiệm vụ AI sang provider khác trước khi xóa',
       );
@@ -461,6 +494,7 @@ export class AiProviderService {
       isActive: row.isActive,
       isDefault: row.isDefault,
       isVisionDefault: row.isVisionDefault,
+      isAnalysisDefault: row.isAnalysisDefault,
       hasApiKey: Boolean(row.encryptedApiKey),
       baseCreditCost: row.baseCreditCost,
       creditCostPer1kTokens: row.creditCostPer1kTokens,

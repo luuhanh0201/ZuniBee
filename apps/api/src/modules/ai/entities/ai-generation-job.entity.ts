@@ -6,12 +6,17 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import type { AiGenerationErrorDetails } from '../ai-error';
+import type { AiGenerationExtractionReport } from '@zunibee/shared';
 
 export enum AiGenerationJobStatus {
   PENDING = 'pending',
   RUNNING = 'running',
+  PAUSE_REQUESTED = 'pause_requested',
+  PAUSED = 'paused',
   SUCCEEDED = 'succeeded',
   FAILED = 'failed',
+  CANCELLED = 'cancelled',
 }
 
 export enum AiGenerationJobStage {
@@ -40,6 +45,8 @@ export class AiGenerationJobEntity {
   @Column({ name: 'provider_id', type: 'uuid' }) providerId!: string;
   @Column({ name: 'vision_provider_id', type: 'uuid', nullable: true })
   visionProviderId!: string | null;
+  @Column({ name: 'analysis_provider_id', type: 'uuid', nullable: true })
+  analysisProviderId!: string | null;
   @Column({ name: 'quiz_id', type: 'uuid', nullable: true }) quizId!:
     string | null;
   @Column({
@@ -85,10 +92,19 @@ export class AiGenerationJobEntity {
   sourceMimeType!: string | null;
   @Column({ name: 'source_size', type: 'integer', nullable: true })
   sourceSize!: number | null;
+  @Column({
+    name: 'source_sha256',
+    type: 'varchar',
+    length: 64,
+    nullable: true,
+  })
+  sourceSha256!: string | null;
   @Column({ name: 'attempt_count', type: 'integer', default: 0 })
   attemptCount!: number;
   @Column({ name: 'quiz_blueprint', type: 'jsonb', nullable: true })
   quizBlueprint!: Record<string, unknown> | null;
+  @Column({ name: 'generation_result', type: 'jsonb', nullable: true })
+  generationResult!: Record<string, unknown> | null;
   @Column({ name: 'request_payload', type: 'jsonb' }) requestPayload!: Record<
     string,
     unknown
@@ -103,6 +119,11 @@ export class AiGenerationJobEntity {
   outputTokens!: number;
   @Column({ name: 'error_message', type: 'text', nullable: true })
   errorMessage!: string | null;
+  /** Lỗi có cấu trúc của lần xử lý gần nhất để chẩn đoán không cần đoán. */
+  @Column({ name: 'error_details', type: 'jsonb', nullable: true })
+  errorDetails!: AiGenerationErrorDetails | null;
+  @Column({ name: 'extraction_report', type: 'jsonb', nullable: true })
+  extractionReport!: AiGenerationExtractionReport | null;
   @Column({ name: 'completed_at', type: 'timestamptz', nullable: true })
   completedAt!: Date | null;
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })

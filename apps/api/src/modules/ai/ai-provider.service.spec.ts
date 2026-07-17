@@ -19,6 +19,7 @@ function provider(overrides: Partial<AiProviderEntity> = {}): AiProviderEntity {
     isActive: true,
     isDefault: true,
     isVisionDefault: true,
+    isAnalysisDefault: false,
     baseCreditCost: 1,
     creditCostPer1kTokens: 0,
     inputUsdPer1m: null,
@@ -130,6 +131,51 @@ describe('AiProviderService', () => {
     await expect(service.resolveVision()).resolves.toBe(row);
     expect(repository.findOne).toHaveBeenCalledWith({
       where: { isVisionDefault: true, isActive: true },
+    });
+  });
+
+  it('resolves the active provider assigned to chunk analysis', async () => {
+    const row = provider({
+      isDefault: false,
+      isAnalysisDefault: true,
+      name: 'Fast AI',
+    });
+    const repository = { findOne: jest.fn().mockResolvedValue(row) };
+    const service = new AiProviderService(
+      repository as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(service.resolveAnalysis()).resolves.toBe(row);
+    expect(repository.findOne).toHaveBeenCalledWith({
+      where: { isAnalysisDefault: true, isActive: true },
+    });
+  });
+
+  it('falls back to the quiz provider when no analysis provider is assigned', async () => {
+    const quizRow = provider({ name: 'Quality AI' });
+    const repository = {
+      findOne: jest
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(quizRow),
+    };
+    const service = new AiProviderService(
+      repository as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(service.resolveAnalysis()).resolves.toBe(quizRow);
+    expect(repository.findOne).toHaveBeenNthCalledWith(2, {
+      where: { isDefault: true, isActive: true },
     });
   });
 

@@ -11,6 +11,7 @@ export type AiProvider = {
   isActive: boolean;
   isDefault: boolean;
   isVisionDefault: boolean;
+  isAnalysisDefault: boolean;
   hasApiKey: boolean;
   baseCreditCost: number;
   creditCostPer1kTokens: number;
@@ -33,6 +34,7 @@ export type CreateAiProviderRequest = {
   isActive?: boolean;
   isDefault?: boolean;
   isVisionDefault?: boolean;
+  isAnalysisDefault?: boolean;
   baseCreditCost?: number;
   creditCostPer1kTokens?: number;
   inputUsdPer1m?: number | null;
@@ -263,7 +265,14 @@ export type AiCreditAdminUserPage = {
 
 export type AiGenerationSourceType = "prompt" | "upload";
 export type AiQuizLanguage = "auto" | "vi" | "en";
-export type AiGenerationStatus = "pending" | "running" | "succeeded" | "failed";
+export type AiGenerationStatus =
+  | "pending"
+  | "running"
+  | "pause_requested"
+  | "paused"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
 export type AiGenerationStage =
   | "queued"
   | "reading_document"
@@ -287,8 +296,30 @@ export type GenerateQuizWithAiRequest = {
   questionTypes?: QuizQuestionType[];
   sourceType?: AiGenerationSourceType;
 };
+/** Phân loại lỗi ở mức TRANG khi AI đọc PDF/ảnh; trang lỗi không chặn job. */
+export type AiGenerationPageFailureCategory =
+  | "provider_blocked"
+  | "provider_timeout"
+  | "unsupported_input"
+  | "invalid_output"
+  | "needs_manual_review";
+/**
+ * Báo cáo trích xuất tài liệu: phương thức từng nhóm trang và danh sách trang
+ * bị bỏ qua để người tạo xem lại trước khi dùng quiz.
+ */
+export type AiGenerationExtractionReport = {
+  totalPages: number;
+  textLayerPages: number;
+  aiPdfPages: number;
+  aiVisionPages: number;
+  failedPages: Array<{
+    pageNumber: number;
+    category: AiGenerationPageFailureCategory;
+  }>;
+};
 export type AiGenerationJob = {
   id: string;
+  sourceType: AiGenerationSourceType;
   status: AiGenerationStatus;
   stage: AiGenerationStage;
   documentTotalPages: number | null;
@@ -304,6 +335,10 @@ export type AiGenerationJob = {
   inputTokens: number;
   outputTokens: number;
   errorMessage: string | null;
+  extractionReport: AiGenerationExtractionReport | null;
+  sourceFileName: string | null;
+  sourceFileSize: number | null;
+  sourceFileSha256: string | null;
   createdAt: string;
   completedAt: string | null;
 };

@@ -6,6 +6,7 @@ import {
   ArrowRight,
   BookOpen,
   BookOpenCheck,
+  BookOpenText,
   CalendarClock,
   Clock3,
   FileText,
@@ -142,11 +143,11 @@ export function DemoDashboard({ role }: { role: DashboardRole }) {
                 Tạo lớp
               </Link>
               <Link
-                href={ROUTES.teacherCreateAiQuiz}
+                href={ROUTES.teacherLessons}
                 className={PRIMARY_ACTION_CLASS}
               >
-                <Sparkles className="h-5 w-5" aria-hidden="true" />
-                Tạo hoạt động với AI
+                <BookOpenText className="h-5 w-5" aria-hidden="true" />
+                Tạo bài học
               </Link>
             </div>
           ) : null}
@@ -374,11 +375,11 @@ function TeacherDashboard({ data }: { data: TeacherDashboardData }) {
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link
-                href={ROUTES.teacherCreateAiQuiz}
+                href={ROUTES.teacherLessons}
                 className={PRIMARY_ACTION_CLASS}
               >
-                <Sparkles className="h-5 w-5" aria-hidden="true" />
-                Bắt đầu từ tài liệu
+                <BookOpenText className="h-5 w-5" aria-hidden="true" />
+                Tạo bài học theo chủ đề
               </Link>
               <Link
                 href={ROUTES.teacherQuizzes}

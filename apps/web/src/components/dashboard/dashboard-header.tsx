@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   BookOpen,
   BookOpenCheck,
+  BookOpenText,
   GraduationCap,
   KeyRound,
   LayoutDashboard,
@@ -48,6 +49,11 @@ export function DashboardHeader({ role }: { role: DashboardRole }) {
       href: student ? ROUTES.studentClasses : ROUTES.teacherClasses,
     },
     {
+      icon: BookOpenText,
+      label: "Bài học",
+      href: student ? ROUTES.studentLessons : ROUTES.teacherLessons,
+    },
+    {
       icon: student ? BookOpenCheck : Library,
       label: student ? "Hoạt động" : "Nội dung",
       href: student ? ROUTES.studentQuizzes : ROUTES.teacherQuizzes,
@@ -67,7 +73,7 @@ export function DashboardHeader({ role }: { role: DashboardRole }) {
 
         <nav
           aria-label="Điều hướng không gian làm việc"
-          className="hidden items-center gap-1 rounded-2xl bg-surface-soft p-1 md:flex"
+          className="hidden items-center gap-1 rounded-2xl bg-surface-soft p-1 lg:flex"
         >
           {navItems.map(({ icon: NavIcon, label, href }) => (
             <Link
@@ -126,7 +132,7 @@ export function DashboardHeader({ role }: { role: DashboardRole }) {
 
       <nav
         aria-label="Điều hướng không gian làm việc trên thiết bị nhỏ"
-        className="mx-auto flex max-w-7xl gap-1 overflow-x-auto border-t border-divider py-2 md:hidden"
+        className="mx-auto flex max-w-7xl gap-1 overflow-x-auto border-t border-divider py-2 lg:hidden"
       >
         {navItems.map(({ icon: NavIcon, label, href }) => (
           <Link

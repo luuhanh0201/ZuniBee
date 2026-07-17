@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Bell,
+  BookOpenText,
   ChevronDown,
   CircleDollarSign,
   CloudCog,
@@ -32,6 +33,7 @@ const focusClass =
 const navigation = [
   { href: ROUTES.adminOverview, label: "Tổng quan", icon: LayoutDashboard },
   { href: ROUTES.adminUsers, label: "Người dùng", icon: Users },
+  { href: ROUTES.adminLessons, label: "Bài học AI", icon: BookOpenText },
   { href: ROUTES.adminAiProviders, label: "AI Providers", icon: CloudCog },
   { href: ROUTES.adminAiUsage, label: "Thống kê AI", icon: BarChart3 },
   { href: ROUTES.adminAiCredits, label: "AI Credit", icon: CircleDollarSign },
@@ -108,7 +110,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
 
-          <nav aria-label="Điều hướng quản trị" className="flex-1 p-3">
+          <nav
+            aria-label="Điều hướng quản trị"
+            className="flex-1 overflow-y-auto p-3"
+          >
             <p
               className={`px-3 pb-2 pt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground ${collapsed ? "lg:hidden" : ""}`}
             >

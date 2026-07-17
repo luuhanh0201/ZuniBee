@@ -7,6 +7,8 @@ import {
   Coins,
   FileText,
   LoaderCircle,
+  Pause,
+  Play,
   Sparkles,
 } from "lucide-react";
 import type {
@@ -21,12 +23,16 @@ import { getErrorMessage } from "@/components/classroom/classroom-utils";
 import {
   INPUT_CLASS,
   PRIMARY_ACTION_CLASS,
+  SECONDARY_ACTION_CLASS,
   TeacherClassroomFrame,
 } from "@/components/classroom/classroom-ui";
 import {
+  cancelAiQuizGenerationJob,
   generateQuizWithAi,
   getAiQuizGenerationJob,
   getMyAiCredit,
+  pauseAiQuizGenerationJob,
+  resumeAiQuizGenerationJob,
 } from "./ai-api";
 
 const TYPES: Array<{ value: QuizQuestionType; label: string }> = [
@@ -54,9 +60,15 @@ export function AiQuizGenerator() {
   );
   const [sourceType, setSourceType] = useState<"prompt" | "upload">("prompt");
   const [sourceFile, setSourceFile] = useState<File | null>(null);
+  const [sourceFingerprint, setSourceFingerprint] = useState<{
+    file: File;
+    sha256: string;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobProgress, setJobProgress] = useState<AiGenerationJob | null>(null);
+  const [jobActionBusy, setJobActionBusy] = useState(false);
+  const [pollVersion, setPollVersion] = useState(0);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -65,6 +77,22 @@ export function AiQuizGenerator() {
       .then(setCredit)
       .catch((cause) => setError(getErrorMessage(cause)));
   }, [accessToken]);
+
+  useEffect(() => {
+    if (!sourceFile) return;
+    const file = sourceFile;
+    let cancelled = false;
+    void sha256File(file)
+      .then((sha256) => {
+        if (!cancelled) setSourceFingerprint({ file, sha256 });
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) setError(getErrorMessage(cause));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceFile]);
 
   useEffect(() => {
     if (!user) return;
@@ -114,6 +142,19 @@ export function AiQuizGenerator() {
             .catch(() => undefined);
           return;
         }
+        if (job.status === "cancelled") {
+          setBusy(false);
+          setActiveJobId(null);
+          if (user)
+            window.localStorage.removeItem(
+              `${ACTIVE_JOB_KEY_PREFIX}${user.id}`,
+            );
+          return;
+        }
+        if (job.status === "paused") {
+          setBusy(false);
+          return;
+        }
       } catch {
         // Job có thể chưa được tạo trong vài mili giây đầu của request upload.
       }
@@ -125,7 +166,7 @@ export function AiQuizGenerator() {
       cancelled = true;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [accessToken, activeJobId, router, user]);
+  }, [accessToken, activeJobId, pollVersion, router, user]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -133,12 +174,43 @@ export function AiQuizGenerator() {
     lock.current = true;
     setBusy(true);
     setError("");
-    const jobId = crypto.randomUUID();
-    setActiveJobId(jobId);
-    setJobProgress(null);
-    if (user)
-      window.localStorage.setItem(`${ACTIVE_JOB_KEY_PREFIX}${user.id}`, jobId);
+    let createdNewJob = false;
     try {
+      const selectedSourceSha256 = sourceFile
+        ? sourceFingerprint?.file === sourceFile
+          ? sourceFingerprint.sha256
+          : await sha256File(sourceFile)
+        : null;
+      const pausedJob =
+        jobProgress?.status === "paused" && activeJobId ? jobProgress : null;
+      const sameSource = pausedJob
+        ? isSamePausedSource(
+            pausedJob,
+            sourceType,
+            sourceFile,
+            selectedSourceSha256,
+          )
+        : false;
+      if (pausedJob && sameSource) {
+        const resumed = await resumeAiQuizGenerationJob(
+          pausedJob.id,
+          accessToken,
+        );
+        setJobProgress(resumed);
+        setPollVersion((value) => value + 1);
+        return;
+      }
+      if (pausedJob) await cancelAiQuizGenerationJob(pausedJob.id, accessToken);
+
+      const jobId = crypto.randomUUID();
+      createdNewJob = true;
+      setActiveJobId(jobId);
+      setJobProgress(null);
+      if (user)
+        window.localStorage.setItem(
+          `${ACTIVE_JOB_KEY_PREFIX}${user.id}`,
+          jobId,
+        );
       const result = await generateQuizWithAi(
         {
           jobId,
@@ -159,13 +231,61 @@ export function AiQuizGenerator() {
     } catch (cause) {
       setError(getErrorMessage(cause));
       setBusy(false);
-      setActiveJobId(null);
-      if (user)
-        window.localStorage.removeItem(`${ACTIVE_JOB_KEY_PREFIX}${user.id}`);
+      if (createdNewJob) {
+        setActiveJobId(null);
+        if (user)
+          window.localStorage.removeItem(`${ACTIVE_JOB_KEY_PREFIX}${user.id}`);
+      }
     } finally {
       lock.current = false;
     }
   }
+
+  async function pauseCurrentJob() {
+    if (!accessToken || !activeJobId || jobActionBusy) return;
+    setJobActionBusy(true);
+    setError("");
+    try {
+      const paused = await pauseAiQuizGenerationJob(activeJobId, accessToken);
+      setJobProgress(paused);
+      if (paused.status === "paused") setBusy(false);
+    } catch (cause) {
+      setError(getErrorMessage(cause));
+    } finally {
+      setJobActionBusy(false);
+    }
+  }
+
+  async function resumeCurrentJob() {
+    if (!accessToken || !activeJobId || jobActionBusy) return;
+    setJobActionBusy(true);
+    setBusy(true);
+    setError("");
+    try {
+      const resumed = await resumeAiQuizGenerationJob(activeJobId, accessToken);
+      setJobProgress(resumed);
+      setPollVersion((value) => value + 1);
+    } catch (cause) {
+      setBusy(false);
+      setError(getErrorMessage(cause));
+    } finally {
+      setJobActionBusy(false);
+    }
+  }
+
+  const pausedJob = jobProgress?.status === "paused" ? jobProgress : null;
+  const sourceFileSha256 =
+    sourceFingerprint?.file === sourceFile ? sourceFingerprint.sha256 : null;
+  const sourceHashPending =
+    sourceType === "upload" && Boolean(sourceFile) && !sourceFileSha256;
+  const resumesCurrentSource = pausedJob
+    ? isSamePausedSource(
+        pausedJob,
+        sourceType,
+        sourceFile,
+        sourceFileSha256,
+      )
+    : false;
 
   return (
     <TeacherClassroomFrame>
@@ -298,13 +418,21 @@ export function AiQuizGenerator() {
             <Field label="Tài liệu nguồn" wide>
               <input
                 type="file"
-                required
+                required={
+                  !(
+                    pausedJob?.sourceType === "upload" &&
+                    sourceType === "upload"
+                  )
+                }
                 accept=".txt,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                onChange={(e) => setSourceFile(e.target.files?.[0] ?? null)}
+                onChange={(event) => {
+                  setSourceFingerprint(null);
+                  setSourceFile(event.target.files?.[0] ?? null);
+                }}
                 className={INPUT_CLASS}
               />
               <span className="mt-2 block text-sm font-semibold text-muted-foreground">
-                Hỗ trợ TXT, DOCX, PDF; tối đa 50 MB. Tệp chỉ được đọc trong yêu
+                Hỗ trợ TXT, DOCX, PDF; tối đa 150 MB. Tệp chỉ được đọc trong yêu
                 cầu này và được lưu tạm trong lúc job đang chạy.
               </span>
             </Field>
@@ -331,25 +459,39 @@ export function AiQuizGenerator() {
           <button
             disabled={
               busy ||
+              sourceHashPending ||
               !questionTypes.length ||
-              (sourceType === "upload" && !sourceFile)
+              (sourceType === "upload" && !sourceFile && !resumesCurrentSource)
             }
             className={`${PRIMARY_ACTION_CLASS} mt-5 w-full`}
           >
-            {busy ? (
+            {busy || sourceHashPending ? (
               <LoaderCircle
                 className="h-5 w-5 motion-safe:animate-spin"
                 aria-hidden="true"
               />
+            ) : pausedJob && resumesCurrentSource ? (
+              <Play className="h-5 w-5" aria-hidden="true" />
             ) : (
               <Sparkles className="h-5 w-5" aria-hidden="true" />
             )}
-            {busy ? "AI đang chuẩn bị bản nháp..." : "Tạo bản nháp bằng AI"}
+            {busy
+              ? "AI đang chuẩn bị bản nháp..."
+              : sourceHashPending
+                ? "Đang kiểm tra tài liệu..."
+              : pausedJob && resumesCurrentSource
+                ? "Tiếp tục từ điểm dừng"
+                : pausedJob
+                  ? "Tạo lại với nguồn mới"
+                  : "Tạo bản nháp bằng AI"}
           </button>
-          {busy ? (
+          {busy || pausedJob ? (
             <GenerationProgressPanel
               sourceType={sourceType}
               progress={jobProgress}
+              actionBusy={jobActionBusy}
+              onPause={() => void pauseCurrentJob()}
+              onResume={() => void resumeCurrentJob()}
             />
           ) : null}
         </aside>
@@ -361,16 +503,42 @@ export function AiQuizGenerator() {
 function GenerationProgressPanel({
   sourceType,
   progress,
+  actionBusy,
+  onPause,
+  onResume,
 }: {
   sourceType: "prompt" | "upload";
   progress: AiGenerationJob | null;
+  actionBusy: boolean;
+  onPause: () => void;
+  onResume: () => void;
 }) {
+  const paused = progress?.status === "paused";
+  const pauseRequested = progress?.status === "pause_requested";
   const total = progress?.documentTotalPages ?? null;
   const processed = total
     ? Math.min(progress?.documentProcessedPages ?? 0, total)
     : (progress?.documentProcessedPages ?? 0);
-  const percent = generationProgressPercent(sourceType, progress);
-  const copy = generationProgressCopy(sourceType, progress, processed, total);
+  const jobSourceType = progress?.sourceType ?? sourceType;
+  const percent = generationProgressPercent(jobSourceType, progress);
+  const activeCopy = generationProgressCopy(
+    jobSourceType,
+    progress,
+    processed,
+    total,
+  );
+  const copy = paused
+    ? {
+        title: "Đã dừng và lưu điểm tiếp tục",
+        detail: `${activeCopy.title}. Tệp nguồn và các phần đã hoàn thành vẫn được giữ lại.`,
+      }
+    : pauseRequested
+      ? {
+          title: "Đang dừng an toàn...",
+          detail:
+            "Hệ thống đang chờ request AI hiện tại hoàn tất để lưu checkpoint, sau đó sẽ không gọi thêm request mới.",
+        }
+      : activeCopy;
 
   return (
     <div
@@ -380,21 +548,29 @@ function GenerationProgressPanel({
       className="mt-4 rounded-xl border border-divider bg-surface p-4"
     >
       <div className="flex items-start gap-3">
-        <span className="relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary">
-          <LoaderCircle
-            className="h-5 w-5 motion-safe:animate-spin"
-            aria-hidden="true"
-          />
+        <span
+          className={`relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${paused || pauseRequested ? "bg-warning" : "bg-primary"}`}
+        >
+          {paused ? (
+            <Pause className="h-5 w-5" aria-hidden="true" />
+          ) : (
+            <LoaderCircle
+              className="h-5 w-5 motion-safe:animate-spin"
+              aria-hidden="true"
+            />
+          )}
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="font-extrabold tabular-nums">{copy.title}</p>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-xs font-bold">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${paused || pauseRequested ? "bg-warning-soft" : "bg-success-soft"}`}
+            >
               <span
-                className="h-2 w-2 rounded-full bg-success"
+                className={`h-2 w-2 rounded-full ${paused || pauseRequested ? "bg-warning" : "bg-success"}`}
                 aria-hidden="true"
               />
-              Đang xử lý
+              {paused ? "Đã dừng" : pauseRequested ? "Đang dừng" : "Đang xử lý"}
             </span>
           </div>
           <p className="mt-1 text-sm font-semibold text-muted-foreground">
@@ -417,9 +593,79 @@ function GenerationProgressPanel({
         />
       </div>
       <p className="mt-3 text-xs font-bold text-muted-foreground">
-        Job chạy nền và tự thử lại khi provider bận. Bạn có thể rời trang rồi
-        quay lại xem tiến độ.
+        {paused
+          ? "Tiếp tục sẽ dùng lại tệp đã lưu và chỉ xử lý các trang/phần còn thiếu. Chọn nguồn mới sẽ tạo một lượt upload mới."
+          : "Job chạy nền và tự thử lại khi provider bận. Bạn có thể rời trang rồi quay lại xem tiến độ."}
       </p>
+      {paused ? (
+        <button
+          type="button"
+          onClick={onResume}
+          disabled={actionBusy}
+          className={`${PRIMARY_ACTION_CLASS} mt-4 w-full`}
+        >
+          {actionBusy ? (
+            <LoaderCircle
+              className="h-5 w-5 motion-safe:animate-spin"
+              aria-hidden="true"
+            />
+          ) : (
+            <Play className="h-5 w-5" aria-hidden="true" />
+          )}
+          Tiếp tục xử lý tệp đã lưu
+        </button>
+      ) : progress?.stage !== "saving_quiz" ? (
+        <button
+          type="button"
+          onClick={onPause}
+          disabled={actionBusy || pauseRequested || !progress}
+          className={`${SECONDARY_ACTION_CLASS} mt-4 w-full`}
+        >
+          {actionBusy || pauseRequested ? (
+            <LoaderCircle
+              className="h-5 w-5 motion-safe:animate-spin"
+              aria-hidden="true"
+            />
+          ) : (
+            <Pause className="h-5 w-5" aria-hidden="true" />
+          )}
+          {pauseRequested ? "Đang lưu điểm dừng..." : "Dừng xử lý"}
+        </button>
+      ) : null}
+      {progress?.extractionReport ? (
+        <ExtractionReport report={progress.extractionReport} />
+      ) : null}
+    </div>
+  );
+}
+
+function ExtractionReport({
+  report,
+}: {
+  report: NonNullable<AiGenerationJob["extractionReport"]>;
+}) {
+  const failedPageNumbers = report.failedPages
+    .map((page) => page.pageNumber)
+    .join(", ");
+
+  return (
+    <div className="mt-4 rounded-xl border border-divider bg-surface-soft p-3 text-sm">
+      <p className="font-extrabold">Báo cáo đọc tài liệu</p>
+      <p className="mt-1 font-semibold text-muted-foreground">
+        {report.textLayerPages} trang lấy text trực tiếp · {report.aiPdfPages}{" "}
+        trang AI đọc PDF · {report.aiVisionPages} trang đọc bằng ảnh dự phòng
+      </p>
+      {report.failedPages.length ? (
+        <p className="mt-2 rounded-lg border border-destructive/30 bg-destructive-soft p-2 font-bold">
+          Cần kiểm tra lại trang {failedPageNumbers}. Nội dung các trang này có
+          thể chưa được dùng đầy đủ trong bản nháp.
+        </p>
+      ) : (
+        <p className="mt-2 font-bold text-success">
+          Đã đọc đủ {report.totalPages} trang; vẫn cần giáo viên duyệt bản nháp
+          trước khi phát hành.
+        </p>
+      )}
     </div>
   );
 }
@@ -492,10 +738,10 @@ function generationProgressCopy(
     );
     return {
       title: chunkTotal
-        ? `Đã phân tích ${chunkProcessed}/${chunkTotal} phần`
-        : "Đang chia tài liệu thành các phần...",
+        ? `Đã tạo câu hỏi cho ${chunkProcessed}/${chunkTotal} phần`
+        : "Đang tạo câu hỏi theo từng phần...",
       detail:
-        "AI đang tạo câu hỏi ứng viên theo từng phần và giữ checkpoint sau mỗi phần.",
+        "AI đang xử lý song song có giới hạn và giữ checkpoint sau mỗi phần hoàn thành.",
     };
   }
   if (progress.stage === "selecting_questions") {
@@ -521,7 +767,7 @@ function generationProgressCopy(
   return {
     title: pageLabel,
     detail: total
-      ? "Hệ thống đang xử lý lần lượt từng trang của tài liệu."
+      ? "Hệ thống đang xử lý song song các trang và ghép lại theo đúng thứ tự."
       : "Hệ thống đang trích xuất nội dung tài liệu.",
   };
 }
@@ -554,6 +800,29 @@ function generationProgressPercent(
     return Math.round(5 + Math.min(1, ratio) * 28);
   }
   return 2;
+}
+
+function isSamePausedSource(
+  job: AiGenerationJob,
+  sourceType: "prompt" | "upload",
+  sourceFile: File | null,
+  sourceFileSha256: string | null,
+): boolean {
+  if (job.sourceType !== sourceType) return false;
+  if (sourceType === "prompt") return true;
+  if (!sourceFile) return true;
+  return Boolean(
+    sourceFileSha256 &&
+      job.sourceFileSha256 &&
+      sourceFileSha256 === job.sourceFileSha256,
+  );
+}
+
+async function sha256File(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 function Field({

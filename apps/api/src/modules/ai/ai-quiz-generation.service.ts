@@ -1,12 +1,16 @@
 import {
   BadGatewayException,
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
+import { createHash } from 'node:crypto';
 import type {
   AiGenerationJob,
   GenerateQuizWithAiResponse,
@@ -38,7 +42,16 @@ import { QuizService } from '@/modules/quiz/quiz.service';
 import { QuizQuestionType } from '@/modules/quiz/entities/quiz-question.entity';
 import { AiProviderService } from './ai-provider.service';
 import { AiCreditService } from './ai-credit.service';
-import { AiModelClientService } from './ai-model-client.service';
+import {
+  AiModelClientService,
+  type AiUsageContext,
+} from './ai-model-client.service';
+import {
+  AiRequestError,
+  isNonRetryableAiError,
+  type AiGenerationErrorDetails,
+} from './ai-error';
+import type { AiProviderEntity } from './entities/ai-provider.entity';
 import {
   AiMaterialSourceService,
   type AiMaterialPage,
@@ -59,6 +72,7 @@ import {
   AiGenerationChunkStatus,
 } from './entities/ai-generation-chunk.entity';
 import { GenerateQuizWithAiDto } from './dto/generate-quiz-with-ai.dto';
+import { boundedConcurrency, mapWithConcurrency } from './bounded-concurrency';
 
 type GeneratedQuestion = {
   type: SharedQuestionType;
@@ -74,9 +88,26 @@ type DocumentChunk = {
   text: string;
 };
 
+type GenerationResultCheckpoint = {
+  questions: GeneratedQuestion[];
+  inputTokens: number;
+  outputTokens: number;
+};
+
 const MAX_GENERATION_CHUNKS = 40;
 const TARGET_CHUNK_CHARACTERS = 24_000;
 const MAX_CHUNK_SOURCE_CHARACTERS = 2_000_000;
+const DEFAULT_ANALYSIS_CONCURRENCY = 2;
+const MAX_ANALYSIS_CONCURRENCY = 6;
+const DEFAULT_CANDIDATE_CONCURRENCY = 1;
+const MAX_CANDIDATE_CONCURRENCY = 4;
+
+class AiGenerationPausedError extends Error {
+  constructor() {
+    super('AI generation paused');
+    this.name = 'AiGenerationPausedError';
+  }
+}
 
 @Injectable()
 export class AiQuizGenerationService {
@@ -96,7 +127,28 @@ export class AiQuizGenerationService {
     private readonly sourceStorage: AiGenerationSourceStorageService,
     private readonly queue: AiGenerationQueueService,
     private readonly quizzes: QuizService,
+    @Optional() private readonly config?: ConfigService,
   ) {}
+
+  private analysisConcurrency(): number {
+    return boundedConcurrency(
+      this.config?.get<string | number>(
+        'AI_GENERATION_CHUNK_ANALYSIS_CONCURRENCY',
+      ),
+      DEFAULT_ANALYSIS_CONCURRENCY,
+      MAX_ANALYSIS_CONCURRENCY,
+    );
+  }
+
+  private candidateConcurrency(): number {
+    return boundedConcurrency(
+      this.config?.get<string | number>(
+        'AI_GENERATION_CHUNK_CANDIDATE_CONCURRENCY',
+      ),
+      DEFAULT_CANDIDATE_CONCURRENCY,
+      MAX_CANDIDATE_CONCURRENCY,
+    );
+  }
 
   async generate(
     teacherId: string,
@@ -124,6 +176,9 @@ export class AiQuizGenerationService {
     const provider = await this.providers.resolveQuiz();
     const visionProvider =
       sourceType === 'upload' ? await this.providers.resolveVision() : null;
+    // Chỉ tài liệu upload mới đi qua bước phân tích chunk.
+    const analysisProvider =
+      sourceType === 'upload' ? await this.providers.resolveAnalysis() : null;
     const reserved = estimateReservedCredits(
       provider.baseCreditCost,
       provider.creditCostPer1kTokens,
@@ -135,6 +190,7 @@ export class AiQuizGenerationService {
         teacherId,
         providerId: provider.id,
         visionProviderId: visionProvider?.id ?? null,
+        analysisProviderId: analysisProvider?.id ?? null,
         quizId: null,
         status: AiGenerationJobStatus.PENDING,
         stage: AiGenerationJobStage.QUEUED,
@@ -146,14 +202,19 @@ export class AiQuizGenerationService {
         sourceOriginalName: sourceFile?.originalname.slice(0, 255) ?? null,
         sourceMimeType: sourceFile?.mimetype ?? null,
         sourceSize: sourceFile?.size ?? null,
+        sourceSha256: sourceFile
+          ? createHash('sha256').update(sourceFile.buffer).digest('hex')
+          : null,
         attemptCount: 0,
         quizBlueprint: null,
+        generationResult: null,
         requestPayload: sanitizeRequest(dto, sourceFile),
         reservedCredits: reserved,
         chargedCredits: 0,
         inputTokens: 0,
         outputTokens: 0,
         errorMessage: null,
+        extractionReport: null,
         completedAt: null,
       }),
     );
@@ -195,21 +256,140 @@ export class AiQuizGenerationService {
     }
   }
 
+  async pause(jobId: string, teacherId: string): Promise<AiGenerationJob> {
+    const job = await this.ownedJob(jobId, teacherId);
+    if (
+      job.status === AiGenerationJobStatus.PAUSED ||
+      job.status === AiGenerationJobStatus.PAUSE_REQUESTED
+    )
+      return this.responseFor(job);
+    if (
+      job.status === AiGenerationJobStatus.SUCCEEDED ||
+      job.status === AiGenerationJobStatus.FAILED ||
+      job.status === AiGenerationJobStatus.CANCELLED
+    )
+      throw new ConflictException('Tác vụ này đã kết thúc nên không thể dừng');
+    if (job.stage === AiGenerationJobStage.SAVING_QUIZ)
+      throw new ConflictException(
+        'Quiz đang được lưu; vui lòng chờ tác vụ hoàn tất trong giây lát',
+      );
+
+    await this.jobs.update(
+      {
+        id: job.id,
+        teacherId,
+        status: In([
+          AiGenerationJobStatus.PENDING,
+          AiGenerationJobStatus.RUNNING,
+        ]),
+      },
+      {
+        status: AiGenerationJobStatus.PAUSE_REQUESTED,
+        errorMessage: null,
+      },
+    );
+    return this.responseFor(await this.ownedJob(jobId, teacherId));
+  }
+
+  async resume(jobId: string, teacherId: string): Promise<AiGenerationJob> {
+    const job = await this.ownedJob(jobId, teacherId);
+    if (job.status !== AiGenerationJobStatus.PAUSED)
+      throw new ConflictException(
+        job.status === AiGenerationJobStatus.PAUSE_REQUESTED
+          ? 'Tác vụ vẫn đang lưu checkpoint; hãy chờ trạng thái đã dừng'
+          : 'Chỉ có thể tiếp tục tác vụ đang dừng',
+      );
+    const resumed = await this.jobs.update(
+      { id: job.id, teacherId, status: AiGenerationJobStatus.PAUSED },
+      {
+        status: AiGenerationJobStatus.PENDING,
+        stage: AiGenerationJobStage.QUEUED,
+        errorMessage: null,
+        errorDetails: null,
+        completedAt: null,
+      },
+    );
+    if (resumed.affected === 0)
+      throw new ConflictException('Tác vụ đã được tiếp tục ở một yêu cầu khác');
+    try {
+      await this.queue.enqueue(job.id);
+    } catch (error) {
+      await this.jobs.update(
+        { id: job.id, status: AiGenerationJobStatus.PENDING },
+        {
+          status: AiGenerationJobStatus.PAUSED,
+          errorMessage: `Chưa thể xếp hàng tiếp tục: ${safeError(error)}`,
+        },
+      );
+      throw error;
+    }
+    return this.responseFor(await this.ownedJob(jobId, teacherId));
+  }
+
+  async cancel(jobId: string, teacherId: string): Promise<AiGenerationJob> {
+    let job = await this.ownedJob(jobId, teacherId);
+    if (job.status !== AiGenerationJobStatus.PAUSED) {
+      if (job.status !== AiGenerationJobStatus.CANCELLED)
+        throw new ConflictException(
+          'Hãy dừng tác vụ hoàn toàn trước khi thay bằng tệp mới',
+        );
+    } else {
+      const cancelled = await this.jobs.update(
+        { id: job.id, teacherId, status: AiGenerationJobStatus.PAUSED },
+        {
+          status: AiGenerationJobStatus.CANCELLED,
+          errorMessage: null,
+          generationResult: null,
+          completedAt: new Date(),
+        },
+      );
+      if (cancelled.affected === 0)
+        throw new ConflictException('Trạng thái tác vụ vừa thay đổi');
+      job = await this.ownedJob(jobId, teacherId);
+    }
+    await this.credits.release(
+      job.teacherId,
+      'quiz_generation',
+      job.id,
+      job.reservedCredits,
+    );
+    await this.cleanupArtifacts(job);
+    return this.responseFor(job);
+  }
+
   async process(jobId: string): Promise<void> {
     let job = await this.jobs.findOne({ where: { id: jobId } });
-    if (!job || job.status === AiGenerationJobStatus.SUCCEEDED) return;
+    if (!job || isTerminalGenerationStatus(job.status)) return;
+    if (job.status === AiGenerationJobStatus.PAUSE_REQUESTED) {
+      await this.markPaused(job.id);
+      return;
+    }
+    if (job.status === AiGenerationJobStatus.PAUSED) return;
     const dto = dtoFromPayload(job.requestPayload);
     const sourceType = dto.sourceType ?? 'prompt';
     const provider = await this.providers.resolve(job.providerId);
-    job.status = AiGenerationJobStatus.RUNNING;
-    job.stage =
+    const startStage =
       sourceType === 'upload'
         ? AiGenerationJobStage.READING_DOCUMENT
         : AiGenerationJobStage.GENERATING_QUIZ;
-    job.attemptCount += 1;
-    job.errorMessage = null;
-    job.completedAt = null;
-    await this.jobs.save(job);
+    const started = await this.jobs.update(
+      { id: job.id, status: AiGenerationJobStatus.PENDING },
+      {
+        status: AiGenerationJobStatus.RUNNING,
+        stage: startStage,
+        attemptCount: job.attemptCount + 1,
+        errorMessage: null,
+        completedAt: null,
+      },
+    );
+    if (started.affected === 0) return;
+    Object.assign(job, {
+      status: AiGenerationJobStatus.RUNNING,
+      stage: startStage,
+      attemptCount: job.attemptCount + 1,
+      errorMessage: null,
+      completedAt: null,
+    });
 
     if (job.quizId) {
       await this.quizzes
@@ -221,11 +401,14 @@ export class AiQuizGenerationService {
 
     let quizId: string | null = null;
     try {
-      let questions: GeneratedQuestion[];
-      let totalInputTokens = 0;
-      let totalOutputTokens = 0;
-      if (sourceType === 'upload') {
+      const savedResult = readGenerationResult(job.generationResult, dto);
+      let questions = savedResult?.questions ?? [];
+      let totalInputTokens = savedResult?.inputTokens ?? 0;
+      let totalOutputTokens = savedResult?.outputTokens ?? 0;
+      if (!savedResult && sourceType === 'upload') {
+        await this.checkpointPause(job.id);
         const source = await this.extractStoredSource(job);
+        await this.checkpointPause(job.id);
         const chunkRows = await this.prepareChunks(
           job,
           source.pages,
@@ -235,9 +418,10 @@ export class AiQuizGenerationService {
         const analyzed = await this.analyzeDocumentChunks(
           job,
           dto,
-          provider,
+          await this.resolveAnalysisProvider(job, provider),
           chunkRows,
         );
+        await this.checkpointPause(job.id);
         const planned = await this.prepareQuizBlueprint(
           job,
           dto,
@@ -245,6 +429,7 @@ export class AiQuizGenerationService {
           analyzed.analyses,
           distribution,
         );
+        await this.checkpointPause(job.id);
         const generated = await this.generateChunkCandidates(
           job,
           dto,
@@ -254,6 +439,7 @@ export class AiQuizGenerationService {
           planned.blueprint,
           distribution,
         );
+        await this.checkpointPause(job.id);
         const reviewed = await this.reviewQuestions(
           job,
           dto,
@@ -278,30 +464,47 @@ export class AiQuizGenerationService {
           planned.outputTokens +
           generated.outputTokens +
           reviewed.outputTokens;
-      } else {
-        const completion = await this.client.completeJson(
+      } else if (!savedResult) {
+        await this.checkpointPause(job.id);
+        const completion = await this.completeCanonicalJson({
           provider,
-          generationSystemPrompt(),
-          generationUserPrompt(dto, null),
-          {
+          system: generationSystemPrompt(),
+          prompt: generationUserPrompt(dto, null),
+          usageContext: {
             source: 'quiz_generation',
             referenceId: job.id,
             userId: job.teacherId,
           },
-          generationOutputSchema(dto.questionTypes, dto.questionCount),
-        );
-        questions = validateGeneratedQuestions(
-          completion.value,
-          dto.questionCount,
-          dto.questionTypes,
-        );
+          schema: generationOutputSchema(dto.questionTypes, dto.questionCount),
+          parse: (value) =>
+            validateGeneratedQuestions(
+              value,
+              dto.questionCount,
+              dto.questionTypes,
+            ),
+        });
+        questions = completion.value;
         totalInputTokens = completion.inputTokens;
         totalOutputTokens = completion.outputTokens;
       }
 
+      if (!savedResult) {
+        job.generationResult = {
+          questions,
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+        };
+        await this.jobs.update(job.id, {
+          // TypeORM's recursive partial type cannot represent arbitrary jsonb
+          // records even though the Postgres column accepts this JSON value.
+          generationResult: job.generationResult as never,
+        });
+      }
+      await this.checkpointPause(job.id);
       await this.updateProgress(job, {
         stage: AiGenerationJobStage.SAVING_QUIZ,
       });
+      await this.checkpointPause(job.id);
       let quiz = await this.quizzes.create(job.teacherId, {
         title: dto.title,
         description: dto.description,
@@ -339,8 +542,10 @@ export class AiQuizGenerationService {
         chargedCredits: charged,
         inputTokens: totalInputTokens,
         outputTokens: totalOutputTokens,
+        generationResult: null,
         completedAt: new Date(),
         errorMessage: null,
+        errorDetails: null,
       });
       const completedJobId = job.id;
       await this.cleanupArtifacts(job).catch((error: unknown) =>
@@ -349,6 +554,14 @@ export class AiQuizGenerationService {
         ),
       );
     } catch (error) {
+      if (error instanceof AiGenerationPausedError) return;
+      // Lưu lỗi có cấu trúc ngay tại đây vì qua BullMQ (UnrecoverableError)
+      // chỉ còn message dạng chuỗi, mất phân loại và validation issues.
+      await this.jobs
+        .update(job.id, {
+          errorDetails: generationErrorDetails(error, job.stage, provider),
+        })
+        .catch(() => undefined);
       if (quizId) {
         await this.quizzes.remove(quizId, job.teacherId).catch(() => undefined);
         job.quizId = null;
@@ -358,18 +571,36 @@ export class AiQuizGenerationService {
     }
   }
 
-  async markRetrying(jobId: string, error: unknown): Promise<void> {
-    const job = await this.jobs.findOne({ where: { id: jobId } });
-    if (!job || job.status === AiGenerationJobStatus.SUCCEEDED) return;
-    job.status = AiGenerationJobStatus.PENDING;
-    job.stage = AiGenerationJobStage.QUEUED;
-    job.errorMessage = `Lần xử lý ${job.attemptCount} chưa thành công, hệ thống đang tự thử lại: ${safeError(error)}`;
-    await this.jobs.save(job);
+  async markRetrying(
+    jobId: string,
+    error: unknown,
+    attemptCount: number,
+  ): Promise<void> {
+    // Chỉ cập nhật đúng attempt vừa thất bại. Nếu backoff đã hết và attempt
+    // kế tiếp đang RUNNING, callback cũ không được ghi ngược trạng thái QUEUED.
+    await this.jobs.update(
+      {
+        id: jobId,
+        status: AiGenerationJobStatus.RUNNING,
+        attemptCount,
+      },
+      {
+        status: AiGenerationJobStatus.PENDING,
+        stage: AiGenerationJobStage.QUEUED,
+        errorMessage: `Lần xử lý ${attemptCount} chưa thành công, hệ thống đang tự thử lại: ${safeError(error)}`,
+      },
+    );
   }
 
   async markFailed(jobId: string, error: unknown): Promise<void> {
     const job = await this.jobs.findOne({ where: { id: jobId } });
-    if (!job || job.status === AiGenerationJobStatus.SUCCEEDED) return;
+    if (
+      !job ||
+      isTerminalGenerationStatus(job.status) ||
+      job.status === AiGenerationJobStatus.PAUSE_REQUESTED ||
+      job.status === AiGenerationJobStatus.PAUSED
+    )
+      return;
     await this.credits
       .release(job.teacherId, 'quiz_generation', job.id, job.reservedCredits)
       .catch((releaseError: unknown) =>
@@ -380,18 +611,65 @@ export class AiQuizGenerationService {
     job.status = AiGenerationJobStatus.FAILED;
     job.stage = AiGenerationJobStage.FAILED;
     job.errorMessage = safeError(error);
+    // process() đã lưu error_details gốc; chỉ bổ sung khi lỗi xảy ra trước đó
+    // (ví dụ không đọc được job) vì qua BullMQ error chỉ còn message.
+    job.errorDetails ??= generationErrorDetails(error, job.stage, null);
     job.completedAt = new Date();
     await this.jobs.save(job);
     await this.cleanupArtifacts(job).catch(() => undefined);
   }
 
   async get(jobId: string, teacherId: string): Promise<AiGenerationJob> {
+    const job = await this.ownedJob(jobId, teacherId);
+    return this.responseFor(job);
+  }
+
+  private async ownedJob(
+    jobId: string,
+    teacherId: string,
+  ): Promise<AiGenerationJobEntity> {
     const job = await this.jobs.findOne({ where: { id: jobId, teacherId } });
     if (!job) throw new NotFoundException('Tác vụ sinh quiz không tồn tại');
+    return job;
+  }
+
+  private async responseFor(
+    job: AiGenerationJobEntity,
+  ): Promise<AiGenerationJob> {
     const provider = await this.providers
       .resolve(job.providerId)
       .catch(() => null);
     return this.toResponse(job, provider?.name ?? 'Provider đã tắt');
+  }
+
+  private async markPaused(jobId: string): Promise<void> {
+    await this.jobs.update(
+      { id: jobId, status: AiGenerationJobStatus.PAUSE_REQUESTED },
+      {
+        status: AiGenerationJobStatus.PAUSED,
+        errorMessage: null,
+        completedAt: null,
+      },
+    );
+  }
+
+  /**
+   * Điểm ngắt hợp tác: không hủy request provider đang bay vì request đó có
+   * thể đã bị tính phí. Kết quả hiện tại được checkpoint trước, sau đó worker
+   * chuyển PAUSE_REQUESTED -> PAUSED và không mở request AI kế tiếp.
+   */
+  private async checkpointPause(jobId: string): Promise<void> {
+    const current = await this.jobs.findOne({ where: { id: jobId } });
+    if (!current) throw new NotFoundException('Tác vụ sinh quiz không tồn tại');
+    if (current.status === AiGenerationJobStatus.PAUSE_REQUESTED) {
+      await this.markPaused(jobId);
+      throw new AiGenerationPausedError();
+    }
+    if (
+      current.status === AiGenerationJobStatus.PAUSED ||
+      current.status === AiGenerationJobStatus.CANCELLED
+    )
+      throw new AiGenerationPausedError();
   }
 
   private async extractStoredSource(job: AiGenerationJobEntity) {
@@ -413,7 +691,7 @@ export class AiQuizGenerationService {
         : this.providers.resolveVision(),
     ]);
     const file = multerFileFromJob(job, buffer);
-    return this.materialSource.extract(file, {
+    const extraction = await this.materialSource.extract(file, {
       provider: visionProvider,
       referenceId: job.id,
       userId: job.teacherId,
@@ -428,6 +706,7 @@ export class AiQuizGenerationService {
             confidence: page.confidence,
             visionInputTokens: page.visionInputTokens,
             visionOutputTokens: page.visionOutputTokens,
+            failureCategory: page.failureCategory,
           }),
         );
       },
@@ -438,7 +717,19 @@ export class AiQuizGenerationService {
           documentProcessedPages: processedPages,
         });
       },
+      checkpoint: () => this.checkpointPause(job.id),
     });
+    job.extractionReport = {
+      totalPages: extraction.pages.length,
+      textLayerPages: extraction.textLayerPages,
+      aiPdfPages: extraction.aiPdfPages,
+      aiVisionPages: extraction.aiVisionPages,
+      failedPages: extraction.failedPages,
+    };
+    await this.jobs.update(job.id, {
+      extractionReport: job.extractionReport,
+    });
+    return extraction;
   }
 
   private async prepareChunks(
@@ -480,6 +771,26 @@ export class AiQuizGenerationService {
     return rows;
   }
 
+  /**
+   * Provider phân tích chunk đã chốt lúc tạo job. Job có thể được retry sau
+   * khi admin tắt hoặc xóa provider đó; phân tích là nhiệm vụ tùy chọn nên khi
+   * ấy quay về provider quiz thay vì để job chết.
+   */
+  private async resolveAnalysisProvider(
+    job: AiGenerationJobEntity,
+    quizProvider: Awaited<ReturnType<AiProviderService['resolve']>>,
+  ): Promise<Awaited<ReturnType<AiProviderService['resolve']>>> {
+    if (!job.analysisProviderId) return quizProvider;
+    const provider = await this.providers
+      .resolve(job.analysisProviderId)
+      .catch(() => null);
+    if (provider) return provider;
+    this.logger.warn(
+      `Provider phân tích ${job.analysisProviderId} của job ${job.id} không dùng được; quay về ${quizProvider.name}`,
+    );
+    return quizProvider;
+  }
+
   private async analyzeDocumentChunks(
     job: AiGenerationJobEntity,
     dto: GenerateQuizWithAiDto,
@@ -490,44 +801,72 @@ export class AiQuizGenerationService {
     inputTokens: number;
     outputTokens: number;
   }> {
-    const analyses: QuizChunkAnalysis[] = [];
-    let completed = rows.filter((row) => row.analysis !== null).length;
+    const analysisByChunk = new Map<number, QuizChunkAnalysis>();
+    for (const row of rows) {
+      const saved = validateChunkAnalysis(row.analysis, row);
+      if (saved) analysisByChunk.set(row.chunkIndex, saved);
+    }
+    let completed = analysisByChunk.size;
     await this.updateProgress(job, {
       stage: AiGenerationJobStage.ANALYZING_DOCUMENT,
       generationTotalChunks: rows.length,
       generationProcessedChunks: completed,
     });
-    for (const row of rows) {
-      const saved = validateChunkAnalysis(row.analysis, row);
-      if (saved) {
-        analyses.push(saved);
-        continue;
-      }
-      const completion = await this.client.completeJson(
-        provider,
-        chunkAnalysisSystemPrompt(),
-        chunkAnalysisUserPrompt(dto, chunkFromRow(row)),
-        {
-          source: 'quiz_generation',
-          referenceId: job.id,
-          userId: job.teacherId,
-        },
-        chunkAnalysisOutputSchema(),
-      );
-      const analysis = requireChunkAnalysis(completion.value, row);
-      row.analysis = analysis;
-      row.analysisInputTokens = completion.inputTokens;
-      row.analysisOutputTokens = completion.outputTokens;
-      row.lastError = null;
-      await this.chunks.save(row);
-      analyses.push(analysis);
-      completed += 1;
-      await this.updateProgress(job, {
+    const reportProgress = serializedProgress(async (processed) =>
+      this.updateProgress(job, {
         stage: AiGenerationJobStage.ANALYZING_DOCUMENT,
         generationTotalChunks: rows.length,
-        generationProcessedChunks: completed,
-      });
-    }
+        generationProcessedChunks: processed,
+      }),
+    );
+    const pendingRows = rows.filter(
+      (row) => !analysisByChunk.has(row.chunkIndex),
+    );
+    await mapWithConcurrency(
+      pendingRows,
+      this.analysisConcurrency(),
+      async (row) => {
+        try {
+          await this.checkpointPause(job.id);
+          const completion = await this.completeCanonicalJson({
+            provider,
+            system: chunkAnalysisSystemPrompt(),
+            prompt: chunkAnalysisUserPrompt(dto, chunkFromRow(row)),
+            usageContext: {
+              source: 'quiz_generation',
+              referenceId: job.id,
+              userId: job.teacherId,
+            },
+            schema: chunkAnalysisOutputSchema(),
+            parse: (value) => requireChunkAnalysis(value, row),
+          });
+          const analysis = completion.value;
+          row.analysis = analysis;
+          row.analysisInputTokens = completion.inputTokens;
+          row.analysisOutputTokens = completion.outputTokens;
+          row.lastError = null;
+          await this.chunks.save(row);
+          analysisByChunk.set(row.chunkIndex, analysis);
+          completed += 1;
+          await reportProgress(completed);
+          await this.checkpointPause(job.id);
+          return analysis;
+        } catch (error) {
+          if (error instanceof AiGenerationPausedError) throw error;
+          row.lastError = safeError(error);
+          await this.chunks.save(row);
+          throw error;
+        }
+      },
+    );
+    const analyses = rows.map((row) => {
+      const analysis = analysisByChunk.get(row.chunkIndex);
+      if (!analysis)
+        throw new BadGatewayException(
+          `Thiếu phân tích cho phần ${row.chunkIndex + 1}`,
+        );
+      return analysis;
+    });
     return {
       analyses,
       inputTokens: rows.reduce(
@@ -559,22 +898,19 @@ export class AiQuizGenerationService {
       generationTotalChunks: analyses.length,
       generationProcessedChunks: analyses.length,
     });
-    const completion = await this.client.completeJson(
+    const completion = await this.completeCanonicalJson({
       provider,
-      quizBlueprintSystemPrompt(),
-      quizBlueprintUserPrompt(dto, analyses, distribution),
-      {
+      system: quizBlueprintSystemPrompt(),
+      prompt: quizBlueprintUserPrompt(dto, analyses, distribution),
+      usageContext: {
         source: 'quiz_generation',
         referenceId: job.id,
         userId: job.teacherId,
       },
-      quizBlueprintOutputSchema(),
-    );
-    const blueprint = requireQuizBlueprint(
-      completion.value,
-      analyses,
-      dto.topic,
-    );
+      schema: quizBlueprintOutputSchema(),
+      parse: (value) => requireQuizBlueprint(value, analyses, dto.topic),
+    });
+    const blueprint = completion.value;
     job.quizBlueprint = {
       blueprint: blueprint as unknown as Record<string, unknown>,
       inputTokens: completion.inputTokens,
@@ -610,10 +946,11 @@ export class AiQuizGenerationService {
       blueprint,
       dto.questionCount,
     );
-    const questions: QualityQuestion[] = [];
-    let completed = selectedRows.filter(
-      (row) => row.status === AiGenerationChunkStatus.COMPLETED,
-    ).length;
+    const candidateCount = qualityCandidateCount(
+      dto.questionCount,
+      selectedRows.length,
+    );
+    const questionsByChunk = new Map<number, QualityQuestion[]>();
     for (const row of selectedRows) {
       const analysis = analysisByChunk.get(row.chunkIndex);
       if (!analysis)
@@ -626,77 +963,98 @@ export class AiQuizGenerationService {
       ) {
         const saved = validateQualityQuestions(
           { questions: row.candidateQuestions },
-          row.candidateQuestions.length,
-          dto.questionTypes,
-          blueprint,
-          undefined,
-          row.text,
-        );
-        if (saved) {
-          questions.push(...saved);
-          continue;
-        }
-      }
-      const candidateCount = qualityCandidateCount(
-        dto.questionCount,
-        selectedRows.length,
-      );
-      row.status = AiGenerationChunkStatus.PROCESSING;
-      row.attempts += 1;
-      row.lastError = null;
-      await this.chunks.save(row);
-      await this.updateProgress(job, {
-        stage: AiGenerationJobStage.GENERATING_CANDIDATES,
-        generationTotalChunks: selectedRows.length,
-        generationProcessedChunks: completed,
-      });
-      try {
-        const completion = await this.client.completeJson(
-          provider,
-          qualityCandidateSystemPrompt(),
-          qualityCandidateUserPrompt(
-            dto,
-            chunkFromRow(row),
-            analysis,
-            blueprint,
-            candidateCount,
-            distribution,
-          ),
-          {
-            source: 'quiz_generation',
-            referenceId: job.id,
-            userId: job.teacherId,
-          },
-          qualityQuestionsOutputSchema(dto.questionTypes, candidateCount),
-        );
-        const candidates = requireQualityQuestions(
-          completion.value,
           candidateCount,
           dto.questionTypes,
           blueprint,
           undefined,
           row.text,
         );
-        row.status = AiGenerationChunkStatus.COMPLETED;
-        row.candidateQuestions = candidates;
-        row.inputTokens = completion.inputTokens;
-        row.outputTokens = completion.outputTokens;
-        row.lastError = null;
-        await this.chunks.save(row);
-        questions.push(...candidates);
-        completed += 1;
-        await this.updateProgress(job, {
-          stage: AiGenerationJobStage.GENERATING_CANDIDATES,
-          generationTotalChunks: selectedRows.length,
-          generationProcessedChunks: completed,
-        });
-      } catch (error) {
-        row.status = AiGenerationChunkStatus.FAILED;
-        row.lastError = safeError(error);
-        await this.chunks.save(row);
-        throw error;
+        if (saved) {
+          questionsByChunk.set(row.chunkIndex, saved);
+        }
       }
     }
+    let completed = questionsByChunk.size;
+    await this.updateProgress(job, {
+      stage: AiGenerationJobStage.GENERATING_CANDIDATES,
+      generationTotalChunks: selectedRows.length,
+      generationProcessedChunks: completed,
+    });
+    const reportProgress = serializedProgress(async (processed) =>
+      this.updateProgress(job, {
+        stage: AiGenerationJobStage.GENERATING_CANDIDATES,
+        generationTotalChunks: selectedRows.length,
+        generationProcessedChunks: processed,
+      }),
+    );
+    const pendingRows = selectedRows.filter(
+      (row) => !questionsByChunk.has(row.chunkIndex),
+    );
+    await mapWithConcurrency(
+      pendingRows,
+      this.candidateConcurrency(),
+      async (row) => {
+        await this.checkpointPause(job.id);
+        const analysis = analysisByChunk.get(row.chunkIndex)!;
+        row.status = AiGenerationChunkStatus.PROCESSING;
+        row.attempts += 1;
+        row.lastError = null;
+        await this.chunks.save(row);
+        try {
+          const completion = await this.completeCanonicalJson({
+            provider,
+            system: qualityCandidateSystemPrompt(),
+            prompt: qualityCandidateUserPrompt(
+              dto,
+              chunkFromRow(row),
+              analysis,
+              blueprint,
+              candidateCount,
+              distribution,
+            ),
+            usageContext: {
+              source: 'quiz_generation',
+              referenceId: job.id,
+              userId: job.teacherId,
+            },
+            schema: qualityQuestionsOutputSchema(
+              dto.questionTypes,
+              candidateCount,
+            ),
+            parse: (value) =>
+              requireQualityQuestions(
+                value,
+                candidateCount,
+                dto.questionTypes,
+                blueprint,
+                undefined,
+                row.text,
+              ),
+          });
+          const candidates = completion.value;
+          row.status = AiGenerationChunkStatus.COMPLETED;
+          row.candidateQuestions = candidates;
+          row.inputTokens = completion.inputTokens;
+          row.outputTokens = completion.outputTokens;
+          row.lastError = null;
+          await this.chunks.save(row);
+          questionsByChunk.set(row.chunkIndex, candidates);
+          completed += 1;
+          await reportProgress(completed);
+          await this.checkpointPause(job.id);
+          return candidates;
+        } catch (error) {
+          if (error instanceof AiGenerationPausedError) throw error;
+          row.status = AiGenerationChunkStatus.FAILED;
+          row.lastError = safeError(error);
+          await this.chunks.save(row);
+          throw error;
+        }
+      },
+    );
+    const questions = selectedRows.flatMap(
+      (row) => questionsByChunk.get(row.chunkIndex) ?? [],
+    );
     return {
       questions,
       inputTokens: selectedRows.reduce(
@@ -732,29 +1090,137 @@ export class AiQuizGenerationService {
       generationTotalChunks: job.generationTotalChunks,
       generationProcessedChunks: job.generationTotalChunks ?? 0,
     });
-    const completion = await this.client.completeJson(
+    const completion = await this.completeCanonicalJson({
       provider,
-      qualityReviewSystemPrompt(),
-      qualityReviewUserPrompt(dto, blueprint, candidates, distribution),
-      {
+      system: qualityReviewSystemPrompt(),
+      prompt: qualityReviewUserPrompt(dto, blueprint, candidates, distribution),
+      usageContext: {
         source: 'quiz_generation',
         referenceId: job.id,
         userId: job.teacherId,
       },
-      qualityQuestionsOutputSchema(dto.questionTypes, dto.questionCount),
-    );
-    return {
-      questions: requireQualityQuestions(
-        completion.value,
-        dto.questionCount,
+      schema: qualityQuestionsOutputSchema(
         dto.questionTypes,
-        blueprint,
-        distribution,
-        pages.map((page) => page.text).join('\n'),
+        dto.questionCount,
       ),
+      parse: (value) =>
+        requireQualityQuestions(
+          value,
+          dto.questionCount,
+          dto.questionTypes,
+          blueprint,
+          distribution,
+          pages.map((page) => page.text).join('\n'),
+        ),
+    });
+    return {
+      questions: completion.value,
       inputTokens: completion.inputTokens,
       outputTokens: completion.outputTokens,
     };
+  }
+
+  /**
+   * Gọi provider rồi validate bằng canonical schema nghiệp vụ. Khi JSON hỏng
+   * hoặc vi phạm nghiệp vụ, cho đúng MỘT lần repair kèm danh sách lỗi theo
+   * field; repair vẫn thất bại thì ném lỗi không-retry với đầy đủ issues.
+   * Không lặp repair vô hạn, không dùng retry request thông thường cho loại
+   * lỗi nội dung này.
+   */
+  private async completeCanonicalJson<T>(args: {
+    provider: AiProviderEntity;
+    system: string;
+    prompt: string;
+    usageContext: AiUsageContext;
+    schema: Record<string, unknown>;
+    parse: (value: unknown) => T;
+  }): Promise<{ value: T; inputTokens: number; outputTokens: number }> {
+    const first = await this.tryCompleteParse<T>(args, args.prompt);
+    if (first.ok) return first;
+    this.logger.warn(
+      `AI output không hợp lệ, repair 1 lần: provider=${args.provider.name} model=${args.provider.model} referenceId=${args.usageContext.referenceId ?? 'none'} issues=${first.issues.join(' | ').slice(0, 1500)}`,
+    );
+    const second = await this.tryCompleteParse<T>(
+      args,
+      repairPrompt(args.prompt, first.issues),
+    );
+    if (second.ok)
+      return {
+        value: second.value,
+        inputTokens: first.inputTokens + second.inputTokens,
+        outputTokens: first.outputTokens + second.outputTokens,
+      };
+    throw new AiRequestError(
+      `AI trả kết quả không hợp lệ sau 1 lần sửa: ${second.issues.join('; ').slice(0, 1500)}`,
+      {
+        category: 'canonical_validation_error',
+        retryable: false,
+        provider: args.provider.name,
+        model: args.provider.model,
+        validationIssues: second.issues,
+      },
+    );
+  }
+
+  private async tryCompleteParse<T>(
+    args: {
+      provider: AiProviderEntity;
+      system: string;
+      usageContext: AiUsageContext;
+      schema: Record<string, unknown>;
+      parse: (value: unknown) => T;
+    },
+    prompt: string,
+  ): Promise<
+    | { ok: true; value: T; inputTokens: number; outputTokens: number }
+    | { ok: false; issues: string[]; inputTokens: number; outputTokens: number }
+  > {
+    let completion: Awaited<ReturnType<AiModelClientService['completeJson']>>;
+    try {
+      completion = await this.client.completeJson(
+        args.provider,
+        args.system,
+        prompt,
+        args.usageContext,
+        args.schema,
+      );
+    } catch (error) {
+      // JSON hỏng/bị cắt là lỗi nội dung — đủ điều kiện repair; các lỗi
+      // provider khác (HTTP, timeout, refusal) ném tiếp cho retry policy.
+      if (
+        error instanceof AiRequestError &&
+        error.details.category === 'invalid_json_output'
+      )
+        return {
+          ok: false,
+          issues: [error.message],
+          inputTokens: 0,
+          outputTokens: 0,
+        };
+      throw error;
+    }
+    try {
+      return {
+        ok: true,
+        value: args.parse(completion.value),
+        inputTokens: completion.inputTokens,
+        outputTokens: completion.outputTokens,
+      };
+    } catch (error) {
+      if (
+        error instanceof AiRequestError &&
+        error.details.category === 'canonical_validation_error'
+      )
+        return {
+          ok: false,
+          issues: error.details.validationIssues.length
+            ? error.details.validationIssues
+            : [error.message],
+          inputTokens: completion.inputTokens,
+          outputTokens: completion.outputTokens,
+        };
+      throw error;
+    }
   }
 
   private toResponse(
@@ -763,6 +1229,8 @@ export class AiQuizGenerationService {
   ): AiGenerationJob {
     return {
       id: job.id,
+      sourceType:
+        job.requestPayload.sourceType === 'upload' ? 'upload' : 'prompt',
       status: job.status,
       stage: job.stage ?? stageFromStatus(job.status),
       documentTotalPages: job.documentTotalPages ?? null,
@@ -778,6 +1246,10 @@ export class AiQuizGenerationService {
       inputTokens: job.inputTokens,
       outputTokens: job.outputTokens,
       errorMessage: job.errorMessage,
+      extractionReport: job.extractionReport ?? null,
+      sourceFileName: job.sourceOriginalName ?? null,
+      sourceFileSize: job.sourceSize ?? null,
+      sourceFileSha256: job.sourceSha256 ?? null,
       createdAt: job.createdAt.toISOString(),
       completedAt: job.completedAt?.toISOString() ?? null,
     };
@@ -900,6 +1372,7 @@ function pageEntityToMaterialPage(
     confidence: page.confidence,
     visionInputTokens: page.visionInputTokens,
     visionOutputTokens: page.visionOutputTokens,
+    failureCategory: page.failureCategory ?? null,
   };
 }
 
@@ -1115,73 +1588,123 @@ function stageFromStatus(status: AiGenerationJobStatus): AiGenerationJobStage {
   return AiGenerationJobStage.QUEUED;
 }
 
+function isTerminalGenerationStatus(status: AiGenerationJobStatus): boolean {
+  return (
+    status === AiGenerationJobStatus.SUCCEEDED ||
+    status === AiGenerationJobStatus.FAILED ||
+    status === AiGenerationJobStatus.CANCELLED
+  );
+}
+
+function readGenerationResult(
+  value: Record<string, unknown> | null | undefined,
+  dto: GenerateQuizWithAiDto,
+): GenerationResultCheckpoint | null {
+  if (!value) return null;
+  const inputTokens = Number(value.inputTokens);
+  const outputTokens = Number(value.outputTokens);
+  if (
+    !Number.isInteger(inputTokens) ||
+    inputTokens < 0 ||
+    !Number.isInteger(outputTokens) ||
+    outputTokens < 0
+  )
+    return null;
+  try {
+    return {
+      questions: validateGeneratedQuestions(
+        { questions: value.questions },
+        dto.questionCount,
+        dto.questionTypes,
+      ),
+      inputTokens,
+      outputTokens,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function validateGeneratedQuestions(
   value: unknown,
   expected: number,
   allowed?: SharedQuestionType[],
 ): GeneratedQuestion[] {
+  const issues: string[] = [];
   const questions = (value as { questions?: unknown })?.questions;
-  if (!Array.isArray(questions) || questions.length !== expected)
-    throw new BadGatewayException(
-      `Provider AI phải trả đúng ${expected} câu hỏi`,
+  if (!Array.isArray(questions))
+    throw canonicalValidationError('Bộ câu hỏi AI không hợp lệ', [
+      'questions: thiếu hoặc không phải mảng',
+    ]);
+  if (questions.length !== expected)
+    issues.push(
+      `questions: cần đúng ${expected} câu hỏi, nhận được ${questions.length}`,
     );
   const allowedTypes = new Set(
     allowed?.length
       ? allowed
       : ['single_choice', 'true_false', 'multiple_choice'],
   );
-  return questions.map((raw, index) => {
-    const row = raw as Partial<GeneratedQuestion>;
-    const options = row.options;
-    if (
-      !row ||
-      typeof row.content !== 'string' ||
-      row.content.trim().length < 2 ||
-      !allowedTypes.has(row.type as SharedQuestionType)
-    )
-      throw new BadGatewayException(
-        `Câu ${index + 1} có nội dung hoặc loại không hợp lệ`,
-      );
-    if (
-      !Array.isArray(options) ||
-      options.length < 2 ||
-      options.some(
-        (option) =>
-          typeof option?.content !== 'string' ||
-          typeof option?.isCorrect !== 'boolean' ||
-          DISALLOWED_OPTION.test(option.content),
+  const parsed: GeneratedQuestion[] = [];
+  questions.forEach((raw, index) => {
+    const path = `questions[${index}]`;
+    try {
+      const row = raw as Partial<GeneratedQuestion>;
+      const options = row.options;
+      if (
+        !row ||
+        typeof row.content !== 'string' ||
+        row.content.trim().length < 2 ||
+        !allowedTypes.has(row.type as SharedQuestionType)
       )
-    )
-      throw new BadGatewayException(
-        `Câu ${index + 1} phải có ít nhất 2 lựa chọn hợp lệ`,
-      );
-    const correct = options.filter((option) => option.isCorrect).length;
-    const optionKeys = options.map((option) => normalized(option.content));
-    if (new Set(optionKeys).size !== optionKeys.length)
-      throw new BadGatewayException(`Câu ${index + 1} có lựa chọn bị trùng`);
-    if (
-      (row.type === 'single_choice' &&
-        (options.length !== 4 || correct !== 1)) ||
-      (row.type === 'true_false' && (options.length !== 2 || correct !== 1)) ||
-      (row.type === 'multiple_choice' &&
-        (options.length < 4 ||
-          options.length > 6 ||
-          correct < 2 ||
-          correct >= options.length))
-    )
-      throw new BadGatewayException(
-        `Câu ${index + 1} có số lựa chọn hoặc đáp án đúng không hợp lệ`,
-      );
-    return {
-      type: row.type!,
-      content: row.content.trim().slice(0, 5000),
-      explanation: row.explanation?.trim().slice(0, 5000),
-      options: options.map((option) => ({
-        content: option.content.trim().slice(0, 1000),
-        isCorrect: option.isCorrect,
-      })),
-    };
+        throw new Error(`${path}: nội dung hoặc loại câu hỏi không hợp lệ`);
+      if (
+        !Array.isArray(options) ||
+        options.length < 2 ||
+        options.some(
+          (option) =>
+            typeof option?.content !== 'string' ||
+            typeof option?.isCorrect !== 'boolean' ||
+            DISALLOWED_OPTION.test(option.content),
+        )
+      )
+        throw new Error(
+          `${path}.options: yêu cầu tối thiểu 2 lựa chọn {content,isCorrect}, không dùng all/none of the above`,
+        );
+      const correct = options.filter((option) => option.isCorrect).length;
+      const optionKeys = options.map((option) => normalized(option.content));
+      if (new Set(optionKeys).size !== optionKeys.length)
+        throw new Error(`${path}.options: có lựa chọn bị trùng nội dung`);
+      if (
+        (row.type === 'single_choice' &&
+          (options.length !== 4 || correct !== 1)) ||
+        (row.type === 'true_false' &&
+          (options.length !== 2 || correct !== 1)) ||
+        (row.type === 'multiple_choice' &&
+          (options.length < 4 ||
+            options.length > 6 ||
+            correct < 2 ||
+            correct >= options.length))
+      )
+        throw new Error(
+          `${path}.options: số lựa chọn hoặc đáp án đúng không hợp lệ cho ${row.type} (nhận ${options.length} lựa chọn, ${correct} đáp án đúng)`,
+        );
+      parsed.push({
+        type: row.type!,
+        content: row.content.trim().slice(0, 5000),
+        explanation: row.explanation?.trim().slice(0, 5000),
+        options: options.map((option) => ({
+          content: option.content.trim().slice(0, 1000),
+          isCorrect: option.isCorrect,
+        })),
+      });
+    } catch (error) {
+      issues.push(issueMessage(error));
+    }
   });
+  if (issues.length)
+    throw canonicalValidationError('Bộ câu hỏi AI không hợp lệ', issues);
+  return parsed;
 }
 
 function chunkFromRow(row: AiGenerationChunkEntity): DocumentChunk {
@@ -1197,12 +1720,15 @@ function requireChunkAnalysis(
   value: unknown,
   row: AiGenerationChunkEntity,
 ): QuizChunkAnalysis {
-  const parsed = validateChunkAnalysis(value, row);
-  if (!parsed)
-    throw new BadGatewayException(
+  try {
+    return parseChunkAnalysis(value, row);
+  } catch (error) {
+    const issue = issueMessage(error);
+    throw canonicalValidationError(
       `AI phân tích phần ${row.chunkIndex + 1} không hợp lệ`,
+      [issue],
     );
-  return parsed;
+  }
 }
 
 function validateChunkAnalysis(
@@ -1210,14 +1736,30 @@ function validateChunkAnalysis(
   row: AiGenerationChunkEntity,
 ): QuizChunkAnalysis | null {
   try {
-    const record = objectValue(value);
-    const chunkIndex = integerValue(
-      record.chunkIndex,
-      0,
-      Number.MAX_SAFE_INTEGER,
+    return parseChunkAnalysis(value, row);
+  } catch {
+    return null;
+  }
+}
+
+function parseChunkAnalysis(
+  value: unknown,
+  row: AiGenerationChunkEntity,
+): QuizChunkAnalysis {
+  const record = objectValue(value, 'kết quả phân tích');
+  const chunkIndex = integerValue(
+    record.chunkIndex,
+    0,
+    Number.MAX_SAFE_INTEGER,
+    'chunkIndex',
+  );
+  if (chunkIndex !== row.chunkIndex)
+    throw new Error(
+      `chunkIndex: phải là ${row.chunkIndex}, nhận được ${chunkIndex}`,
     );
-    if (chunkIndex !== row.chunkIndex) throw new Error('Sai chunkIndex');
-    const sectionType = enumValue(record.sectionType, [
+  const sectionType = enumValue(
+    record.sectionType,
+    [
       'core_content',
       'exercise',
       'front_matter',
@@ -1226,57 +1768,75 @@ function validateChunkAnalysis(
       'answer_key',
       'appendix',
       'other',
-    ] as const);
-    const relevanceScore = integerValue(record.relevanceScore, 0, 100);
-    const summary = requiredText(record.summary, 1, 2000);
-    const excludedReason = textValue(record.excludedReason).slice(0, 1000);
-    if (!Array.isArray(record.keyPoints) || record.keyPoints.length > 8)
-      throw new Error('keyPoints không hợp lệ');
-    const keyPoints = record.keyPoints.map((raw) => {
-      const point = objectValue(raw);
-      const evidence = requiredText(point.evidence, 2, 800);
-      const sourcePages = integerArray(point.sourcePages, 1);
-      if (
-        sourcePages.some(
-          (page) =>
-            (row.startPage !== null && page < row.startPage) ||
-            (row.endPage !== null && page > row.endPage),
-        )
+    ] as const,
+    'sectionType',
+  );
+  const relevanceScore = integerValue(
+    record.relevanceScore,
+    0,
+    100,
+    'relevanceScore',
+  );
+  const summary = requiredText(record.summary, 1, 2000, 'summary');
+  const excludedReason = textValue(record.excludedReason).slice(0, 1000);
+  if (!Array.isArray(record.keyPoints) || record.keyPoints.length > 8)
+    throw new Error('keyPoints: phải là mảng tối đa 8 phần tử');
+  const keyPoints = record.keyPoints.map((raw, index) => {
+    const path = `keyPoints[${index}]`;
+    const point = objectValue(raw, path);
+    const evidence = requiredText(point.evidence, 2, 800, `${path}.evidence`);
+    const sourcePages = integerArray(
+      point.sourcePages,
+      1,
+      `${path}.sourcePages`,
+    );
+    if (
+      sourcePages.some(
+        (page) =>
+          (row.startPage !== null && page < row.startPage) ||
+          (row.endPage !== null && page > row.endPage),
       )
-        throw new Error('Trang evidence nằm ngoài chunk');
-      return {
-        title: requiredText(point.title, 2, 300),
-        description: requiredText(point.description, 2, 1200),
-        importance: integerValue(point.importance, 1, 5),
-        cognitiveLevels: enumArray(point.cognitiveLevels, [
-          'remember',
-          'understand',
-          'apply',
-        ] as const),
-        evidence,
-        sourcePages,
-      };
-    });
-    const excludedSection = [
-      'front_matter',
-      'table_of_contents',
-      'copyright',
-      'answer_key',
-    ].includes(sectionType);
+    )
+      throw new Error(
+        `${path}.sourcePages: trang evidence nằm ngoài phạm vi chunk (${row.startPage ?? '?'}-${row.endPage ?? '?'})`,
+      );
     return {
-      chunkIndex,
-      sectionType,
-      relevanceScore: excludedSection ? Math.min(10, relevanceScore) : relevanceScore,
-      summary,
-      keyPoints: excludedSection ? [] : keyPoints,
-      excludedReason:
-        excludedSection && !excludedReason
-          ? 'Nội dung phụ không dùng để đánh giá kiến thức trọng tâm'
-          : excludedReason,
+      title: requiredText(point.title, 2, 300, `${path}.title`),
+      description: requiredText(
+        point.description,
+        2,
+        1200,
+        `${path}.description`,
+      ),
+      importance: integerValue(point.importance, 1, 5, `${path}.importance`),
+      cognitiveLevels: enumArray(
+        point.cognitiveLevels,
+        ['remember', 'understand', 'apply'] as const,
+        `${path}.cognitiveLevels`,
+      ),
+      evidence,
+      sourcePages,
     };
-  } catch {
-    return null;
-  }
+  });
+  const excludedSection = [
+    'front_matter',
+    'table_of_contents',
+    'copyright',
+    'answer_key',
+  ].includes(sectionType);
+  return {
+    chunkIndex,
+    sectionType,
+    relevanceScore: excludedSection
+      ? Math.min(10, relevanceScore)
+      : relevanceScore,
+    summary,
+    keyPoints: excludedSection ? [] : keyPoints,
+    excludedReason:
+      excludedSection && !excludedReason
+        ? 'Nội dung phụ không dùng để đánh giá kiến thức trọng tâm'
+        : excludedReason,
+  };
 }
 
 function readStoredBlueprint(
@@ -1289,15 +1849,21 @@ function readStoredBlueprint(
   outputTokens: number;
 } | null {
   try {
-    const stored = objectValue(value);
+    const stored = objectValue(value, 'quizBlueprint');
     const blueprint = requireQuizBlueprint(stored.blueprint, analyses, topic);
     return {
       blueprint,
-      inputTokens: integerValue(stored.inputTokens, 0, Number.MAX_SAFE_INTEGER),
+      inputTokens: integerValue(
+        stored.inputTokens,
+        0,
+        Number.MAX_SAFE_INTEGER,
+        'quizBlueprint.inputTokens',
+      ),
       outputTokens: integerValue(
         stored.outputTokens,
         0,
         Number.MAX_SAFE_INTEGER,
+        'quizBlueprint.outputTokens',
       ),
     };
   } catch {
@@ -1311,15 +1877,19 @@ function requireQuizBlueprint(
   topic: string,
 ): QuizBlueprint {
   try {
-    const record = objectValue(value);
-    const documentKind = enumValue(record.documentKind, [
-      'english_reading',
-      'english_grammar',
-      'english_mixed',
-      'general_subject',
-    ] as const);
+    const record = objectValue(value, 'blueprint');
+    const documentKind = enumValue(
+      record.documentKind,
+      [
+        'english_reading',
+        'english_grammar',
+        'english_mixed',
+        'general_subject',
+      ] as const,
+      'documentKind',
+    );
     if (!Array.isArray(record.objectives) || !record.objectives.length)
-      throw new Error('Thiếu objectives');
+      throw new Error('objectives: thiếu hoặc không phải mảng có phần tử');
     const validChunkIndexes = new Set(
       analyses
         .filter(
@@ -1332,13 +1902,19 @@ function requireQuizBlueprint(
     const ids = new Set<string>();
     const objectives = record.objectives
       .slice(0, 8)
-      .map((raw) => {
-        const objective = objectValue(raw);
-        const id = requiredText(objective.id, 1, 40);
-        if (ids.has(id)) throw new Error('Objective ID bị trùng');
+      .map((raw, index) => {
+        const path = `objectives[${index}]`;
+        const objective = objectValue(raw, path);
+        const id = requiredText(objective.id, 1, 40, `${path}.id`);
+        if (ids.has(id)) throw new Error(`${path}.id: bị trùng "${id}"`);
         ids.add(id);
-        const title = requiredText(objective.title, 2, 300);
-        const description = requiredText(objective.description, 2, 1200);
+        const title = requiredText(objective.title, 2, 300, `${path}.title`);
+        const description = requiredText(
+          objective.description,
+          2,
+          1200,
+          `${path}.description`,
+        );
         if (
           !allowMetadata &&
           isLowValueMetadataQuestion(`${title} ${description}`)
@@ -1347,37 +1923,58 @@ function requireQuizBlueprint(
         const sourceChunkIndexes = integerArray(
           objective.sourceChunkIndexes,
           0,
+          `${path}.sourceChunkIndexes`,
         ).filter((chunkIndex) => validChunkIndexes.has(chunkIndex));
         if (!sourceChunkIndexes.length) return null;
         return {
           id,
           title,
           description,
-          weight: integerValue(objective.weight, 1, 100),
+          weight: integerValue(objective.weight, 1, 100, `${path}.weight`),
           sourceChunkIndexes,
-          sourcePages: integerArray(objective.sourcePages, 1),
-          preferredCategories: enumArray(objective.preferredCategories, [
-            'reading_comprehension',
-            'vocabulary_in_context',
-            'grammar',
-            'core_concept',
-            'application',
-          ] as const),
+          sourcePages: integerArray(
+            objective.sourcePages,
+            1,
+            `${path}.sourcePages`,
+          ),
+          preferredCategories: enumArray(
+            objective.preferredCategories,
+            [
+              'reading_comprehension',
+              'vocabulary_in_context',
+              'grammar',
+              'core_concept',
+              'application',
+            ] as const,
+            `${path}.preferredCategories`,
+          ),
         };
       })
       .filter((objective): objective is QuizBlueprint['objectives'][number] =>
         Boolean(objective),
       );
     if (!objectives.length)
-      throw new Error('Blueprint không có mục tiêu trọng tâm');
+      throw new Error(
+        'objectives: không còn mục tiêu trọng tâm hợp lệ (mỗi objective cần sourceChunkIndexes thuộc chunk có kiến thức và không dựa vào metadata)',
+      );
     normalizeWeights(objectives);
     return {
       documentKind,
-      language: requiredText(record.language, 1, 100),
-      overview: requiredText(record.overview, 2, 3000),
-      targetAudience: requiredText(record.targetAudience, 1, 300),
+      language: requiredText(record.language, 1, 100, 'language'),
+      overview: requiredText(record.overview, 2, 3000, 'overview'),
+      targetAudience: requiredText(
+        record.targetAudience,
+        1,
+        300,
+        'targetAudience',
+      ),
       objectives,
-      excludedContent: stringArray(record.excludedContent, 20, 500),
+      excludedContent: stringArray(
+        record.excludedContent,
+        20,
+        500,
+        'excludedContent',
+      ),
       readingEvidenceRequired:
         documentKind === 'english_reading' || documentKind === 'english_mixed'
           ? true
@@ -1388,9 +1985,11 @@ function requireQuizBlueprint(
           : Boolean(record.grammarRuleExplanationRequired),
     };
   } catch (error) {
-    throw new BadGatewayException(
-      `AI lập kế hoạch quiz không hợp lệ: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    if (error instanceof AiRequestError) throw error;
+    const issue = issueMessage(error);
+    throw canonicalValidationError('AI lập kế hoạch quiz không hợp lệ', [
+      issue,
+    ]);
   }
 }
 
@@ -1402,19 +2001,22 @@ function requireQualityQuestions(
   distribution?: CognitiveDistribution,
   sourceText?: string,
 ): QualityQuestion[] {
-  const questions = validateQualityQuestions(
+  const issues: string[] = [];
+  const parsed = parseQualityQuestions(
     value,
     expected,
     allowed,
     blueprint,
     distribution,
     sourceText,
+    issues,
   );
-  if (!questions)
-    throw new BadGatewayException(
+  if (!parsed || issues.length)
+    throw canonicalValidationError(
       'Bộ câu hỏi AI không đạt rubric về trọng tâm, bằng chứng hoặc đáp án',
+      issues,
     );
-  return questions;
+  return parsed;
 }
 
 function validateQualityQuestions(
@@ -1425,123 +2027,223 @@ function validateQualityQuestions(
   distribution?: CognitiveDistribution,
   sourceText?: string,
 ): QualityQuestion[] | null {
+  const issues: string[] = [];
+  const parsed = parseQualityQuestions(
+    value,
+    expected,
+    allowed,
+    blueprint,
+    distribution,
+    sourceText,
+    issues,
+  );
+  return !parsed || issues.length ? null : parsed;
+}
+
+/**
+ * Parse + validate bộ câu hỏi theo canonical schema nghiệp vụ. Mỗi lỗi được
+ * ghi vào `issues` kèm đường dẫn field (questions[2].options...) thay vì chỉ
+ * trả "không hợp lệ" — đây là dữ liệu cho log, error_details và prompt repair.
+ */
+function parseQualityQuestions(
+  value: unknown,
+  expected: number,
+  allowed: SharedQuestionType[] | undefined,
+  blueprint: QuizBlueprint,
+  distribution: CognitiveDistribution | undefined,
+  sourceText: string | undefined,
+  issues: string[],
+): QualityQuestion[] | null {
+  let questions: unknown;
   try {
-    const questions = objectValue(value).questions;
-    if (!Array.isArray(questions) || questions.length !== expected)
-      throw new Error('Sai số lượng câu hỏi');
-    const allowedTypes = new Set(
+    questions = objectValue(value, 'kết quả').questions;
+  } catch (error) {
+    issues.push(issueMessage(error));
+    return null;
+  }
+  if (!Array.isArray(questions)) {
+    issues.push('questions: thiếu hoặc không phải mảng');
+    return null;
+  }
+  if (questions.length !== expected)
+    issues.push(
+      `questions: cần đúng ${expected} câu hỏi, nhận được ${questions.length}`,
+    );
+  const context = {
+    allowedTypes: new Set(
       allowed?.length
         ? allowed
         : ['single_choice', 'true_false', 'multiple_choice'],
-    );
-    const objectiveById = new Map(
+    ),
+    objectiveById: new Map(
       blueprint.objectives.map((objective) => [objective.id, objective]),
-    );
-    const seen = new Set<string>();
-    const parsed = questions.map((raw) => {
-      const question = objectValue(raw);
-      const type = enumValue(question.type, [
-        'single_choice',
-        'true_false',
-        'multiple_choice',
-      ] as const);
-      if (!allowedTypes.has(type)) throw new Error('Loại câu không được phép');
-      const content = requiredText(question.content, 2, 5000);
-      const key = normalized(content);
-      if (!key || seen.has(key)) throw new Error('Câu hỏi bị trùng');
-      seen.add(key);
-      const objectiveId = requiredText(question.objectiveId, 1, 40);
-      const objective = objectiveById.get(objectiveId);
-      if (!objective) throw new Error('Objective không tồn tại');
-      if (
-        isLowValueMetadataQuestion(content) &&
-        !isLowValueMetadataQuestion(
-          `${objective.title} ${objective.description}`,
-        )
-      )
-        throw new Error('Câu hỏi dùng metadata không trọng tâm');
-      const cognitiveLevel = enumValue(question.cognitiveLevel, [
-        'remember',
-        'understand',
-        'apply',
-      ] as const);
-      const category = enumValue(question.category, [
-        'reading_comprehension',
-        'vocabulary_in_context',
-        'grammar',
-        'core_concept',
-        'application',
-      ] as const);
-      const explanation = requiredText(
-        question.explanation,
-        category === 'grammar' ? 40 : 15,
-        5000,
-      );
-      if (!Array.isArray(question.options)) throw new Error('Thiếu lựa chọn');
-      const options = question.options.map((rawOption) => {
-        const option = objectValue(rawOption);
-        const optionContent = requiredText(option.content, 1, 1000);
-        if (DISALLOWED_OPTION.test(optionContent))
-          throw new Error('Lựa chọn all/none of the above');
-        return {
-          content: optionContent,
-          isCorrect: booleanValue(option.isCorrect),
-        };
-      });
-      const optionKeys = options.map((option) => normalized(option.content));
-      if (new Set(optionKeys).size !== optionKeys.length)
-        throw new Error('Lựa chọn bị trùng');
-      const correct = options.filter((option) => option.isCorrect).length;
-      if (type === 'single_choice' && (options.length !== 4 || correct !== 1))
-        throw new Error('single_choice không đúng chuẩn 4/1');
-      if (type === 'true_false' && (options.length !== 2 || correct !== 1))
-        throw new Error('true_false không đúng chuẩn 2/1');
-      if (
-        type === 'multiple_choice' &&
-        (options.length < 4 ||
-          options.length > 6 ||
-          correct < 2 ||
-          correct >= options.length)
-      )
-        throw new Error('multiple_choice không có distractor hợp lệ');
-      const sourcePages = integerArray(question.sourcePages, 1, true);
-      if (sourcePages.some((page) => !objective.sourcePages.includes(page)))
-        throw new Error('Trang nguồn không thuộc objective');
-      const sourceEvidence = textValue(question.sourceEvidence).slice(0, 800);
-      if (
-        blueprint.readingEvidenceRequired &&
-        ['reading_comprehension', 'vocabulary_in_context'].includes(category)
-      ) {
-        if (!sourcePages.length || sourceEvidence.length < 5)
-          throw new Error('Câu reading thiếu nguồn');
-        if (sourceText && !containsNormalized(sourceText, sourceEvidence))
-          throw new Error('Nguồn reading không có trong tài liệu');
-      }
-      return {
-        type,
-        content,
-        explanation,
-        options,
-        objectiveId,
-        cognitiveLevel,
-        category,
-        sourcePages,
-        sourceEvidence,
-      };
-    });
-    if (distribution) {
-      for (const level of ['remember', 'understand', 'apply'] as const) {
-        if (
-          parsed.filter((question) => question.cognitiveLevel === level)
-            .length !== distribution[level]
-        )
-          throw new Error('Sai phân bố tư duy');
-      }
+    ),
+    seen: new Set<string>(),
+    blueprint,
+    sourceText,
+  };
+  const parsed: QualityQuestion[] = [];
+  questions.forEach((raw, index) => {
+    try {
+      parsed.push(parseQualityQuestion(raw, `questions[${index}]`, context));
+    } catch (error) {
+      issues.push(issueMessage(error));
     }
-    return parsed;
-  } catch {
-    return null;
+  });
+  if (distribution && !issues.length) {
+    for (const level of ['remember', 'understand', 'apply'] as const) {
+      const actual = parsed.filter(
+        (question) => question.cognitiveLevel === level,
+      ).length;
+      if (actual !== distribution[level])
+        issues.push(
+          `questions: cần ${distribution[level]} câu mức "${level}", nhận được ${actual}`,
+        );
+    }
   }
+  return parsed;
+}
+
+function parseQualityQuestion(
+  raw: unknown,
+  path: string,
+  context: {
+    allowedTypes: Set<string>;
+    objectiveById: Map<string, QuizBlueprint['objectives'][number]>;
+    seen: Set<string>;
+    blueprint: QuizBlueprint;
+    sourceText?: string;
+  },
+): QualityQuestion {
+  const question = objectValue(raw, path);
+  const type = enumValue(
+    question.type,
+    ['single_choice', 'true_false', 'multiple_choice'] as const,
+    `${path}.type`,
+  );
+  if (!context.allowedTypes.has(type))
+    throw new Error(`${path}.type: loại "${type}" không được phép`);
+  const content = requiredText(question.content, 2, 5000, `${path}.content`);
+  const key = normalized(content);
+  if (!key || context.seen.has(key))
+    throw new Error(`${path}.content: câu hỏi bị trùng với câu khác`);
+  context.seen.add(key);
+  const objectiveId = requiredText(
+    question.objectiveId,
+    1,
+    40,
+    `${path}.objectiveId`,
+  );
+  const objective = context.objectiveById.get(objectiveId);
+  if (!objective)
+    throw new Error(
+      `${path}.objectiveId: "${objectiveId}" không tồn tại trong blueprint`,
+    );
+  if (
+    isLowValueMetadataQuestion(content) &&
+    !isLowValueMetadataQuestion(`${objective.title} ${objective.description}`)
+  )
+    throw new Error(`${path}.content: hỏi metadata xuất bản không trọng tâm`);
+  const cognitiveLevel = enumValue(
+    question.cognitiveLevel,
+    ['remember', 'understand', 'apply'] as const,
+    `${path}.cognitiveLevel`,
+  );
+  const category = enumValue(
+    question.category,
+    [
+      'reading_comprehension',
+      'vocabulary_in_context',
+      'grammar',
+      'core_concept',
+      'application',
+    ] as const,
+    `${path}.category`,
+  );
+  const explanation = requiredText(
+    question.explanation,
+    category === 'grammar' ? 40 : 15,
+    5000,
+    `${path}.explanation`,
+  );
+  if (!Array.isArray(question.options))
+    throw new Error(`${path}.options: thiếu mảng lựa chọn`);
+  const options = question.options.map((rawOption, optionIndex) => {
+    const optionPath = `${path}.options[${optionIndex}]`;
+    const option = objectValue(rawOption, optionPath);
+    const optionContent = requiredText(
+      option.content,
+      1,
+      1000,
+      `${optionPath}.content`,
+    );
+    if (DISALLOWED_OPTION.test(optionContent))
+      throw new Error(`${optionPath}: không dùng all/none of the above`);
+    return {
+      content: optionContent,
+      isCorrect: booleanValue(option.isCorrect, `${optionPath}.isCorrect`),
+    };
+  });
+  const optionKeys = options.map((option) => normalized(option.content));
+  if (new Set(optionKeys).size !== optionKeys.length)
+    throw new Error(`${path}.options: có lựa chọn bị trùng nội dung`);
+  const correct = options.filter((option) => option.isCorrect).length;
+  if (type === 'single_choice' && (options.length !== 4 || correct !== 1))
+    throw new Error(
+      `${path}.options: single_choice yêu cầu đúng 4 lựa chọn và 1 đáp án đúng (nhận ${options.length} lựa chọn, ${correct} đáp án đúng)`,
+    );
+  if (type === 'true_false' && (options.length !== 2 || correct !== 1))
+    throw new Error(
+      `${path}.options: true_false yêu cầu đúng 2 lựa chọn và 1 đáp án đúng (nhận ${options.length} lựa chọn, ${correct} đáp án đúng)`,
+    );
+  if (
+    type === 'multiple_choice' &&
+    (options.length < 4 ||
+      options.length > 6 ||
+      correct < 2 ||
+      correct >= options.length)
+  )
+    throw new Error(
+      `${path}.options: multiple_choice yêu cầu 4-6 lựa chọn, tối thiểu 2 đáp án đúng và tối thiểu 1 distractor (nhận ${options.length} lựa chọn, ${correct} đáp án đúng)`,
+    );
+  const sourcePages = integerArray(
+    question.sourcePages,
+    1,
+    `${path}.sourcePages`,
+    true,
+  );
+  if (sourcePages.some((page) => !objective.sourcePages.includes(page)))
+    throw new Error(
+      `${path}.sourcePages: trang nguồn không thuộc objective "${objectiveId}"`,
+    );
+  const sourceEvidence = textValue(question.sourceEvidence).slice(0, 800);
+  if (
+    context.blueprint.readingEvidenceRequired &&
+    ['reading_comprehension', 'vocabulary_in_context'].includes(category)
+  ) {
+    if (!sourcePages.length || sourceEvidence.length < 5)
+      throw new Error(
+        `${path}.sourceEvidence: câu ${category} bắt buộc có sourcePages và sourceEvidence nguyên văn`,
+      );
+    if (
+      context.sourceText &&
+      !containsNormalized(context.sourceText, sourceEvidence)
+    )
+      throw new Error(
+        `${path}.sourceEvidence: trích dẫn không có trong tài liệu nguồn`,
+      );
+  }
+  return {
+    type,
+    content,
+    explanation,
+    options,
+    objectiveId,
+    cognitiveLevel,
+    category,
+    sourcePages,
+    sourceEvidence,
+  };
 }
 
 function qualityQuestionForQuiz(
@@ -1601,9 +2303,9 @@ export function isLowValueMetadataQuestion(value: string): boolean {
   return LOW_VALUE_METADATA.test(value);
 }
 
-function objectValue(value: unknown): Record<string, unknown> {
+function objectValue(value: unknown, path: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
-    throw new Error('Dữ liệu không phải object');
+    throw new Error(`${path}: phải là JSON object`);
   return value as Record<string, unknown>;
 }
 
@@ -1611,9 +2313,11 @@ function requiredText(
   value: unknown,
   minimum: number,
   maximum: number,
+  path: string,
 ): string {
   const text = textValue(value).trim();
-  if (text.length < minimum) throw new Error('Chuỗi quá ngắn');
+  if (text.length < minimum)
+    throw new Error(`${path}: chuỗi phải có tối thiểu ${minimum} ký tự`);
   return text.slice(0, maximum);
 }
 
@@ -1621,8 +2325,9 @@ function textValue(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
-function booleanValue(value: unknown): boolean {
-  if (typeof value !== 'boolean') throw new Error('Không phải boolean');
+function booleanValue(value: unknown, path: string): boolean {
+  if (typeof value !== 'boolean')
+    throw new Error(`${path}: phải là boolean true/false`);
   return value;
 }
 
@@ -1630,22 +2335,28 @@ function integerValue(
   value: unknown,
   minimum: number,
   maximum: number,
+  path: string,
 ): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum)
-    throw new Error('Số nguyên không hợp lệ');
+    throw new Error(
+      `${path}: phải là số nguyên từ ${minimum} đến ${maximum === Number.MAX_SAFE_INTEGER ? '∞' : maximum}`,
+    );
   return parsed;
 }
 
 function integerArray(
   value: unknown,
   minimum: number,
+  path: string,
   allowEmpty = false,
 ): number[] {
   if (!Array.isArray(value) || (!allowEmpty && value.length < 1))
-    throw new Error('Mảng số không hợp lệ');
+    throw new Error(
+      `${path}: phải là mảng số nguyên${allowEmpty ? '' : ' có tối thiểu 1 phần tử'}`,
+    );
   const parsed = value.map((item) =>
-    integerValue(item, minimum, Number.MAX_SAFE_INTEGER),
+    integerValue(item, minimum, Number.MAX_SAFE_INTEGER, path),
   );
   return [...new Set(parsed)];
 }
@@ -1654,29 +2365,36 @@ function stringArray(
   value: unknown,
   maximumItems: number,
   maximumLength: number,
+  path: string,
 ): string[] {
-  if (!Array.isArray(value)) throw new Error('Mảng chuỗi không hợp lệ');
+  if (!Array.isArray(value)) throw new Error(`${path}: phải là mảng chuỗi`);
   return value
     .slice(0, maximumItems)
-    .map((item) => requiredText(item, 1, maximumLength));
+    .map((item, index) =>
+      requiredText(item, 1, maximumLength, `${path}[${index}]`),
+    );
 }
 
 function enumValue<const T extends readonly string[]>(
   value: unknown,
   allowed: T,
+  path: string,
 ): T[number] {
   if (typeof value !== 'string' || !allowed.includes(value))
-    throw new Error('Enum không hợp lệ');
+    throw new Error(
+      `${path}: phải là một trong [${allowed.join(', ')}], nhận được "${String(value).slice(0, 60)}"`,
+    );
   return value;
 }
 
 function enumArray<const T extends readonly string[]>(
   value: unknown,
   allowed: T,
+  path: string,
 ): T[number][] {
   if (!Array.isArray(value) || !value.length)
-    throw new Error('Mảng enum không hợp lệ');
-  return [...new Set(value.map((item) => enumValue(item, allowed)))];
+    throw new Error(`${path}: phải là mảng có tối thiểu 1 phần tử`);
+  return [...new Set(value.map((item) => enumValue(item, allowed, path)))];
 }
 
 function normalized(value: string): string {
@@ -1698,4 +2416,75 @@ function safeError(error: unknown): string {
     0,
     2000,
   );
+}
+
+/**
+ * Xếp hàng các lần ghi progress để response DB hoàn thành lệch thứ tự không
+ * thể làm số đã xử lý bị lùi trong khi nhiều chunk kết thúc song song.
+ */
+function serializedProgress(
+  update: (completed: number) => Promise<void>,
+): (completed: number) => Promise<void> {
+  let tail = Promise.resolve();
+  return async (completed) => {
+    const current = tail.then(() => update(completed));
+    tail = current.catch(() => undefined);
+    await current;
+  };
+}
+
+function issueMessage(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error)).slice(0, 500);
+}
+
+/** Lỗi validation canonical: không retry, mang danh sách issues theo field. */
+function canonicalValidationError(
+  prefix: string,
+  issues: string[],
+): AiRequestError {
+  return new AiRequestError(
+    `${prefix}: ${issues.join('; ').slice(0, 1500) || 'dữ liệu không đúng schema'}`,
+    {
+      category: 'canonical_validation_error',
+      retryable: false,
+      validationIssues: issues,
+    },
+  );
+}
+
+/** Prompt repair MỘT lần: giữ nguyên yêu cầu gốc + danh sách lỗi theo field. */
+function repairPrompt(prompt: string, issues: string[]): string {
+  const list = issues
+    .slice(0, 20)
+    .map((issue) => `- ${issue.slice(0, 300)}`)
+    .join('\n');
+  return `${prompt}\n\nLần trả lời trước KHÔNG HỢP LỆ với các lỗi sau:\n${list}\nHãy tạo lại và trả về MỘT JSON hợp lệ đúng schema, khắc phục toàn bộ lỗi trên, không thêm bất kỳ nội dung nào ngoài JSON.`;
+}
+
+/** Gom lỗi bất kỳ thành cấu trúc chẩn đoán lưu vào ai_generation_jobs. */
+function generationErrorDetails(
+  error: unknown,
+  stage: string,
+  provider: AiProviderEntity | null,
+): AiGenerationErrorDetails {
+  const message = safeError(error);
+  if (error instanceof AiRequestError)
+    return {
+      stage,
+      message,
+      ...error.details,
+      provider: error.details.provider ?? provider?.name ?? null,
+      model: error.details.model ?? provider?.model ?? null,
+    };
+  return {
+    stage,
+    message,
+    category: 'request_failed',
+    retryable: !isNonRetryableAiError(error),
+    provider: provider?.name ?? null,
+    model: provider?.model ?? null,
+    statusCode: null,
+    providerMessage: null,
+    validationIssues: [],
+  };
 }

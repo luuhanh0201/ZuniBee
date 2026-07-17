@@ -1,6 +1,9 @@
 import {
   AiMaterialSourceService,
+  buildPdfPageBatches,
+  distributeInteger,
   isUsableOcr,
+  isUsableTextLayer,
   parseTesseractTsv,
 } from './ai-material-source.service';
 
@@ -63,5 +66,51 @@ describe('AiMaterialSourceService', () => {
     expect(parsed.confidence).toBe(90);
     expect(isUsableOcr(parsed)).toBe(true);
     expect(isUsableOcr({ text: parsed.text, confidence: 20 })).toBe(false);
+  });
+
+  it('uses safe page concurrency defaults and caps env overrides', () => {
+    const configured = new AiMaterialSourceService(
+      {} as never,
+      {
+        get: jest.fn().mockReturnValue(99),
+      } as never,
+    );
+    const empty = new AiMaterialSourceService(
+      {} as never,
+      {
+        get: jest.fn().mockReturnValue(''),
+      } as never,
+    );
+    expect(configured['pageConcurrency']()).toBe(4);
+    expect(empty['pageConcurrency']()).toBe(1);
+  });
+
+  it('groups only consecutive PDF pages and respects the batch cap', () => {
+    expect(buildPdfPageBatches([7, 1, 2, 3, 5, 6, 8, 9], 3)).toEqual([
+      [1, 2, 3],
+      [5, 6, 7],
+      [8, 9],
+    ]);
+  });
+
+  it('distributes PDF usage tokens without losing or double-counting', () => {
+    const values = distributeInteger(10, 3);
+    expect(values).toEqual([4, 3, 3]);
+    expect(values.reduce((total, value) => total + value, 0)).toBe(10);
+  });
+
+  it('rejects noisy text layers instead of treating symbols as source text', () => {
+    expect(isUsableTextLayer('%%% --- ___ ### '.repeat(10))).toBe(false);
+    expect(
+      isUsableTextLayer(
+        'Unit 1. Students learn vocabulary and grammar in context. '.repeat(3),
+      ),
+    ).toBe(true);
+  });
+
+  it('defaults to native PDF with local Tesseract disabled', () => {
+    expect(service['nativePdfEnabled']()).toBe(true);
+    expect(service['localOcrEnabled']()).toBe(false);
+    expect(service['pdfBatchPages']()).toBe(3);
   });
 });

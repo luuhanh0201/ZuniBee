@@ -5,11 +5,13 @@ import {
   Index,
   PrimaryColumn,
 } from 'typeorm';
+import type { AiGenerationPageFailureCategory } from '@zunibee/shared';
 
 export enum AiDocumentPageExtractionMethod {
   DIRECT_TEXT = 'direct_text',
   TEXT_LAYER = 'text_layer',
   LOCAL_OCR = 'local_ocr',
+  AI_PDF = 'ai_pdf',
   AI_VISION = 'ai_vision',
 }
 
@@ -30,6 +32,13 @@ export class AiGenerationDocumentPageEntity {
   visionInputTokens!: number;
   @Column({ name: 'vision_output_tokens', type: 'integer', default: 0 })
   visionOutputTokens!: number;
+  @Column({
+    name: 'failure_category',
+    type: 'varchar',
+    length: 30,
+    nullable: true,
+  })
+  failureCategory!: AiGenerationPageFailureCategory | null;
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

@@ -510,7 +510,12 @@ export function AdminAiConsole() {
   }
 
   async function toggleProvider(provider: AiProvider) {
-    if ((provider.isDefault || provider.isVisionDefault) && provider.isActive) {
+    if (
+      (provider.isDefault ||
+        provider.isVisionDefault ||
+        provider.isAnalysisDefault) &&
+      provider.isActive
+    ) {
       setNotice({
         tone: "error",
         message: "Provider đang được giao nhiệm vụ AI phải luôn được bật.",
@@ -579,8 +584,33 @@ export function AdminAiConsole() {
     }
   }
 
+  async function setAnalysisProvider(providerId: string) {
+    if (!accessToken || actionId) return;
+    setActionId(providerId);
+    try {
+      await adminUpdateAiProvider(
+        providerId,
+        { isAnalysisDefault: true, isActive: true },
+        accessToken,
+      );
+      setNotice({
+        tone: "success",
+        message: "Đã chọn provider phân tích nội dung tài liệu.",
+      });
+      await loadData();
+    } catch (cause) {
+      setNotice({ tone: "error", message: getErrorMessage(cause) });
+    } finally {
+      setActionId(null);
+    }
+  }
+
   async function deleteProvider(provider: AiProvider) {
-    if (provider.isDefault || provider.isVisionDefault) {
+    if (
+      provider.isDefault ||
+      provider.isVisionDefault ||
+      provider.isAnalysisDefault
+    ) {
       setNotice({
         tone: "error",
         message: "Hãy chuyển các nhiệm vụ AI sang provider khác trước khi xóa.",
@@ -796,6 +826,9 @@ export function AdminAiConsole() {
                   onToggle={() => void toggleProvider(provider)}
                   onQuizDefault={() => void setQuizProvider(provider.id)}
                   onVisionDefault={() => void setVisionProvider(provider.id)}
+                  onAnalysisDefault={() =>
+                    void setAnalysisProvider(provider.id)
+                  }
                   onDelete={() => void deleteProvider(provider)}
                   onTest={() => void testConnection(provider.id)}
                   checking={checkingIds.has(provider.id)}
@@ -870,6 +903,7 @@ function ProviderCard({
   onToggle,
   onQuizDefault,
   onVisionDefault,
+  onAnalysisDefault,
   onDelete,
   onTest,
   checking,
@@ -880,6 +914,7 @@ function ProviderCard({
   onToggle: () => void;
   onQuizDefault: () => void;
   onVisionDefault: () => void;
+  onAnalysisDefault: () => void;
   onDelete: () => void;
   onTest: () => void;
   checking: boolean;
@@ -899,7 +934,9 @@ function ProviderCard({
     <article
       className={`relative rounded-2xl border border-divider p-5 shadow-sm transition-[border-color,box-shadow] duration-200 hover:border-primary/20 hover:shadow-md ${provider.isActive ? "bg-surface" : "bg-surface-soft"}`}
     >
-      {provider.isDefault || provider.isVisionDefault ? (
+      {provider.isDefault ||
+      provider.isVisionDefault ||
+      provider.isAnalysisDefault ? (
         <div className="absolute -right-2 -top-3 flex flex-wrap justify-end gap-1.5 pl-4">
           {provider.isDefault ? (
             <span className="inline-flex items-center gap-1 rounded-full border border-divider bg-warning-soft px-3 py-1 text-xs font-semibold text-foreground shadow-sm">
@@ -911,6 +948,12 @@ function ProviderCard({
             <span className="inline-flex items-center gap-1 rounded-full border border-divider bg-secondary-soft px-3 py-1 text-xs font-semibold text-foreground shadow-sm">
               <Brain className="h-3.5 w-3.5" aria-hidden="true" />
               Đọc ảnh/OCR
+            </span>
+          ) : null}
+          {provider.isAnalysisDefault ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-divider bg-surface-soft px-3 py-1 text-xs font-semibold text-foreground shadow-sm">
+              <Gauge className="h-3.5 w-3.5" aria-hidden="true" />
+              Phân tích
             </span>
           ) : null}
         </div>
@@ -1044,6 +1087,17 @@ function ProviderCard({
           >
             <Brain className="h-4 w-4" aria-hidden="true" />
             Dùng đọc ảnh
+          </button>
+        ) : null}
+        {!provider.isAnalysisDefault ? (
+          <button
+            type="button"
+            disabled={busy || checking}
+            onClick={onAnalysisDefault}
+            className={`inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-surface-soft px-3 text-sm font-extrabold transition-colors hover:bg-primary ${buttonFocus}`}
+          >
+            <Gauge className="h-4 w-4" aria-hidden="true" />
+            Dùng phân tích
           </button>
         ) : null}
         <button

@@ -78,4 +78,29 @@ export class AiController {
   ) {
     return this.generation.get(id, user.id);
   }
+  @Post('quiz-generations/:id/pause')
+  @HttpCode(200)
+  pauseGenerationJob(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.generation.pause(id, user.id);
+  }
+  @Post('quiz-generations/:id/resume')
+  @HttpCode(202)
+  @ExpensiveOperationRateLimit()
+  resumeGenerationJob(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.generation.resume(id, user.id);
+  }
+  @Post('quiz-generations/:id/cancel')
+  @HttpCode(200)
+  cancelGenerationJob(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.generation.cancel(id, user.id);
+  }
 }
