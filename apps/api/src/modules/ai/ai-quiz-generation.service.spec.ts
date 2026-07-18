@@ -250,6 +250,31 @@ describe('AiQuizGenerationService pause and resume', () => {
     expect(value.storage.delete).not.toHaveBeenCalled();
   });
 
+  it('stops a queued job immediately without waiting for a worker checkpoint', async () => {
+    const value = context(AiGenerationJobStatus.PENDING);
+
+    const response = await value.service.pause(JOB_ID, 'teacher-id');
+
+    expect(response.status).toBe(AiGenerationJobStatus.PAUSED);
+    expect(value.queue.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('aborts the active provider signal after a pause is observed in the database', async () => {
+    jest.useFakeTimers();
+    try {
+      const value = context(AiGenerationJobStatus.RUNNING);
+      const watcher = value.service['watchPause'](JOB_ID);
+
+      value.job.status = AiGenerationJobStatus.PAUSE_REQUESTED;
+      await jest.advanceTimersByTimeAsync(750);
+
+      expect(watcher.signal.aborted).toBe(true);
+      watcher.close();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('turns a queued pause request into a stable paused checkpoint', async () => {
     const value = context(AiGenerationJobStatus.PAUSE_REQUESTED);
 

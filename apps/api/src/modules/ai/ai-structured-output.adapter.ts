@@ -1,7 +1,5 @@
-import {
-  AiProviderKind,
-  type AiProviderEntity,
-} from './entities/ai-provider.entity';
+import type { AiProviderEntity } from './entities/ai-provider.entity';
+import { AiProviderDriver, providerDriverFor } from './ai-provider-driver';
 
 export type AiJsonSchema = Record<string, unknown>;
 
@@ -65,7 +63,7 @@ export function resolveStructuredOutput(
       // nguyên canonical schema; các provider HTTP strict sẽ trả 400 với
       // keyword ngoài tập hỗ trợ nên phải biên dịch.
       schema:
-        provider.kind === AiProviderKind.OLLAMA
+        providerDriverFor(provider) === AiProviderDriver.OLLAMA
           ? canonicalSchema
           : compileStrictSchema(canonicalSchema),
       promptInstruction: null,
@@ -80,17 +78,17 @@ export function resolveStructuredOutput(
 export function resolveStructuredOutputMode(
   provider: AiProviderEntity,
 ): AiStructuredOutputMode {
-  if (provider.kind === AiProviderKind.OLLAMA) return 'strict_schema';
-  const hostname = new URL(provider.baseUrl).hostname.toLowerCase();
+  const driver = providerDriverFor(provider);
+  if (driver === AiProviderDriver.OLLAMA) return 'strict_schema';
   const model = provider.model.toLowerCase();
   if (
-    hostname === 'api.anthropic.com' ||
-    hostname === 'api.openai.com' ||
-    hostname === 'generativelanguage.googleapis.com' ||
-    hostname === 'openrouter.ai'
+    driver === AiProviderDriver.ANTHROPIC ||
+    driver === AiProviderDriver.OPENAI ||
+    driver === AiProviderDriver.GEMINI ||
+    driver === AiProviderDriver.OPENROUTER
   )
     return 'strict_schema';
-  if (hostname === 'api.groq.com')
+  if (driver === AiProviderDriver.GROQ)
     return model.startsWith('openai/gpt-oss-')
       ? 'strict_schema'
       : 'json_object';
@@ -106,14 +104,13 @@ export function resolveStructuredOutputMode(
  * Ollama vẫn dùng fallback ảnh.
  */
 export function supportsPdfNativeInput(provider: AiProviderEntity): boolean {
-  if (provider.kind === AiProviderKind.OLLAMA) return false;
-  const hostname = new URL(provider.baseUrl).hostname.toLowerCase();
+  const driver = providerDriverFor(provider);
   return (
-    hostname === 'api.anthropic.com' ||
-    hostname === 'api.openai.com' ||
-    (hostname === 'generativelanguage.googleapis.com' &&
+    driver === AiProviderDriver.ANTHROPIC ||
+    driver === AiProviderDriver.OPENAI ||
+    (driver === AiProviderDriver.GEMINI &&
       provider.model.toLowerCase().startsWith('gemini-')) ||
-    hostname === 'openrouter.ai'
+    driver === AiProviderDriver.OPENROUTER
   );
 }
 

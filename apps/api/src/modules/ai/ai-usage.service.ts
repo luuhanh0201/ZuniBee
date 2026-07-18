@@ -33,6 +33,11 @@ export type RecordAiUsageInput = {
   inputTokens: number;
   outputTokens: number;
   cacheInputTokens?: number;
+  cacheWriteTokens?: number;
+  reasoningTokens?: number;
+  /** Giá provider trả trực tiếp; hiện OpenRouter hỗ trợ. */
+  providerCostUsd?: number | null;
+  providerRequestId?: string | null;
   status?: AiUsageStatus;
   latencyMs?: number | null;
   httpStatus?: number | null;
@@ -91,7 +96,13 @@ type UsageEventGroupRawRow = {
   input_tokens: string;
   output_tokens: string;
   cache_input_tokens: string;
+  cache_write_tokens?: string;
+  reasoning_tokens?: string;
   cost_usd: string | null;
+  provider_cost_usd?: string | null;
+  cost_source?:
+    'provider_response' | 'rate_card_estimate' | 'local' | 'unavailable';
+  provider_request_id?: string | null;
   latency_ms: string | null;
   http_status: string | null;
   finish_reason: string | null;
@@ -119,12 +130,22 @@ export class AiUsageService {
   async record(input: RecordAiUsageInput): Promise<void> {
     const inputTokens = safeInteger(input.inputTokens);
     const outputTokens = safeInteger(input.outputTokens);
-    const costUsd = calculateUsageCostUsd(
+    const estimatedCostUsd = calculateUsageCostUsd(
       inputTokens,
       outputTokens,
       input.provider.inputUsdPer1m,
       input.provider.outputUsdPer1m,
     );
+    const providerCostUsd = validCost(input.providerCostUsd);
+    const costUsd = providerCostUsd ?? estimatedCostUsd;
+    const costSource =
+      providerCostUsd !== null
+        ? 'provider_response'
+        : estimatedCostUsd !== null
+          ? 'rate_card_estimate'
+          : input.provider.driver === 'ollama'
+            ? 'local'
+            : 'unavailable';
     await this.events.save(
       this.events.create({
         providerId: input.provider.id,
@@ -137,9 +158,14 @@ export class AiUsageService {
         inputTokens,
         outputTokens,
         cacheInputTokens: safeInteger(input.cacheInputTokens ?? 0),
+        cacheWriteTokens: safeInteger(input.cacheWriteTokens ?? 0),
+        reasoningTokens: safeInteger(input.reasoningTokens ?? 0),
         inputUsdPer1m: input.provider.inputUsdPer1m,
         outputUsdPer1m: input.provider.outputUsdPer1m,
         costUsd,
+        providerCostUsd,
+        costSource,
+        providerRequestId: truncate(input.providerRequestId, 250),
         latencyMs:
           input.latencyMs == null ? null : safeInteger(input.latencyMs),
         httpStatus: input.httpStatus ?? null,
@@ -338,7 +364,12 @@ export class AiUsageService {
       { header: 'Input token', key: 'input', width: 16 },
       { header: 'Output token', key: 'output', width: 16 },
       { header: 'Cache token', key: 'cache', width: 16 },
+      { header: 'Cache write token', key: 'cacheWrite', width: 18 },
+      { header: 'Reasoning token', key: 'reasoning', width: 18 },
       { header: 'Chi phí USD', key: 'cost', width: 16 },
+      { header: 'Chi phí provider USD', key: 'providerCost', width: 21 },
+      { header: 'Nguồn chi phí', key: 'costSource', width: 20 },
+      { header: 'Provider request ID', key: 'providerRequestId', width: 28 },
       { header: 'Độ trễ ms', key: 'latency', width: 16 },
       { header: 'HTTP', key: 'http', width: 10 },
       { header: 'Lỗi', key: 'error', width: 55 },
@@ -357,7 +388,12 @@ export class AiUsageService {
         input: event.inputTokens,
         output: event.outputTokens,
         cache: event.cacheInputTokens,
+        cacheWrite: event.cacheWriteTokens,
+        reasoning: event.reasoningTokens,
         cost: event.costUsd ?? '',
+        providerCost: event.providerCostUsd ?? '',
+        costSource: event.costSource,
+        providerRequestId: event.providerRequestId ?? '',
         latency: event.latencyMs ?? '',
         http: event.httpStatus ?? '',
         error: event.errorMessage ?? '',
@@ -594,10 +630,18 @@ export class AiUsageService {
       .addSelect('SUM(event.input_tokens)', 'input_tokens')
       .addSelect('SUM(event.output_tokens)', 'output_tokens')
       .addSelect('SUM(event.cache_input_tokens)', 'cache_input_tokens')
+      .addSelect('SUM(event.cache_write_tokens)', 'cache_write_tokens')
+      .addSelect('SUM(event.reasoning_tokens)', 'reasoning_tokens')
       .addSelect(
         `CASE WHEN COUNT(*) FILTER (WHERE event.cost_usd IS NULL) > 0 THEN NULL ELSE SUM(event.cost_usd) END`,
         'cost_usd',
       )
+      .addSelect(
+        `CASE WHEN COUNT(*) FILTER (WHERE event.provider_cost_usd IS NULL) > 0 THEN NULL ELSE SUM(event.provider_cost_usd) END`,
+        'provider_cost_usd',
+      )
+      .addSelect('MAX(event.cost_source)', 'cost_source')
+      .addSelect('MAX(event.provider_request_id)', 'provider_request_id')
       .addSelect('AVG(event.latency_ms)', 'latency_ms')
       .addSelect('MAX(event.http_status)', 'http_status')
       .addSelect('MAX(event.finish_reason)', 'finish_reason')
@@ -775,7 +819,13 @@ function toUsageEvent(row: UsageEventGroupRawRow): AiUsageEvent {
     inputTokens: Number(row.input_tokens),
     outputTokens: Number(row.output_tokens),
     cacheInputTokens: Number(row.cache_input_tokens),
+    cacheWriteTokens: Number(row.cache_write_tokens ?? 0),
+    reasoningTokens: Number(row.reasoning_tokens ?? 0),
     costUsd: row.cost_usd === null ? null : Number(row.cost_usd),
+    providerCostUsd:
+      row.provider_cost_usd == null ? null : Number(row.provider_cost_usd),
+    costSource: row.cost_source ?? 'rate_card_estimate',
+    providerRequestId: row.provider_request_id ?? null,
     latencyMs: row.latency_ms === null ? null : Number(row.latency_ms),
     httpStatus: row.http_status === null ? null : Number(row.http_status),
     finishReason: row.finish_reason,
@@ -876,6 +926,12 @@ function styleWorksheet(sheet: ExcelJS.Worksheet): void {
 
 function safeInteger(value: number): number {
   return Math.max(0, Math.floor(Number.isFinite(value) ? value : 0));
+}
+
+function validCost(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value
+    : null;
 }
 
 function truncate(value: string | null | undefined, length: number) {

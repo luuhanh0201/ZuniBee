@@ -62,6 +62,8 @@ export type AiMaterialVisionContext = {
   onPageExtracted?: (page: AiMaterialPage) => Promise<void>;
   /** Điểm ngắt hợp tác; gọi trước request mới và sau khi lưu checkpoint. */
   checkpoint?: () => Promise<void>;
+  /** Abort signal của job để dừng request vision/PDF đang bay khi pause. */
+  signal?: AbortSignal;
 };
 
 export type AiMaterialExtractionProgress = {
@@ -452,6 +454,7 @@ export class AiMaterialSourceService {
           source: 'document_vision_ocr',
           referenceId: args.vision.referenceId,
           userId: args.vision.userId,
+          abortSignal: args.vision.signal,
         },
       );
       const inputTokens = distributeInteger(
@@ -501,6 +504,7 @@ export class AiMaterialSourceService {
           source: 'document_vision_ocr',
           referenceId: vision.referenceId,
           userId: vision.userId,
+          abortSignal: vision.signal,
         },
         pageNumber,
       );

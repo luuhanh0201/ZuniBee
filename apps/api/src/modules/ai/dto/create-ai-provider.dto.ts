@@ -13,6 +13,7 @@ import {
 } from 'class-validator';
 import type { CreateAiProviderRequest } from '@zunibee/shared';
 import { AiProviderKind } from '../entities/ai-provider.entity';
+import { AiProviderDriver } from '../ai-provider-driver';
 
 export class CreateAiProviderDto implements CreateAiProviderRequest {
   @IsString({ message: 'Tên provider phải là chuỗi' })
@@ -21,6 +22,9 @@ export class CreateAiProviderDto implements CreateAiProviderRequest {
   name!: string;
   @IsEnum(AiProviderKind, { message: 'Loại provider không hợp lệ' })
   kind!: AiProviderKind;
+  @IsOptional()
+  @IsEnum(AiProviderDriver, { message: 'Driver provider không hợp lệ' })
+  driver?: AiProviderDriver;
   @IsUrl(
     {
       require_tld: false,

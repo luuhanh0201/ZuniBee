@@ -24,12 +24,27 @@ import { AiGenerationJobEntity } from './entities/ai-generation-job.entity';
 import { QuizWeaknessInsightEntity } from './entities/quiz-weakness-insight.entity';
 import { AiSecretService } from './ai-secret.service';
 import { AiProviderUrlPolicyService } from './ai-provider-url-policy.service';
+import {
+  inferProviderDriver,
+  providerDriverFor,
+  type AiProviderDriver,
+} from './ai-provider-driver';
+import {
+  AiProviderSdkError,
+  AiProviderSdkService,
+} from './ai-provider-sdk.service';
 import { CreateAiProviderDto } from './dto/create-ai-provider.dto';
 import { UpdateAiProviderDto } from './dto/update-ai-provider.dto';
 import { DiscoverAiProviderModelsDto } from './dto/discover-ai-provider-models.dto';
 import { TestAiProviderConnectionDto } from './dto/test-ai-provider-connection.dto';
 
 type CountRow = { providerId: string; count: string };
+
+/** PNG 1×1 hợp lệ để probe đúng request vision mà không mang dữ liệu người dùng. */
+const VISION_PROBE_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL0NwAAAABJRU5ErkJggg==',
+  'base64',
+);
 
 @Injectable()
 export class AiProviderService {
@@ -45,6 +60,7 @@ export class AiProviderService {
     private readonly dataSource: DataSource,
     private readonly secrets: AiSecretService,
     private readonly urlPolicy: AiProviderUrlPolicyService,
+    private readonly sdk: AiProviderSdkService,
   ) {}
 
   async list(activeOnly = false): Promise<AiProvider[]> {
@@ -139,6 +155,8 @@ export class AiProviderService {
   }
 
   async create(dto: CreateAiProviderDto): Promise<AiProvider> {
+    const baseUrl = normalizeBaseUrl(dto.baseUrl);
+    const driver = dto.driver ?? inferProviderDriver(dto.kind, baseUrl);
     const row = await this.dataSource.transaction(async (manager) => {
       if (dto.isDefault)
         await manager.update(
@@ -160,7 +178,8 @@ export class AiProviderService {
         );
       const entity = manager.create(AiProviderEntity, {
         ...dto,
-        baseUrl: normalizeBaseUrl(dto.baseUrl),
+        baseUrl,
+        driver,
         encryptedApiKey: dto.apiKey ? this.secrets.encrypt(dto.apiKey) : null,
         isActive:
           dto.isDefault || dto.isVisionDefault || dto.isAnalysisDefault
@@ -222,13 +241,17 @@ export class AiProviderService {
         );
       const connectionChanged =
         dto.kind !== undefined ||
+        dto.driver !== undefined ||
         dto.baseUrl !== undefined ||
         dto.model !== undefined ||
         dto.apiKey !== undefined;
       if (dto.name !== undefined) current.name = dto.name;
       if (dto.kind !== undefined) current.kind = dto.kind;
+      if (dto.driver !== undefined) current.driver = dto.driver;
       if (dto.baseUrl !== undefined)
         current.baseUrl = normalizeBaseUrl(dto.baseUrl);
+      if (dto.baseUrl !== undefined && dto.driver === undefined)
+        current.driver = inferProviderDriver(current.kind, current.baseUrl);
       if (dto.model !== undefined) current.model = dto.model;
       if (dto.apiKey !== undefined)
         current.encryptedApiKey = dto.apiKey
@@ -280,9 +303,11 @@ export class AiProviderService {
       await this.urlPolicy.assertAllowed(row.kind, row.baseUrl);
       await this.probeConfiguration({
         kind: row.kind,
+        driver: providerDriverFor(row),
         baseUrl: row.baseUrl,
         model: row.model,
         apiKey: this.apiKey(row),
+        vision: row.isVisionDefault,
       });
       row.healthStatus = AiProviderHealthStatus.ONLINE;
       row.lastHealthLatencyMs = Date.now() - startedAt;
@@ -290,11 +315,11 @@ export class AiProviderService {
       row.lastHealthError = null;
       await this.repository.save(row);
       this.logger.log(
-        `Provider test succeeded: name=${row.name} model=${row.model} latency=${row.lastHealthLatencyMs}ms`,
+        `Provider inference probe succeeded: name=${row.name} model=${row.model} latency=${row.lastHealthLatencyMs}ms`,
       );
       return {
         ok: true,
-        message: `Kết nối thành công trong ${row.lastHealthLatencyMs} ms`,
+        message: `Inference thử nghiệm thành công trong ${row.lastHealthLatencyMs} ms`,
         provider: this.toResponse(row, await this.requestCount(row.id)),
       };
     } catch (error) {
@@ -305,7 +330,7 @@ export class AiProviderService {
       row.lastHealthError = message.slice(0, 500);
       await this.repository.save(row);
       this.logger.warn(
-        `Provider test failed: name=${row.name} model=${row.model} reason=${message}`,
+        `Provider inference probe failed: name=${row.name} model=${row.model} reason=${message}`,
       );
       return {
         ok: false,
@@ -324,23 +349,24 @@ export class AiProviderService {
       await this.urlPolicy.assertAllowed(dto.kind, baseUrl);
       await this.probeConfiguration({
         kind: dto.kind,
+        driver: dto.driver,
         baseUrl,
         model: dto.model.trim(),
         apiKey: dto.apiKey?.trim() || null,
       });
       const latencyMs = Date.now() - startedAt;
-      this.logger.log(
-        `Provider draft test succeeded: kind=${dto.kind} model=${dto.model} latency=${latencyMs}ms`,
+    this.logger.log(
+        `Provider draft inference probe succeeded: kind=${dto.kind} model=${dto.model} latency=${latencyMs}ms`,
       );
       return {
         ok: true,
-        message: `Kết nối thành công trong ${latencyMs} ms`,
+        message: `Inference thử nghiệm thành công trong ${latencyMs} ms`,
         latencyMs,
       };
     } catch (error) {
       const message = providerErrorMessage(error);
       this.logger.warn(
-        `Provider draft test failed: kind=${dto.kind} model=${dto.model} reason=${message}`,
+        `Provider draft inference probe failed: kind=${dto.kind} model=${dto.model} reason=${message}`,
       );
       return { ok: false, message, latencyMs: null };
     }
@@ -351,33 +377,13 @@ export class AiProviderService {
   ): Promise<DiscoverAiProviderModelsResponse> {
     const baseUrl = normalizeBaseUrl(dto.baseUrl);
     await this.urlPolicy.assertAllowed(dto.kind, baseUrl);
-    const isOllama = dto.kind === AiProviderKind.OLLAMA;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
     try {
-      const response = await fetch(
-        isOllama ? `${baseUrl}/api/tags` : `${baseUrl}/models`,
-        {
-          method: 'GET',
-          redirect: 'error',
-          signal: controller.signal,
-          headers: {
-            Accept: 'application/json',
-            ...providerAuthenticationHeaders(
-              dto.kind,
-              baseUrl,
-              dto.apiKey?.trim() || null,
-            ),
-          },
-        },
-      );
-      if (!response.ok) {
-        await response.body?.cancel();
-        throw new BadGatewayException(
-          `Provider trả HTTP ${response.status} khi tải model`,
-        );
-      }
-      const models = extractProviderModels(await response.json(), isOllama);
+      const models = await this.listProviderModels({
+        kind: dto.kind,
+        driver: dto.driver,
+        baseUrl,
+        apiKey: dto.apiKey?.trim() || null,
+      });
       if (!models.length)
         throw new BadGatewayException(
           'Provider không trả về model tương thích nào',
@@ -385,18 +391,14 @@ export class AiProviderService {
       this.logger.log(
         `Discovered provider models: kind=${dto.kind} count=${models.length}`,
       );
-      return { models };
+      return {
+        models: models
+          .map((model) => model.id)
+          .sort((left, right) => left.localeCompare(right)),
+      };
     } catch (error) {
       if (error instanceof BadGatewayException) throw error;
-      if (error instanceof Error && error.name === 'AbortError')
-        throw new BadGatewayException(
-          'Provider không phản hồi khi tải danh sách model',
-        );
-      throw new BadGatewayException(
-        'Không thể tải danh sách model từ provider',
-      );
-    } finally {
-      clearTimeout(timeout);
+      throw new BadGatewayException(providerErrorMessage(error));
     }
   }
 
@@ -407,6 +409,7 @@ export class AiProviderService {
     if (!row) throw new NotFoundException('Provider AI không tồn tại');
     return this.discoverModels({
       kind: row.kind,
+      driver: providerDriverFor(row),
       baseUrl: row.baseUrl,
       apiKey: this.apiKey(row) ?? undefined,
     });
@@ -421,51 +424,37 @@ export class AiProviderService {
   ): Promise<AiProviderPricingSuggestion> {
     const baseUrl = normalizeBaseUrl(dto.baseUrl);
     await this.urlPolicy.assertAllowed(dto.kind, baseUrl);
-    const hostname = new URL(baseUrl).hostname.toLowerCase();
     if (
       dto.kind === AiProviderKind.OLLAMA ||
-      (hostname !== 'openrouter.ai' && !hostname.endsWith('.openrouter.ai'))
+      (dto.driver ?? inferProviderDriver(dto.kind, baseUrl)) !== 'openrouter'
     ) {
       return { inputUsdPer1m: null, outputUsdPer1m: null, source: null };
     }
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
     try {
-      const response = await fetch(`${baseUrl}/models`, {
-        method: 'GET',
-        redirect: 'error',
-        signal: controller.signal,
-        headers: {
-          Accept: 'application/json',
-          ...(dto.apiKey?.trim()
-            ? { Authorization: `Bearer ${dto.apiKey.trim()}` }
-            : {}),
-        },
-      });
-      if (!response.ok) {
-        await response.body?.cancel();
-        throw new BadGatewayException(
-          `Provider trả HTTP ${response.status} khi tải bảng giá`,
-        );
-      }
-      const pricing = extractOpenRouterPricing(
-        await response.json(),
-        dto.model.trim(),
-      );
-      if (!pricing)
+      const model = (
+        await this.listProviderModels({
+          kind: dto.kind,
+          driver: dto.driver,
+          baseUrl,
+          apiKey: dto.apiKey?.trim() || null,
+        })
+      ).find((item) => item.id === dto.model.trim().replace(/^models\//, ''));
+      if (
+        !model ||
+        model.inputUsdPer1m === null ||
+        model.outputUsdPer1m === null
+      )
         throw new BadGatewayException(
           'Provider không công bố giá cho model đã chọn',
         );
-      return { ...pricing, source: 'openrouter' };
+      return {
+        inputUsdPer1m: model.inputUsdPer1m,
+        outputUsdPer1m: model.outputUsdPer1m,
+        source: 'openrouter',
+      };
     } catch (error) {
       if (error instanceof BadGatewayException) throw error;
-      if (error instanceof Error && error.name === 'AbortError')
-        throw new BadGatewayException(
-          'Provider không phản hồi khi tải bảng giá',
-        );
-      throw new BadGatewayException('Không thể tải bảng giá từ provider');
-    } finally {
-      clearTimeout(timeout);
+      throw new BadGatewayException(providerErrorMessage(error));
     }
   }
 
@@ -474,6 +463,7 @@ export class AiProviderService {
     if (!row) throw new NotFoundException('Provider AI không tồn tại');
     return this.discoverPricing({
       kind: row.kind,
+      driver: providerDriverFor(row),
       baseUrl: row.baseUrl,
       model: row.model,
       apiKey: this.apiKey(row) ?? undefined,
@@ -489,6 +479,7 @@ export class AiProviderService {
       id: row.id,
       name: row.name,
       kind: row.kind,
+      driver: providerDriverFor(row),
       baseUrl: row.baseUrl,
       model: row.model,
       isActive: row.isActive,
@@ -512,47 +503,73 @@ export class AiProviderService {
 
   private async probeConfiguration(configuration: {
     kind: AiProviderKind;
+    driver?: AiProviderDriver;
     baseUrl: string;
     model: string;
     apiKey: string | null;
+    /** Provider OCR phải nhận một ảnh thật để kiểm tra đúng modality. */
+    vision?: boolean;
   }): Promise<void> {
+    const models = await this.listProviderModels(configuration);
+    const model = configuration.model.trim().replace(/^models\//, '');
+    if (!models.some((item) => item.id === model))
+      throw new Error('Provider không có model đã chọn');
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20_000);
+    try {
+      const reply = await this.sdk.generate({
+        provider: {
+          kind: configuration.kind,
+          driver:
+            configuration.driver ??
+            inferProviderDriver(configuration.kind, configuration.baseUrl),
+          baseUrl: configuration.baseUrl,
+          model,
+        } as AiProviderEntity,
+        apiKey: configuration.apiKey,
+        system: 'Bạn là probe nội bộ để xác nhận provider AI đang hoạt động.',
+        prompt: 'Trả lời chính xác một từ: OK',
+        plan: { mode: 'prompt_json', schema: null, promptInstruction: null },
+        ...(configuration.vision
+          ? {
+              attachment: {
+                kind: 'image' as const,
+                data: VISION_PROBE_PNG,
+                mediaType: 'image/png' as const,
+              },
+            }
+          : {}),
+        maxOutputTokens: 32,
+        temperature: 0,
+        timeoutMs: 20_000,
+        signal: controller.signal,
+      });
+      if (reply.refused || reply.truncated || !reply.content?.trim())
+        throw new Error('Provider không hoàn tất inference thử nghiệm');
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private async listProviderModels(configuration: {
+    kind: AiProviderKind;
+    driver?: AiProviderDriver;
+    baseUrl: string;
+    apiKey: string | null;
+  }) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
     try {
-      const isOllama = configuration.kind === AiProviderKind.OLLAMA;
-      const response = await fetch(
-        isOllama
-          ? `${configuration.baseUrl}/api/show`
-          : `${configuration.baseUrl}/models`,
-        {
-          method: isOllama ? 'POST' : 'GET',
-          redirect: 'error',
-          signal: controller.signal,
-          headers: {
-            Accept: 'application/json',
-            ...(isOllama ? { 'Content-Type': 'application/json' } : {}),
-            ...providerAuthenticationHeaders(
-              configuration.kind,
-              configuration.baseUrl,
-              configuration.apiKey,
-            ),
-          },
-          body: isOllama
-            ? JSON.stringify({ model: configuration.model })
-            : undefined,
-        },
-      );
-      if (!response.ok) {
-        await response.body?.cancel();
-        throw new Error(`Provider trả HTTP ${response.status}`);
-      }
-      if (isOllama) {
-        await response.body?.cancel();
-        return;
-      }
-      const models = extractProviderModels(await response.json(), false);
-      if (!models.includes(configuration.model))
-        throw new Error('Provider không có model đã chọn');
+      return await this.sdk.listModels({
+        driver:
+          configuration.driver ??
+          inferProviderDriver(configuration.kind, configuration.baseUrl),
+        baseUrl: configuration.baseUrl,
+        apiKey: configuration.apiKey,
+        timeoutMs: 15_000,
+        signal: controller.signal,
+      });
     } finally {
       clearTimeout(timeout);
     }
@@ -603,6 +620,14 @@ function resetHealth(row: AiProviderEntity): void {
 function providerErrorMessage(error: unknown): string {
   if (error instanceof Error && error.name === 'AbortError')
     return 'Provider không phản hồi trong 15 giây';
+  if (error instanceof AiProviderSdkError) {
+    if (error.statusCode === 401)
+      return 'API key không hợp lệ, đã hết hạn hoặc không đúng loại (HTTP 401)';
+    if (error.statusCode) return `Provider trả HTTP ${error.statusCode}`;
+    if (/abort|timeout/i.test(error.message))
+      return 'Provider không phản hồi trong 15 giây';
+    return `Provider không xử lý inference: ${error.message.slice(0, 300)}`;
+  }
   if (error instanceof BadRequestException) return error.message;
   if (error instanceof Error && error.message === 'Provider trả HTTP 401')
     return 'API key không hợp lệ, đã hết hạn hoặc không đúng loại (HTTP 401)';
@@ -614,22 +639,6 @@ function providerErrorMessage(error: unknown): string {
   )
     return error.message;
   return 'Không thể kết nối tới provider hoặc model đã cấu hình';
-}
-
-function providerAuthenticationHeaders(
-  kind: AiProviderKind,
-  baseUrl: string,
-  apiKey: string | null,
-): Record<string, string> {
-  if (kind === AiProviderKind.OLLAMA || !apiKey) return {};
-  const hostname = new URL(baseUrl).hostname.toLowerCase();
-  if (hostname === 'api.anthropic.com') {
-    return {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    };
-  }
-  return { Authorization: `Bearer ${apiKey}` };
 }
 
 export function extractProviderModels(

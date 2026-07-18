@@ -1,4 +1,4 @@
-import type { AiProviderKind } from "@zunibee/shared";
+import type { AiProviderDriver, AiProviderKind } from "@zunibee/shared";
 
 export type AiProviderPresetId =
   | "openai"
@@ -23,6 +23,7 @@ export type AiProviderPreset = {
   id: AiProviderPresetId;
   label: string;
   kind: AiProviderKind;
+  driver: AiProviderDriver;
   baseUrl: string;
   suggestedModels: string[];
   /** Note sức mạnh hiển thị cạnh model; model discover động sẽ không có note. */
@@ -43,7 +44,8 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
     id: "google_gemini",
     label: "Google Gemini",
     kind: "openai_compatible",
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    driver: "gemini",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
     suggestedModels: [
       "gemini-3.5-flash",
       "gemini-3.1-pro-preview",
@@ -77,6 +79,7 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
     id: "openai",
     label: "OpenAI",
     kind: "openai_compatible",
+    driver: "openai",
     baseUrl: "https://api.openai.com/v1",
     suggestedModels: [
       "gpt-5.4-mini",
@@ -111,6 +114,7 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
     id: "anthropic",
     label: "Anthropic Claude",
     kind: "openai_compatible",
+    driver: "anthropic",
     // Backend nhận diện host này và gọi Messages API native của Anthropic.
     baseUrl: "https://api.anthropic.com/v1",
     suggestedModels: [
@@ -138,6 +142,7 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
     id: "deepseek",
     label: "DeepSeek",
     kind: "openai_compatible",
+    driver: "deepseek",
     baseUrl: "https://api.deepseek.com",
     suggestedModels: ["deepseek-v4-flash", "deepseek-v4-pro"],
     modelStrengths: {
@@ -154,6 +159,7 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
     id: "groq",
     label: "Groq",
     kind: "openai_compatible",
+    driver: "groq",
     baseUrl: "https://api.groq.com/openai/v1",
     suggestedModels: [
       "openai/gpt-oss-120b",
@@ -176,6 +182,7 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
     id: "openrouter",
     label: "OpenRouter",
     kind: "openai_compatible",
+    driver: "openrouter",
     baseUrl: "https://openrouter.ai/api/v1",
     suggestedModels: [
       "google/gemini-3.5-flash",
@@ -197,6 +204,7 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
     id: "ollama",
     label: "Ollama local",
     kind: "ollama",
+    driver: "ollama",
     baseUrl: "http://host.docker.internal:11434",
     suggestedModels: [],
     apiKeyRequired: false,
@@ -205,6 +213,7 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
     id: "custom",
     label: "OpenAI-compatible khác",
     kind: "openai_compatible",
+    driver: "openai_compatible",
     baseUrl: "https://",
     suggestedModels: [],
     apiKeyRequired: false,
@@ -236,6 +245,11 @@ export function inferProviderPreset(
   baseUrl: string,
 ): AiProviderPresetId {
   const normalized = baseUrl.replace(/\/+$/, "").toLowerCase();
+  if (
+    kind === "openai_compatible" &&
+    normalized === "https://generativelanguage.googleapis.com/v1beta/openai"
+  )
+    return "google_gemini";
   return (
     AI_PROVIDER_PRESETS.find(
       (preset) =>
@@ -250,6 +264,7 @@ const CUSTOM_PRESET: AiProviderPreset = {
   id: "custom",
   label: "OpenAI-compatible khác",
   kind: "openai_compatible",
+  driver: "openai_compatible",
   baseUrl: "https://",
   suggestedModels: [],
   apiKeyRequired: false,

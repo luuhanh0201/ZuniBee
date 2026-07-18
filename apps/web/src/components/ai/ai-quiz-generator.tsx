@@ -536,7 +536,7 @@ function GenerationProgressPanel({
       ? {
           title: "Đang dừng an toàn...",
           detail:
-            "Hệ thống đang chờ request AI hiện tại hoàn tất để lưu checkpoint, sau đó sẽ không gọi thêm request mới.",
+            "Hệ thống đang gửi tín hiệu dừng request AI và lưu checkpoint. Tác vụ sẽ chuyển sang trạng thái đã dừng ngay khi worker xác nhận.",
         }
       : activeCopy;
 

@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { createHash } from 'node:crypto';
 import type {
   AiGenerationJob,
@@ -101,6 +101,7 @@ const DEFAULT_ANALYSIS_CONCURRENCY = 2;
 const MAX_ANALYSIS_CONCURRENCY = 6;
 const DEFAULT_CANDIDATE_CONCURRENCY = 1;
 const MAX_CANDIDATE_CONCURRENCY = 4;
+const PAUSE_WATCH_INTERVAL_MS = 750;
 
 class AiGenerationPausedError extends Error {
   constructor() {
@@ -108,6 +109,11 @@ class AiGenerationPausedError extends Error {
     this.name = 'AiGenerationPausedError';
   }
 }
+
+type PauseWatcher = {
+  signal: AbortSignal;
+  close: () => void;
+};
 
 @Injectable()
 export class AiQuizGenerationService {
@@ -274,14 +280,31 @@ export class AiQuizGenerationService {
         'Quiz đang được lưu; vui lòng chờ tác vụ hoàn tất trong giây lát',
       );
 
+    // Job còn ở hàng đợi chưa thể có request AI đang bay, nên có thể dừng
+    // ngay. Cách này cũng xử lý worker chưa kịp nhận job, không để UI mắc ở
+    // "đang dừng" chỉ vì phải chờ một worker không làm gì.
+    if (job.status === AiGenerationJobStatus.PENDING) {
+      const paused = await this.jobs.update(
+        {
+          id: job.id,
+          teacherId,
+          status: AiGenerationJobStatus.PENDING,
+        },
+        {
+          status: AiGenerationJobStatus.PAUSED,
+          errorMessage: null,
+          completedAt: null,
+        },
+      );
+      if (paused.affected)
+        return this.responseFor(await this.ownedJob(jobId, teacherId));
+    }
+
     await this.jobs.update(
       {
         id: job.id,
         teacherId,
-        status: In([
-          AiGenerationJobStatus.PENDING,
-          AiGenerationJobStatus.RUNNING,
-        ]),
+        status: AiGenerationJobStatus.RUNNING,
       },
       {
         status: AiGenerationJobStatus.PAUSE_REQUESTED,
@@ -399,6 +422,8 @@ export class AiQuizGenerationService {
       await this.jobs.update(job.id, { quizId: null });
     }
 
+    const pauseWatcher = this.watchPause(job.id);
+    const processingJobId = job.id;
     let quizId: string | null = null;
     try {
       const savedResult = readGenerationResult(job.generationResult, dto);
@@ -407,7 +432,7 @@ export class AiQuizGenerationService {
       let totalOutputTokens = savedResult?.outputTokens ?? 0;
       if (!savedResult && sourceType === 'upload') {
         await this.checkpointPause(job.id);
-        const source = await this.extractStoredSource(job);
+        const source = await this.extractStoredSource(job, pauseWatcher.signal);
         await this.checkpointPause(job.id);
         const chunkRows = await this.prepareChunks(
           job,
@@ -420,6 +445,7 @@ export class AiQuizGenerationService {
           dto,
           await this.resolveAnalysisProvider(job, provider),
           chunkRows,
+          pauseWatcher.signal,
         );
         await this.checkpointPause(job.id);
         const planned = await this.prepareQuizBlueprint(
@@ -428,6 +454,7 @@ export class AiQuizGenerationService {
           provider,
           analyzed.analyses,
           distribution,
+          pauseWatcher.signal,
         );
         await this.checkpointPause(job.id);
         const generated = await this.generateChunkCandidates(
@@ -438,6 +465,7 @@ export class AiQuizGenerationService {
           analyzed.analyses,
           planned.blueprint,
           distribution,
+          pauseWatcher.signal,
         );
         await this.checkpointPause(job.id);
         const reviewed = await this.reviewQuestions(
@@ -448,6 +476,7 @@ export class AiQuizGenerationService {
           generated.questions,
           distribution,
           source.pages,
+          pauseWatcher.signal,
         );
         questions = reviewed.questions.map((question) =>
           qualityQuestionForQuiz(question, dto),
@@ -482,6 +511,8 @@ export class AiQuizGenerationService {
               dto.questionCount,
               dto.questionTypes,
             ),
+          signal: pauseWatcher.signal,
+          checkpoint: () => this.checkpointPause(processingJobId),
         });
         questions = completion.value;
         totalInputTokens = completion.inputTokens;
@@ -555,6 +586,10 @@ export class AiQuizGenerationService {
       );
     } catch (error) {
       if (error instanceof AiGenerationPausedError) return;
+      // Abort do người dùng yêu cầu pause được SDK báo như lỗi mạng/abort.
+      // Kiểm tra trạng thái DB một lần cuối để không biến pause thành retry
+      // BullMQ, rồi để worker dừng sạch ngay cả khi API và worker khác process.
+      if (await this.finalizePauseIfRequested(job.id)) return;
       // Lưu lỗi có cấu trúc ngay tại đây vì qua BullMQ (UnrecoverableError)
       // chỉ còn message dạng chuỗi, mất phân loại và validation issues.
       await this.jobs
@@ -568,6 +603,8 @@ export class AiQuizGenerationService {
         await this.jobs.update(job.id, { quizId: null });
       }
       throw error;
+    } finally {
+      pauseWatcher.close();
     }
   }
 
@@ -654,25 +691,78 @@ export class AiQuizGenerationService {
   }
 
   /**
-   * Điểm ngắt hợp tác: không hủy request provider đang bay vì request đó có
-   * thể đã bị tính phí. Kết quả hiện tại được checkpoint trước, sau đó worker
-   * chuyển PAUSE_REQUESTED -> PAUSED và không mở request AI kế tiếp.
+   * Điểm ngắt bền vững theo DB. Watcher sẽ abort request SDK đang bay để UI
+   * không chờ timeout provider; checkpoint này vẫn là hàng rào cuối trước mọi
+   * request/lần ghi checkpoint tiếp theo.
    */
   private async checkpointPause(jobId: string): Promise<void> {
+    const paused = await this.finalizePauseIfRequested(jobId);
+    if (paused) throw new AiGenerationPausedError();
+  }
+
+  /**
+   * Chuyển yêu cầu dừng thành checkpoint ổn định. Tách helper này khỏi
+   * checkpoint để catch của request bị abort cũng có thể kết thúc job đúng
+   * trạng thái thay vì để BullMQ retry nó.
+   */
+  private async finalizePauseIfRequested(jobId: string): Promise<boolean> {
     const current = await this.jobs.findOne({ where: { id: jobId } });
     if (!current) throw new NotFoundException('Tác vụ sinh quiz không tồn tại');
     if (current.status === AiGenerationJobStatus.PAUSE_REQUESTED) {
       await this.markPaused(jobId);
-      throw new AiGenerationPausedError();
+      return true;
     }
-    if (
+    return (
       current.status === AiGenerationJobStatus.PAUSED ||
       current.status === AiGenerationJobStatus.CANCELLED
-    )
-      throw new AiGenerationPausedError();
+    );
   }
 
-  private async extractStoredSource(job: AiGenerationJobEntity) {
+  /**
+   * Worker và API có thể là hai process/container khác nhau, vì vậy không
+   * dùng cờ in-memory từ endpoint pause. Worker poll DB nhẹ trong lúc chạy để
+   * abort request SDK hiện tại, còn checkpoint bên dưới lưu tiến độ đã có.
+   */
+  private watchPause(jobId: string): PauseWatcher {
+    const controller = new AbortController();
+    let closed = false;
+    let checking = false;
+    const check = () => {
+      if (closed || checking || controller.signal.aborted) return;
+      checking = true;
+      void this.jobs
+        .findOne({ where: { id: jobId } })
+        .then((current) => {
+          if (
+            current?.status === AiGenerationJobStatus.PAUSE_REQUESTED ||
+            current?.status === AiGenerationJobStatus.PAUSED ||
+            current?.status === AiGenerationJobStatus.CANCELLED
+          )
+            controller.abort();
+        })
+        // DB có thể vừa restart; checkpoint/catch vẫn kiểm tra lại trước khi
+        // quyết định retry nên watcher chỉ fail-open cho lần poll đó.
+        .catch(() => undefined)
+        .finally(() => {
+          checking = false;
+        });
+    };
+    check();
+    const timer = setInterval(check, PAUSE_WATCH_INTERVAL_MS);
+    timer.unref?.();
+    return {
+      signal: controller.signal,
+      close: () => {
+        closed = true;
+        clearInterval(timer);
+      },
+    };
+  }
+
+  private async extractStoredSource(
+    job: AiGenerationJobEntity,
+    signal?: AbortSignal,
+  ) {
     if (
       !job.sourceStorageKey ||
       !job.sourceOriginalName ||
@@ -718,6 +808,7 @@ export class AiQuizGenerationService {
         });
       },
       checkpoint: () => this.checkpointPause(job.id),
+      signal,
     });
     job.extractionReport = {
       totalPages: extraction.pages.length,
@@ -796,6 +887,7 @@ export class AiQuizGenerationService {
     dto: GenerateQuizWithAiDto,
     provider: Awaited<ReturnType<AiProviderService['resolve']>>,
     rows: AiGenerationChunkEntity[],
+    signal?: AbortSignal,
   ): Promise<{
     analyses: QuizChunkAnalysis[];
     inputTokens: number;
@@ -839,6 +931,8 @@ export class AiQuizGenerationService {
             },
             schema: chunkAnalysisOutputSchema(),
             parse: (value) => requireChunkAnalysis(value, row),
+            signal,
+            checkpoint: () => this.checkpointPause(job.id),
           });
           const analysis = completion.value;
           row.analysis = analysis;
@@ -886,6 +980,7 @@ export class AiQuizGenerationService {
     provider: Awaited<ReturnType<AiProviderService['resolve']>>,
     analyses: QuizChunkAnalysis[],
     distribution: CognitiveDistribution,
+    signal?: AbortSignal,
   ): Promise<{
     blueprint: QuizBlueprint;
     inputTokens: number;
@@ -909,6 +1004,8 @@ export class AiQuizGenerationService {
       },
       schema: quizBlueprintOutputSchema(),
       parse: (value) => requireQuizBlueprint(value, analyses, dto.topic),
+      signal,
+      checkpoint: () => this.checkpointPause(job.id),
     });
     const blueprint = completion.value;
     job.quizBlueprint = {
@@ -932,6 +1029,7 @@ export class AiQuizGenerationService {
     analyses: QuizChunkAnalysis[],
     blueprint: QuizBlueprint,
     distribution: CognitiveDistribution,
+    signal?: AbortSignal,
   ): Promise<{
     questions: QualityQuestion[];
     inputTokens: number;
@@ -1030,6 +1128,8 @@ export class AiQuizGenerationService {
                 undefined,
                 row.text,
               ),
+            signal,
+            checkpoint: () => this.checkpointPause(job.id),
           });
           const candidates = completion.value;
           row.status = AiGenerationChunkStatus.COMPLETED;
@@ -1076,6 +1176,7 @@ export class AiQuizGenerationService {
     candidates: QualityQuestion[],
     distribution: CognitiveDistribution,
     pages: AiMaterialPage[],
+    signal?: AbortSignal,
   ): Promise<{
     questions: QualityQuestion[];
     inputTokens: number;
@@ -1112,6 +1213,8 @@ export class AiQuizGenerationService {
           distribution,
           pages.map((page) => page.text).join('\n'),
         ),
+      signal,
+      checkpoint: () => this.checkpointPause(job.id),
     });
     return {
       questions: completion.value,
@@ -1134,9 +1237,14 @@ export class AiQuizGenerationService {
     usageContext: AiUsageContext;
     schema: Record<string, unknown>;
     parse: (value: unknown) => T;
+    signal?: AbortSignal;
+    checkpoint?: () => Promise<void>;
   }): Promise<{ value: T; inputTokens: number; outputTokens: number }> {
     const first = await this.tryCompleteParse<T>(args, args.prompt);
     if (first.ok) return first;
+    // Nếu output đầu tiên hỏng, đừng mở request repair mới sau khi người dùng
+    // đã bấm dừng. Đây là chỗ trước đây có thể khiến pause chờ thêm một call.
+    await args.checkpoint?.();
     this.logger.warn(
       `AI output không hợp lệ, repair 1 lần: provider=${args.provider.name} model=${args.provider.model} referenceId=${args.usageContext.referenceId ?? 'none'} issues=${first.issues.join(' | ').slice(0, 1500)}`,
     );
@@ -1169,6 +1277,7 @@ export class AiQuizGenerationService {
       usageContext: AiUsageContext;
       schema: Record<string, unknown>;
       parse: (value: unknown) => T;
+      signal?: AbortSignal;
     },
     prompt: string,
   ): Promise<
@@ -1181,7 +1290,10 @@ export class AiQuizGenerationService {
         args.provider,
         args.system,
         prompt,
-        args.usageContext,
+        {
+          ...args.usageContext,
+          ...(args.signal ? { abortSignal: args.signal } : {}),
+        },
         args.schema,
       );
     } catch (error) {

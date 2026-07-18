@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { numericTransformer } from '@/modules/ai/entities/ai-usage-event.entity';
+import { AiProviderDriver } from '@/modules/ai/ai-provider-driver';
 
 export enum AiProviderKind {
   OLLAMA = 'ollama',
@@ -26,6 +27,13 @@ export class AiProviderEntity {
   id!: string;
   @Column({ type: 'varchar', length: 120, unique: true }) name!: string;
   @Column({ type: 'enum', enum: AiProviderKind }) kind!: AiProviderKind;
+  /** SDK/contract kết nối. kind chỉ giữ tương thích cho URL policy cũ. */
+  @Column({
+    type: 'varchar',
+    length: 32,
+    default: AiProviderDriver.OPENAI_COMPATIBLE,
+  })
+  driver!: AiProviderDriver;
   @Column({ name: 'base_url', type: 'varchar', length: 500 }) baseUrl!: string;
   @Column({ type: 'varchar', length: 200 }) model!: string;
   @Column({ name: 'encrypted_api_key', type: 'text', nullable: true })

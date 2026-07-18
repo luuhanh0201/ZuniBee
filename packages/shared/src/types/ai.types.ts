@@ -1,11 +1,21 @@
 import type { QuizQuestionType } from "./quiz.types";
 
 export type AiProviderKind = "ollama" | "openai_compatible";
+export type AiProviderDriver =
+  | "openai"
+  | "anthropic"
+  | "gemini"
+  | "openrouter"
+  | "deepseek"
+  | "groq"
+  | "ollama"
+  | "openai_compatible";
 export type AiProviderHealthStatus = "unknown" | "online" | "offline";
 export type AiProvider = {
   id: string;
   name: string;
   kind: AiProviderKind;
+  driver: AiProviderDriver;
   baseUrl: string;
   model: string;
   isActive: boolean;
@@ -28,6 +38,7 @@ export type AiProvider = {
 export type CreateAiProviderRequest = {
   name: string;
   kind: AiProviderKind;
+  driver?: AiProviderDriver;
   baseUrl: string;
   model: string;
   apiKey?: string;
@@ -52,6 +63,11 @@ export type AiUsageSource =
   "quiz_generation" | "quiz_insight" | "document_vision_ocr";
 export type AiUsageStatus =
   "success" | "failed" | "refused" | "timeout" | "invalid_output";
+export type AiUsageCostSource =
+  | "provider_response"
+  | "rate_card_estimate"
+  | "local"
+  | "unavailable";
 export type AiUsageBudgetScope = "global" | "provider" | "model" | "source";
 export type AiUsageBudgetPeriod = "daily" | "monthly";
 export type AiUsageStatRow = {
@@ -141,7 +157,12 @@ export type AiUsageEvent = {
   inputTokens: number;
   outputTokens: number;
   cacheInputTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
   costUsd: number | null;
+  providerCostUsd: number | null;
+  costSource: AiUsageCostSource;
+  providerRequestId: string | null;
   latencyMs: number | null;
   httpStatus: number | null;
   finishReason: string | null;
@@ -201,6 +222,8 @@ export type AiProviderTestResult = {
 };
 export type DiscoverAiProviderModelsRequest = {
   kind: AiProviderKind;
+  /** SDK driver được chọn từ preset; custom giữ openai_compatible. */
+  driver?: AiProviderDriver;
   baseUrl: string;
   apiKey?: string;
 };

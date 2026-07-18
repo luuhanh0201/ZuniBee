@@ -5,7 +5,11 @@ import {
   Index,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import type { AiUsageSource, AiUsageStatus } from '@zunibee/shared';
+import type {
+  AiUsageCostSource,
+  AiUsageSource,
+  AiUsageStatus,
+} from '@zunibee/shared';
 
 /** Postgres trả numeric/bigint dạng string — convert về number khi đọc. */
 export const numericTransformer = {
@@ -62,6 +66,20 @@ export class AiUsageEventEntity {
   })
   cacheInputTokens!: number;
   @Column({
+    name: 'cache_write_tokens',
+    type: 'bigint',
+    default: 0,
+    transformer: numericTransformer,
+  })
+  cacheWriteTokens!: number;
+  @Column({
+    name: 'reasoning_tokens',
+    type: 'bigint',
+    default: 0,
+    transformer: numericTransformer,
+  })
+  reasoningTokens!: number;
+  @Column({
     name: 'input_usd_per_1m',
     type: 'numeric',
     precision: 12,
@@ -88,6 +106,24 @@ export class AiUsageEventEntity {
     transformer: numericTransformer,
   })
   costUsd!: number | null;
+  @Column({
+    name: 'provider_cost_usd',
+    type: 'numeric',
+    precision: 14,
+    scale: 8,
+    nullable: true,
+    transformer: numericTransformer,
+  })
+  providerCostUsd!: number | null;
+  @Column({ name: 'cost_source', type: 'varchar', length: 24 })
+  costSource!: AiUsageCostSource;
+  @Column({
+    name: 'provider_request_id',
+    type: 'varchar',
+    length: 250,
+    nullable: true,
+  })
+  providerRequestId!: string | null;
   @Column({ name: 'latency_ms', type: 'integer', nullable: true })
   latencyMs!: number | null;
   @Column({ name: 'http_status', type: 'integer', nullable: true })

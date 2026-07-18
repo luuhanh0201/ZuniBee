@@ -16,7 +16,6 @@ import {
   HardDrive,
   KeyRound,
   Loader2,
-  MoreHorizontal,
   Pencil,
   Plus,
   RefreshCw,
@@ -32,6 +31,7 @@ import {
 } from "lucide-react";
 import type {
   AiProvider,
+  AiProviderDriver,
   AiProviderKind,
   AiProviderMetrics,
   CreateAiProviderRequest,
@@ -110,6 +110,7 @@ type ProviderDraft = {
   presetId: AiProviderPresetId;
   name: string;
   kind: AiProviderKind;
+  driver: AiProviderDriver;
   baseUrl: string;
   model: string;
   apiKey: string;
@@ -151,7 +152,8 @@ const EMPTY_DRAFT: ProviderDraft = {
   presetId: "google_gemini",
   name: "",
   kind: "openai_compatible",
-  baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+  driver: "gemini",
+  baseUrl: "https://generativelanguage.googleapis.com/v1beta",
   model: "gemini-3.5-flash",
   apiKey: "",
   baseCreditCost: 1,
@@ -269,6 +271,7 @@ export function AdminAiConsole() {
       presetId,
       name: provider.name,
       kind: provider.kind,
+      driver: provider.driver,
       baseUrl: provider.baseUrl,
       model: provider.model,
       apiKey: "",
@@ -308,6 +311,7 @@ export function AdminAiConsole() {
       ...current,
       presetId,
       kind: preset.kind,
+      driver: preset.driver,
       baseUrl: preset.baseUrl,
       model: preset.suggestedModels[0] ?? "",
       apiKey: "",
@@ -333,6 +337,7 @@ export function AdminAiConsole() {
           : await adminDiscoverAiProviderModels(
               {
                 kind: draft.kind,
+                driver: draft.driver,
                 baseUrl: draft.baseUrl.trim(),
                 ...(draft.apiKey ? { apiKey: draft.apiKey } : {}),
               },
@@ -402,6 +407,7 @@ export function AdminAiConsole() {
           : await adminDiscoverAiProviderPricing(
               {
                 kind: draft.kind,
+                driver: draft.driver,
                 baseUrl: draft.baseUrl.trim(),
                 model: draft.model.trim(),
                 ...(draft.apiKey ? { apiKey: draft.apiKey } : {}),
@@ -440,6 +446,7 @@ export function AdminAiConsole() {
       const result = await adminTestAiProviderConfiguration(
         {
           kind: draft.kind,
+          driver: draft.driver,
           baseUrl: draft.baseUrl.trim(),
           model: draft.model.trim(),
           ...(draft.apiKey.trim() ? { apiKey: draft.apiKey.trim() } : {}),
@@ -473,6 +480,7 @@ export function AdminAiConsole() {
     const body: CreateAiProviderRequest = {
       name: draft.name.trim(),
       kind: draft.kind,
+      driver: draft.driver,
       baseUrl: draft.baseUrl.trim(),
       model: draft.model.trim(),
       baseCreditCost: draft.baseCreditCost,
@@ -796,14 +804,14 @@ export function AdminAiConsole() {
           </div>
         </div>
 
-        <div className="grid gap-4 p-4 sm:p-5 xl:grid-cols-2">
+        <div className="grid gap-4 p-4 sm:p-5 sm:grid-cols-2 xl:grid-cols-3">
           {isLoading ? (
-            <div className="flex min-h-52 items-center justify-center gap-3 font-bold text-muted-foreground xl:col-span-2">
+            <div className="flex min-h-52 items-center justify-center gap-3 font-bold text-muted-foreground sm:col-span-2 xl:col-span-3">
               <Loader2 className="h-6 w-6 animate-spin" aria-hidden="true" />
               Đang tải cấu hình provider thật...
             </div>
           ) : loadError ? (
-            <div className="rounded-2xl border-2 border-destructive bg-destructive-soft p-8 text-center xl:col-span-2">
+            <div className="rounded-2xl border-2 border-destructive bg-destructive-soft p-8 text-center sm:col-span-2 xl:col-span-3">
               <p className="font-extrabold">{loadError}</p>
               <button
                 type="button"
@@ -837,7 +845,7 @@ export function AdminAiConsole() {
               ))
             : null}
           {!isLoading && !loadError && !filteredProviders.length ? (
-            <div className="rounded-2xl border-2 border-dashed border-foreground bg-surface-soft p-10 text-center xl:col-span-2">
+            <div className="rounded-2xl border-2 border-dashed border-foreground bg-surface-soft p-10 text-center sm:col-span-2 xl:col-span-3">
               <Search className="mx-auto h-8 w-8 text-muted-foreground" />
               <h3 className="mt-3 font-display text-xl font-extrabold">
                 Không tìm thấy provider
@@ -930,107 +938,52 @@ function ProviderCard({
       : provider.healthStatus === "offline"
         ? "Ngoại tuyến"
         : "Chưa kiểm tra";
+  const busyOrChecking = busy || checking;
+  const actionButton =
+    "inline-flex min-h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-2 border-foreground bg-surface px-2.5 text-xs font-extrabold transition-colors disabled:cursor-not-allowed disabled:opacity-50";
   return (
     <article
-      className={`relative rounded-2xl border border-divider p-5 shadow-sm transition-[border-color,box-shadow] duration-200 hover:border-primary/20 hover:shadow-md ${provider.isActive ? "bg-surface" : "bg-surface-soft"}`}
+      className={`flex flex-col gap-3.5 rounded-2xl border border-divider p-4 shadow-sm transition-[border-color,box-shadow] duration-200 hover:border-primary/20 hover:shadow-md ${provider.isActive ? "bg-surface" : "bg-surface-soft"}`}
     >
-      {provider.isDefault ||
-      provider.isVisionDefault ||
-      provider.isAnalysisDefault ? (
-        <div className="absolute -right-2 -top-3 flex flex-wrap justify-end gap-1.5 pl-4">
-          {provider.isDefault ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-divider bg-warning-soft px-3 py-1 text-xs font-semibold text-foreground shadow-sm">
-              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-              Sinh quiz
-            </span>
-          ) : null}
-          {provider.isVisionDefault ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-divider bg-secondary-soft px-3 py-1 text-xs font-semibold text-foreground shadow-sm">
-              <Brain className="h-3.5 w-3.5" aria-hidden="true" />
-              Đọc ảnh/OCR
-            </span>
-          ) : null}
-          {provider.isAnalysisDefault ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-divider bg-surface-soft px-3 py-1 text-xs font-semibold text-foreground shadow-sm">
-              <Gauge className="h-3.5 w-3.5" aria-hidden="true" />
-              Phân tích
-            </span>
-          ) : null}
-        </div>
-      ) : null}
       <div className="flex items-start gap-3">
         <span
-          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${provider.kind === "ollama" ? "bg-secondary-soft text-secondary-strong" : "bg-primary text-white"}`}
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${provider.kind === "ollama" ? "bg-secondary-soft text-secondary-strong" : "bg-primary text-white"}`}
         >
           {provider.kind === "ollama" ? (
-            <ServerCog className="h-6 w-6" aria-hidden="true" />
+            <ServerCog className="h-5 w-5" aria-hidden="true" />
           ) : (
-            <Bot className="h-6 w-6" aria-hidden="true" />
+            <Bot className="h-5 w-5" aria-hidden="true" />
           )}
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate font-display text-xl font-extrabold">
-            {provider.name}
-          </h3>
-          <p className="mt-0.5 text-sm font-bold text-muted-foreground">
-            {providerLabel}
+          <div className="flex items-center gap-2">
+            <h3 className="truncate font-display text-lg font-extrabold">
+              {provider.name}
+            </h3>
+            {!provider.isActive ? (
+              <span className="shrink-0 rounded-md bg-surface-soft px-1.5 py-0.5 text-[11px] font-bold text-muted-foreground">
+                Đã tắt
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs font-bold text-muted-foreground">
+            <span className="shrink-0">{providerLabel}</span>
+            <span aria-hidden="true">·</span>
+            <span
+              className="truncate font-mono text-foreground"
+              title={provider.model}
+            >
+              {provider.model}
+            </span>
           </p>
         </div>
-        <MoreHorizontal
-          className="h-5 w-5 text-muted-foreground"
-          aria-hidden="true"
-        />
-      </div>
-
-      <dl className="mt-5 grid gap-3 rounded-xl border-2 border-divider bg-surface p-4 text-sm sm:grid-cols-2">
-        <div className="min-w-0">
-          <dt className="font-bold text-muted-foreground">Model</dt>
-          <dd className="mt-1 truncate font-extrabold">{provider.model}</dd>
-        </div>
-        <div>
-          <dt className="font-bold text-muted-foreground">Chi phí</dt>
-          <dd className="mt-1 font-extrabold tabular-nums">
-            {provider.baseCreditCost} + {provider.creditCostPer1kTokens}/1K
-          </dd>
-        </div>
-        <div className="min-w-0 sm:col-span-2">
-          <dt className="font-bold text-muted-foreground">Endpoint</dt>
-          <dd className="mt-1 truncate font-mono text-xs font-bold">
-            {provider.baseUrl}
-          </dd>
-        </div>
-        <div>
-          <dt className="font-bold text-muted-foreground">
-            Tác vụ AI ghi nhận
-          </dt>
-          <dd className="mt-1 font-extrabold tabular-nums">
-            {formatNumber(provider.requestCount)}
-          </dd>
-        </div>
-        <div>
-          <dt className="font-bold text-muted-foreground">Kiểm tra gần nhất</dt>
-          <dd className="mt-1 font-extrabold">
-            {provider.lastHealthCheckedAt
-              ? formatDateTime(provider.lastHealthCheckedAt)
-              : "Chưa có"}
-          </dd>
-        </div>
-      </dl>
-
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-sm font-extrabold">
-          <span
-            className={`h-2.5 w-2.5 rounded-full ${checking ? "animate-pulse bg-primary" : provider.healthStatus === "online" ? "bg-success" : provider.healthStatus === "offline" ? "bg-destructive" : "bg-divider"}`}
-          />
-          {healthLabel}
-          {provider.lastHealthLatencyMs != null ? (
-            <span className="font-bold text-muted-foreground">
-              · {provider.lastHealthLatencyMs} ms
-            </span>
-          ) : null}
-        </div>
-        <label className="inline-flex cursor-pointer items-center gap-2 font-bold">
-          <span className="text-sm">{provider.isActive ? "Bật" : "Tắt"}</span>
+        <label
+          className="inline-flex shrink-0 cursor-pointer items-center"
+          title={provider.isActive ? "Đang bật" : "Đang tắt"}
+        >
+          <span className="sr-only">
+            {provider.isActive ? "Tắt provider" : "Bật provider"}
+          </span>
           <input
             type="checkbox"
             checked={provider.isActive}
@@ -1038,79 +991,160 @@ function ProviderCard({
             disabled={busy}
             className="peer sr-only"
           />
-          <span className="relative h-7 w-12 rounded-full border-2 border-foreground bg-divider transition-colors peer-checked:bg-success peer-focus-visible:outline peer-focus-visible:outline-3 peer-focus-visible:outline-offset-3 peer-focus-visible:outline-ring after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border-2 after:border-foreground after:bg-surface after:transition-transform peer-checked:after:translate-x-5" />
+          <span className="relative h-6 w-11 rounded-full border-2 border-foreground bg-divider transition-colors peer-checked:bg-success peer-focus-visible:outline peer-focus-visible:outline-3 peer-focus-visible:outline-offset-3 peer-focus-visible:outline-ring after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:border-2 after:border-foreground after:bg-surface after:transition-transform peer-checked:after:translate-x-5" />
         </label>
       </div>
 
+      <div>
+        <p className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-muted-foreground">
+          Nhiệm vụ AI
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          <RoleChip
+            active={provider.isDefault}
+            icon={<Sparkles className="h-3.5 w-3.5" aria-hidden="true" />}
+            label="Sinh quiz"
+            activeClass="bg-warning-soft"
+            onAssign={onQuizDefault}
+            disabled={busyOrChecking}
+          />
+          <RoleChip
+            active={provider.isVisionDefault}
+            icon={<Brain className="h-3.5 w-3.5" aria-hidden="true" />}
+            label="Đọc ảnh"
+            activeClass="bg-secondary-soft"
+            onAssign={onVisionDefault}
+            disabled={busyOrChecking}
+          />
+          <RoleChip
+            active={provider.isAnalysisDefault}
+            icon={<Gauge className="h-3.5 w-3.5" aria-hidden="true" />}
+            label="Phân tích"
+            activeClass="bg-success-soft"
+            onAssign={onAnalysisDefault}
+            disabled={busyOrChecking}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold">
+        <span className="inline-flex items-center gap-1.5">
+          <span
+            className={`h-2 w-2 rounded-full ${checking ? "animate-pulse bg-primary" : provider.healthStatus === "online" ? "bg-success" : provider.healthStatus === "offline" ? "bg-destructive" : "bg-divider"}`}
+          />
+          {healthLabel}
+          {provider.lastHealthLatencyMs != null ? (
+            <span className="text-muted-foreground">
+              · {provider.lastHealthLatencyMs}ms
+            </span>
+          ) : null}
+        </span>
+        <span aria-hidden="true" className="text-divider">
+          |
+        </span>
+        <span className="text-muted-foreground tabular-nums">
+          {formatNumber(provider.requestCount)} tác vụ
+        </span>
+        <span aria-hidden="true" className="text-divider">
+          |
+        </span>
+        <span className="text-muted-foreground tabular-nums">
+          {provider.baseCreditCost}+{provider.creditCostPer1kTokens}/1K credit
+        </span>
+        <span aria-hidden="true" className="text-divider">
+          |
+        </span>
+        <span className="text-muted-foreground">
+          Kiểm tra{" "}
+          {provider.lastHealthCheckedAt
+            ? formatDateTime(provider.lastHealthCheckedAt)
+            : "chưa có"}
+        </span>
+      </div>
+      <p
+        className="-mt-1.5 truncate font-mono text-[11px] font-semibold text-muted-foreground"
+        title={provider.baseUrl}
+      >
+        {provider.baseUrl}
+      </p>
+
       {provider.lastHealthError ? (
-        <p className="mt-3 rounded-lg bg-destructive-soft px-3 py-2 text-xs font-bold text-destructive">
+        <p className="rounded-lg bg-destructive-soft px-2.5 py-1.5 text-xs font-bold text-destructive">
           {provider.lastHealthError}
         </p>
       ) : null}
 
-      <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+      <div className="mt-auto flex flex-wrap gap-1.5 border-t border-divider pt-3">
         <button
           type="button"
-          disabled={checking || busy}
+          disabled={busyOrChecking}
           onClick={onTest}
-          className={`inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-surface px-3 text-sm font-extrabold transition-colors hover:bg-secondary-soft disabled:cursor-wait disabled:opacity-60 ${buttonFocus}`}
+          className={`${actionButton} hover:bg-secondary-soft ${buttonFocus}`}
         >
           <Activity className="h-4 w-4" aria-hidden="true" />
           Kiểm tra
         </button>
         <button
           type="button"
-          disabled={busy || checking}
+          disabled={busyOrChecking}
           onClick={onEdit}
-          className={`inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-surface px-3 text-sm font-extrabold transition-colors hover:bg-primary ${buttonFocus}`}
+          className={`${actionButton} hover:bg-primary ${buttonFocus}`}
         >
           <Pencil className="h-4 w-4" aria-hidden="true" />
-          Chỉnh sửa
+          Sửa
         </button>
-        {!provider.isDefault ? (
-          <button
-            type="button"
-            disabled={busy || checking}
-            onClick={onQuizDefault}
-            className={`inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-warning-soft px-3 text-sm font-extrabold transition-colors hover:bg-primary ${buttonFocus}`}
-          >
-            <Sparkles className="h-4 w-4" aria-hidden="true" />
-            Tạo quiz
-          </button>
-        ) : null}
-        {!provider.isVisionDefault ? (
-          <button
-            type="button"
-            disabled={busy || checking}
-            onClick={onVisionDefault}
-            className={`inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-secondary-soft px-3 text-sm font-extrabold transition-colors hover:bg-primary ${buttonFocus}`}
-          >
-            <Brain className="h-4 w-4" aria-hidden="true" />
-            Dùng đọc ảnh
-          </button>
-        ) : null}
-        {!provider.isAnalysisDefault ? (
-          <button
-            type="button"
-            disabled={busy || checking}
-            onClick={onAnalysisDefault}
-            className={`inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-surface-soft px-3 text-sm font-extrabold transition-colors hover:bg-primary ${buttonFocus}`}
-          >
-            <Gauge className="h-4 w-4" aria-hidden="true" />
-            Dùng phân tích
-          </button>
-        ) : null}
         <button
           type="button"
-          disabled={busy || checking}
+          disabled={busyOrChecking}
           onClick={onDelete}
-          className={`inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground bg-surface px-3 text-sm font-extrabold transition-colors hover:bg-destructive-soft ${buttonFocus}`}
+          className={`${actionButton} ml-auto hover:bg-destructive-soft ${buttonFocus}`}
         >
           <Trash2 className="h-4 w-4" aria-hidden="true" />
           Xóa
         </button>
       </div>
     </article>
+  );
+}
+
+function RoleChip({
+  active,
+  icon,
+  label,
+  activeClass,
+  onAssign,
+  disabled,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  activeClass: string;
+  onAssign: () => void;
+  disabled: boolean;
+}) {
+  if (active) {
+    return (
+      <span
+        className={`inline-flex items-center gap-1.5 rounded-lg border border-divider px-2.5 py-1 text-xs font-extrabold text-foreground ${activeClass}`}
+        title={`Đang dùng cho nhiệm vụ ${label}`}
+      >
+        {icon}
+        {label}
+        <Check className="h-3.5 w-3.5 text-success" aria-hidden="true" />
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onAssign}
+      disabled={disabled}
+      title={`Gán nhiệm vụ ${label} cho provider này`}
+      className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-dashed border-divider bg-surface px-2.5 py-1 text-xs font-bold text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 ${buttonFocus}`}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 
@@ -1151,6 +1185,8 @@ function ProviderEditor({
 }) {
   const [showKey, setShowKey] = useState(false);
   const selectedPreset = providerPreset(draft.presetId);
+  const allowsBaseUrlEdit =
+    draft.presetId === "custom" || draft.presetId === "ollama";
   const customModel = !modelOptions.includes(draft.model);
   const hasRequiredKey =
     !selectedPreset.apiKeyRequired ||
@@ -1274,16 +1310,30 @@ function ProviderEditor({
               />
             </EditorField>
           ) : null}
-          <EditorField label="Base URL" className="sm:col-span-2">
-            <input
-              required
-              type="url"
-              value={draft.baseUrl}
-              onChange={(event) =>
-                onChange({ ...draft, baseUrl: event.target.value })
-              }
-              className="min-h-12 w-full rounded-xl border-2 border-foreground bg-surface px-3 font-mono text-sm font-semibold outline-none focus:ring-2 focus:ring-ring"
-            />
+          <EditorField
+            label={allowsBaseUrlEdit ? "Base URL" : "Endpoint SDK"}
+            hint={
+              allowsBaseUrlEdit
+                ? "Chỉ cần sửa khi dùng Ollama hoặc endpoint OpenAI-compatible riêng."
+                : "Endpoint chuẩn được khóa theo provider đã chọn."
+            }
+            className="sm:col-span-2"
+          >
+            {allowsBaseUrlEdit ? (
+              <input
+                required
+                type="url"
+                value={draft.baseUrl}
+                onChange={(event) =>
+                  onChange({ ...draft, baseUrl: event.target.value })
+                }
+                className="min-h-12 w-full rounded-xl border-2 border-foreground bg-surface px-3 font-mono text-sm font-semibold outline-none focus:ring-2 focus:ring-ring"
+              />
+            ) : (
+              <div className="flex min-h-12 items-center rounded-xl border-2 border-divider bg-surface-soft px-3 font-mono text-sm font-semibold text-muted-foreground">
+                {draft.baseUrl}
+              </div>
+            )}
           </EditorField>
           <EditorField
             label={editing ? "API key mới (không bắt buộc)" : "API key"}
@@ -1524,6 +1574,7 @@ function formatDateTime(value: string): string {
 function providerConnectionFingerprint(draft: ProviderDraft): string {
   return JSON.stringify([
     draft.kind,
+    draft.driver,
     draft.baseUrl.trim().replace(/\/+$/, ""),
     draft.model.trim(),
     draft.apiKey.trim(),

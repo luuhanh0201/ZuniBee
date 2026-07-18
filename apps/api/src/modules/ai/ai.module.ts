@@ -28,6 +28,7 @@ import { QuizWeaknessInsightService } from './quiz-weakness-insight.service';
 import { QuizInsightController } from './quiz-insight.controller';
 import { AiProviderUrlPolicyService } from './ai-provider-url-policy.service';
 import { AiGenerationSourceStorageService } from './ai-generation-source-storage.service';
+import { AiProviderSdkService } from './ai-provider-sdk.service';
 import {
   AI_GENERATION_PROCESSOR,
   AiGenerationQueueService,
@@ -57,6 +58,7 @@ import {
   providers: [
     AiSecretService,
     AiProviderService,
+    AiProviderSdkService,
     AiCreditService,
     AiModelClientService,
     AiUsageService,

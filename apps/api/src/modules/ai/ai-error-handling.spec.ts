@@ -15,6 +15,7 @@ import {
   resolveStructuredOutputMode,
 } from './ai-structured-output.adapter';
 import { AiModelClientService } from './ai-model-client.service';
+import { AiProviderSdkError } from './ai-provider-sdk.service';
 import {
   AiQuizGenerationService,
   validateGeneratedQuestions,
@@ -241,13 +242,16 @@ describe('AiModelClientService provider failures', () => {
   function client(usage = { recordSafely: jest.fn().mockResolvedValue(null) }) {
     const providers = { apiKey: jest.fn().mockReturnValue('sk-test') };
     const urlPolicy = { assertAllowed: jest.fn().mockResolvedValue(undefined) };
+    const sdkGenerate = jest.fn();
     return {
       service: new AiModelClientService(
         providers as never,
         urlPolicy as never,
         usage as never,
+        { generate: sdkGenerate } as never,
       ),
       usage,
+      sdkGenerate,
     };
   }
 
@@ -258,18 +262,13 @@ describe('AiModelClientService provider failures', () => {
   };
 
   it('keeps provider error body, categorizes HTTP 400 as non-retryable schema error', async () => {
-    const { service, usage } = client();
-    global.fetch = jest.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          error: {
-            type: 'invalid_request_error',
-            message: 'output_config.format.schema: minItems is unsupported',
-          },
-        }),
-        { status: 400 },
+    const { service, usage, sdkGenerate } = client();
+    sdkGenerate.mockRejectedValue(
+      new AiProviderSdkError(
+        'invalid_request_error: output_config.format.schema: minItems is unsupported',
+        400,
       ),
-    ) as never;
+    );
     const call = service.completeJson(
       provider(),
       'system',
@@ -295,12 +294,8 @@ describe('AiModelClientService provider failures', () => {
   });
 
   it('marks HTTP 429 as retryable rate limit', async () => {
-    const { service } = client();
-    global.fetch = jest.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: { message: 'rate limited' } }), {
-        status: 429,
-      }),
-    ) as never;
+    const { service, sdkGenerate } = client();
+    sdkGenerate.mockRejectedValue(new AiProviderSdkError('rate limited', 429));
     const error = await service
       .completeJson(
         provider({ baseUrl: 'https://api.deepseek.com' }),
@@ -318,18 +313,13 @@ describe('AiModelClientService provider failures', () => {
   });
 
   it('keeps the content-filter body and marks vision HTTP 400 as provider refusal', async () => {
-    const { service, usage } = client();
-    global.fetch = jest.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          error: {
-            type: 'invalid_request_error',
-            message: 'Output blocked by content filtering policy',
-          },
-        }),
-        { status: 400 },
+    const { service, usage, sdkGenerate } = client();
+    sdkGenerate.mockRejectedValue(
+      new AiProviderSdkError(
+        'invalid_request_error: Output blocked by content filtering policy',
+        400,
       ),
-    ) as never;
+    );
     const error = await service
       .readImageText(
         provider(),
@@ -356,18 +346,21 @@ describe('AiModelClientService provider failures', () => {
   });
 
   it('sends compiled schema to Anthropic without unsupported keywords', async () => {
-    const { service } = client();
-    const fetchMock = jest.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          content: [{ type: 'text', text: '{"ok":true}' }],
-          stop_reason: 'end_turn',
-          usage: { input_tokens: 1, output_tokens: 1 },
-        }),
-        { status: 200 },
-      ),
-    );
-    global.fetch = fetchMock as never;
+    const { service, sdkGenerate } = client();
+    sdkGenerate.mockResolvedValue({
+      content: '{"ok":true}',
+      inputTokens: 1,
+      outputTokens: 1,
+      cacheInputTokens: 0,
+      cacheWriteTokens: 0,
+      reasoningTokens: 0,
+      providerCostUsd: null,
+      providerRequestId: null,
+      finishReason: 'end_turn',
+      refused: false,
+      truncated: false,
+      httpStatus: 200,
+    });
     await service.completeJson(
       provider(),
       'system',
@@ -375,32 +368,31 @@ describe('AiModelClientService provider failures', () => {
       usageContext,
       chunkAnalysisOutputSchema(),
     );
-    const calls = fetchMock.mock.calls as unknown as Array<
-      [string, { body: string }]
+    const sentSchema = sdkGenerate.mock.calls[0][0].plan.schema as Record<
+      string,
+      unknown
     >;
-    const body = JSON.parse(calls[0][1].body) as Record<string, unknown>;
-    const sentSchema = (
-      body.output_config as {
-        format: { schema: Record<string, unknown> };
-      }
-    ).format.schema;
     const keys = collectKeys(sentSchema);
     for (const keyword of UNSUPPORTED_KEYWORDS)
       expect(keys.has(keyword)).toBe(false);
   });
 
   it('sends json_object and schema-in-prompt to DeepSeek', async () => {
-    const { service } = client();
-    const fetchMock = jest.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          choices: [{ message: { content: '{"ok":true}' } }],
-          usage: { prompt_tokens: 1, completion_tokens: 1 },
-        }),
-        { status: 200 },
-      ),
-    );
-    global.fetch = fetchMock as never;
+    const { service, sdkGenerate } = client();
+    sdkGenerate.mockResolvedValue({
+      content: '{"ok":true}',
+      inputTokens: 1,
+      outputTokens: 1,
+      cacheInputTokens: 0,
+      cacheWriteTokens: 0,
+      reasoningTokens: 0,
+      providerCostUsd: null,
+      providerRequestId: null,
+      finishReason: 'stop',
+      refused: false,
+      truncated: false,
+      httpStatus: 200,
+    });
     await service.completeJson(
       provider({ baseUrl: 'https://api.deepseek.com' }),
       'system',
@@ -408,16 +400,13 @@ describe('AiModelClientService provider failures', () => {
       usageContext,
       chunkAnalysisOutputSchema(),
     );
-    const calls = fetchMock.mock.calls as unknown as Array<
-      [string, { body: string }]
-    >;
-    const body = JSON.parse(calls[0][1].body) as {
-      response_format: { type: string };
-      messages: Array<{ role: string; content: string }>;
+    const input = sdkGenerate.mock.calls[0][0] as {
+      plan: { mode: string };
+      prompt: string;
     };
-    expect(body.response_format).toEqual({ type: 'json_object' });
-    expect(body.messages[1].content).toContain('chunkIndex');
-    expect(body.messages[1].content).toContain('JSON Schema');
+    expect(input.plan.mode).toBe('json_object');
+    expect(input.prompt).toContain('chunkIndex');
+    expect(input.prompt).toContain('JSON Schema');
   });
 });
 

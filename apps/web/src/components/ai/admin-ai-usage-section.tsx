@@ -21,6 +21,7 @@ import type {
   AiUsageBreakdownRow,
   AiUsageBudgetPeriod,
   AiUsageBudgetScope,
+  AiUsageCostSource,
   AiUsageSource,
   AiUsageStatus,
   UpsertAiUsageBudgetRequest,
@@ -53,6 +54,12 @@ const statusLabels: Record<AiUsageStatus, string> = {
   refused: "Bị từ chối",
   timeout: "Quá thời gian",
   invalid_output: "Output không hợp lệ",
+};
+const costSourceLabels: Record<AiUsageCostSource, string> = {
+  provider_response: "Provider trả về",
+  rate_card_estimate: "Ước tính theo bảng giá",
+  local: "Local / không tính phí",
+  unavailable: "Chưa có giá",
 };
 
 type DraftFilters = {
@@ -758,9 +765,25 @@ function EventLog({
                         (cache {formatNumber(event.cacheInputTokens)})
                       </small>
                     ) : null}
+                    {event.cacheWriteTokens ? (
+                      <small className="ml-1 text-muted-foreground">
+                        (cache write {formatNumber(event.cacheWriteTokens)})
+                      </small>
+                    ) : null}
+                    {event.reasoningTokens ? (
+                      <small className="ml-1 text-muted-foreground">
+                        (reasoning {formatNumber(event.reasoningTokens)})
+                      </small>
+                    ) : null}
                   </td>
                   <td className="px-3 py-3 text-right tabular-nums">
                     {event.costUsd == null ? "--" : formatUsd(event.costUsd)}
+                    <small className="block text-xs text-muted-foreground">
+                      {costSourceLabels[event.costSource]}
+                      {event.providerCostUsd !== null
+                        ? ` · provider ${formatUsd(event.providerCostUsd)}`
+                        : ""}
+                    </small>
                   </td>
                   <td className="px-3 py-3 text-right tabular-nums">
                     {event.latencyMs == null ? "--" : `${event.latencyMs} ms`}
@@ -775,6 +798,11 @@ function EventLog({
                     {event.httpStatus ? (
                       <small className="text-muted-foreground">
                         HTTP {event.httpStatus} · {event.errorCode ?? "no-code"}
+                      </small>
+                    ) : null}
+                    {event.providerRequestId ? (
+                      <small className="block truncate font-mono text-xs text-muted-foreground">
+                        req {event.providerRequestId}
                       </small>
                     ) : null}
                   </td>

@@ -7,10 +7,15 @@ import {
 } from 'class-validator';
 import type { DiscoverAiProviderModelsRequest } from '@zunibee/shared';
 import { AiProviderKind } from '../entities/ai-provider.entity';
+import { AiProviderDriver } from '../ai-provider-driver';
 
 export class DiscoverAiProviderModelsDto implements DiscoverAiProviderModelsRequest {
   @IsEnum(AiProviderKind, { message: 'Loại provider không hợp lệ' })
   kind!: AiProviderKind;
+
+  @IsOptional()
+  @IsEnum(AiProviderDriver, { message: 'SDK driver provider không hợp lệ' })
+  driver?: AiProviderDriver;
 
   @IsUrl(
     {
